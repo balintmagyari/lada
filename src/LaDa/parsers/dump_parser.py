@@ -4,22 +4,23 @@ import itertools
 from dataclasses import dataclass
 from typing import List, Iterator
 
-# 1. Define a clean structure to hold a single frame's data
+# 1. Data structure to hold dump data
 @dataclass
 class DumpFrame:
     metadata: dict[str, List[str]]  # Stores any ITEM block as a list of strings
     columns: List[str]              # The names of the atom data columns
     data: np.ndarray                # The numerical atom data
 
-# 2. Create the generator function
 def iter_dump_frames(filepath: str) -> Iterator[DumpFrame]:
     """
     Dynamically parses a LAMMPS dump file with unpredictable headers.
+
+    -> Assumes that each block of new data in the dump file starts with the line "ITEM: TIMESTEP"
     """
     
     metadata = {}
     columns = []
-    atom_lines = []
+    bulk_data = []
     current_header = None
     
     with open(filepath, 'r') as f:
@@ -35,23 +36,30 @@ def iter_dump_frames(filepath: str) -> Iterator[DumpFrame]:
                 
                 # If we hit a new TIMESTEP and we already have atom data, 
                 # we know the previous frame is finished. Yield it!
-                if header_content.startswith("TIMESTEP") and atom_lines:
+                if header_content.startswith("TIMESTEP") and bulk_data:
                     yield DumpFrame(
                         metadata=metadata.copy(),
                         columns=columns.copy(),
-                        data=np.loadtxt(atom_lines)
+                        data=np.loadtxt(bulk_data)
                     )
                     
                     # Reset the containers for the next frame
                     metadata = {}
                     columns = []
-                    atom_lines = []
+                    bulk_data = []
                 
                 # Special handling for the ATOMS block to extract column names
                 if header_content.startswith("ATOMS"):
                     current_header = "ATOMS"
                     parts = header_content.split()
                     # Grab everything after "ATOMS" as the column names
+                    columns = parts[1:] if len(parts) > 1 else []
+                    continue
+                # Special handling for the BONDS block to extract column names
+                elif header_content.startswith("BONDS"):
+                    current_header = "BONDS"
+                    parts = header_content.split()
+                    # Grab everything after "BONDS" as the column names
                     columns = parts[1:] if len(parts) > 1 else []
                     continue
                     
@@ -61,15 +69,15 @@ def iter_dump_frames(filepath: str) -> Iterator[DumpFrame]:
                 
             else:
                 # We are reading the data lines belonging to the current header
-                if current_header == "ATOMS":
-                    atom_lines.append(stripped)
+                if current_header == "ATOMS" or current_header == "BONDS":
+                    bulk_data.append(stripped)
                 elif current_header is not None:
                     metadata[current_header].append(stripped)
                     
         # When the file ends, yield the very last frame
-        if atom_lines:
+        if bulk_data:
             yield DumpFrame(
                 metadata=metadata,
                 columns=columns,
-                data=np.loadtxt(atom_lines)
+                data=np.loadtxt(bulk_data)
             )

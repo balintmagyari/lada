@@ -30,7 +30,7 @@ class DumpFrame:
         idx = self._column_index.get(name)
         return self.data[:, idx] if idx is not None else default
 
-    def to_dataframe(self, copy: bool = True) -> pd.DataFrame:
+    def to_pandas(self, copy: bool = True) -> pd.DataFrame:
         """Return the data block as a pandas DataFrame."""
         df = pd.DataFrame(self.data, columns=self.columns)
         return df.copy() if copy else df

@@ -18,7 +18,7 @@ pip install lada
 
 ## 📦 Package structure
 
-The core parser modules are located in `src/LaDa/parsers/`:
+The core parser modules are located in `src/lada/parsers/`:
 
 - `dump_parser.py` - streaming parser for LAMMPS dump files (i.e., output from [`dump`](https://docs.lammps.org/dump.html) command) using `iter_dump_frames()`
 - `log_parser.py` - parser for LAMMPS log files using `read_lammps_log()`
@@ -27,7 +27,7 @@ The core parser modules are located in `src/LaDa/parsers/`:
 To keep imports simple, the package exports the most common entry point:
 
 ```python
-from LaDa import iter_dump_frames, read_lammps_log, read_data_file
+from lada import iter_dump_frames, read_lammps_log, read_data_file
 ```
 
 ---
@@ -37,7 +37,7 @@ from LaDa import iter_dump_frames, read_lammps_log, read_data_file
 ### Main API
 
 ```python
-from LaDa import iter_dump_frames
+from lada import iter_dump_frames
 
 for frame in iter_dump_frames("path/to/dump_file.dump"):
     # metadata is a dict of "ITEM:" blocks
@@ -77,7 +77,7 @@ col_idx = frame.column_index("type")
 ### Main API
 
 ```python
-from LaDa import read_lammps_log
+from lada import read_lammps_log
 
 thermo = read_lammps_log("log.lammps")
 print(thermo.columns)        # column names (Step, Temp, E_pair, ...)
@@ -98,7 +98,7 @@ df = thermo.to_pandas()
 ### Main API
 
 ```python
-from LaDa import read_data_file
+from lada import read_data_file
 
 lammps_data = read_data_file("data.lmp")
 

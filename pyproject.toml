@@ -4,17 +4,16 @@ build-backend = "hatchling.build"
 
 [project]
 name = "lada"
-version = "0.0.1"
+version = "1.0.0"
 authors = [
   { name="Balint Magyari", email="balint.magyari@unina.it" },
 ]
-description = "MC Bond Exchange for LAMMPS Simulations"
+description = "LAMMPS Data Analysis library"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
-  "lammps",
-  "mpi4py",
-  "numpy"
+  "numpy",
+  "pandas"
 ]
 classifiers = [
     "Programming Language :: Python :: 3",
@@ -26,6 +25,7 @@ license = { text = "MIT" }
 [project.optional-dependencies]
 dev = [
     "pytest",
+    "icecream"
 ]
 
 [project.urls]

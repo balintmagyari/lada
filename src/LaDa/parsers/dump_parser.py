@@ -1,8 +1,8 @@
 import numpy as np
 import pandas as pd
 import itertools
-from dataclasses import dataclass
-from typing import Iterator
+from dataclasses import dataclass, field
+from typing import Iterator, Mapping, Optional
 
 # 1. Data structure to hold dump data
 @dataclass
@@ -10,6 +10,31 @@ class DumpFrame:
     metadata: dict[str, list[str] | np.ndarray | int]  # Stores any ITEM block as a list of strings (or parsed numpy arrays)
     columns: list[str]                           # The names of the atom data columns
     data: np.ndarray                             # The numerical atom data
+
+    # Internal cache for fast column lookups
+    _column_index: dict[str, int] = field(init=False, repr=False)
+
+    def __post_init__(self) -> None:
+        # Create a simple mapping from column name to column index for fast lookups.
+        self._column_index = {col: idx for idx, col in enumerate(self.columns)}
+
+    def column_index(self, name: str) -> int:
+        """Return the column index for a given column name."""
+        return self._column_index[name]
+
+    def get_column(self, name: str) -> np.ndarray:
+        """Return the data values for a given column name."""
+        return self.data[:, self.column_index(name)]
+
+    def get_column_or(self, name: str, default: Optional[np.ndarray] = None) -> Optional[np.ndarray]:
+        """Return the column values if present, otherwise return a default."""
+        idx = self._column_index.get(name)
+        return self.data[:, idx] if idx is not None else default
+
+    def to_dataframe(self, copy: bool = True) -> pd.DataFrame:
+        """Return the data block as a pandas DataFrame."""
+        df = pd.DataFrame(self.data, columns=self.columns)
+        return df.copy() if copy else df
 
 
 def iter_dump_frames(filepath: str) -> Iterator[DumpFrame]:

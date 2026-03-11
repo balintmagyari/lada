@@ -3,8 +3,8 @@ import pandas as pd
 from dataclasses import dataclass, field
 from typing import Iterator, Mapping, Optional
 import warnings
+from tqdm import tqdm
 
-# 1. Data structure to hold dump data
 @dataclass
 class DumpFrame:
     """
@@ -184,7 +184,45 @@ def dump_frames(filepath: str) -> Iterator[DumpFrame]:
                 data=np.loadtxt(current_data)
             )
 
+def read_dump(filepath: str, timestep_col: str = 'timestep') -> pd.DataFrame:
+    """Read a dump file and concatenate every timestep into a single DataFrame.
 
+    Each row in the returned DataFrame corresponds to one atom from a single
+    timestep. If the dump contains a `TIMESTEP` metadata block, it is added as a
+    column (default: ``timestep``).
+
+    Parameters
+    ----------
+    filepath : str
+        Path to a LAMMPS dump file.
+    timestep_col : str, default='timestep'
+        If the dump file contains a 'TIMESTEP' metadata block, its data is added
+        as a column with the column name defined by this parameter. 
+
+    Returns
+    -------
+    pd.DataFrame
+        Pandas dataframe containing data of all timesteps listed in the dump file.
+        Timesteps to which data belong to are indicated by the value in the column
+        defined by the parameter 'timestep_col'.
+    """
+    frames = list(dump_frames(filepath))
+
+    if not frames:
+        return pd.DataFrame()
+
+    dfs: list[pd.DataFrame] = []
+    for frame in tqdm(frames, desc="Reading dump file"):
+        df = frame.to_pandas(copy=False)
+        if "TIMESTEP" in frame.metadata:
+            df = df.assign(**{timestep_col: frame.metadata["TIMESTEP"]}) # Use dictionary unpacking to feed keyword arguments to the 'assign' function
+        df.insert(0, timestep_col, df.pop(timestep_col))    # Move TIMESTEP column as first column
+        dfs.append(df)
+
+    return pd.concat(dfs, ignore_index=True, copy=False)
+
+
+# Old function that eventually need to be depreciated
 def iter_dump_frames(filepath: str) -> Iterator[DumpFrame]:
     """Yield frames from a LAMMPS dump file.
 

@@ -15,6 +15,34 @@ def calculate_avg_rg_sq(
     """
     Compute the ensemble-average squared radius of gyration using fast vectorization.
     Dynamically handles both single frames and massive multi-timestep trajectories.
+
+    Parameters
+    ----------
+    df : pd.DataFrame | np.ndarray
+        Dataframe containing data to be used to calculate squared radius of gyration.
+        It can be given either as a pandas dataframe or a numpy array. In case it is a 
+        numpy array, the 'columns' argument is necessary to be specified.
+    columns: list[str] | None, default=None
+        Column header names in case a numpy array was given for 'df' argument.
+    coords_cols: list[str], default=['xu', 'yu', 'zu']
+        Column headers specifying the coordinate columns. For a reliable calculation
+        these coordinates should be in their 'unwrapped' format, which LAMMPS 
+        denotes as 'xu', 'yu', and 'zu' for the three coordinates.
+    molecule_col: str, default='mol'
+        Column header specifying molecular IDs.
+    timestep_col: str, default='timestep'
+        Column header specifying timestep values.
+    mass_col: str | None, default=None
+        Column header specifying atom masses. When given, the mass of each atom is 
+        accounted for when calculating Rg^2. If None, the mass of all atoms is 
+        considered equal.
+
+    Returns
+    -------
+    float | dict[float, float]
+        Returns a singular float value if a single timestep's data was given in df.
+        Otherwise it returns a dictionary where the keys specify the timestep and 
+        the values the Rg^2 values.
     """
     
     # 1. Standardize input and validate columns

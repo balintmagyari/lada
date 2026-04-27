@@ -123,7 +123,9 @@ df = thermo.to_pandas()
 
 ## 🧬 3) Parsing LAMMPS data files (`data_parser.py`)
 
-### Main API
+### Regular LAMMPS data files
+
+#### Main API
 
 ```python
 from lada import read_data_file
@@ -137,36 +139,26 @@ atoms = lammps_data.get("Atoms")
 df_atoms = lammps_data.to_pandas(section="Atoms")
 ```
 
-### Notes on atom style detection
+#### Notes on atom style detection
 
 - The parser attempts to detect the atom style from the comment in the `Atoms` section header,
   e.g. `Atoms # atomic`.
 - If detected, it uses the correct column layout for that style (e.g., `x y z` vs `qx qy qz`).
 
-<!-- ---
+### Autocorrelation data files
 
-## 🧪 Testing
+These files refer to files written using LAMMPS' `fix ave/correlate/long` command ([LAMMPS
+documentation](https://docs.lammps.org/fix_ave_correlate_long.html)). 
 
-Run the test suite with:
-
-```bash
-python -m pytest -q
-```
-
----
-
-## 🎯 Tips
-
-- If you want a consistent representation for `BOX BOUNDS`, you can standardize by converting the array to a known shape:
+#### Main API
 
 ```python
-box_bounds = np.asarray(frame.metadata["BOX BOUNDS pp pp pp"])
-if box_bounds.shape == (3, 3):
-    bounds = box_bounds[:, :2]
-    tilt   = box_bounds[:, 2]
+from lada import read_lammps_acf
+
+df = read_lammps_acf('data.txt')
 ```
 
-- Use `frame.to_dataframe()` for easy plotting and analysis with pandas. -->
+The output from the `read_lammps_acf` function is a standard pandas dataframe.
 
 ---
 

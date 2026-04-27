@@ -2,6 +2,9 @@ import numpy as np
 import warnings
 from dataclasses import dataclass
 from typing import Dict, Any, List, Optional, Literal
+import re
+from pathlib import Path
+import pandas as pd
 
 ATOM_STYLE_COLUMNS = {
     "atomic": ["id", "type", "x", "y", "z", "nx", "ny", "nz"],
@@ -132,3 +135,128 @@ def read_data_file(filepath: str) -> LammpsData:
         metadata=metadata, 
         sections=sections, 
     )
+
+def _find_last_timestep_block(lines: list[str]) -> tuple[int, int, int]:
+    """
+    Scan *lines* and return (timestep_value, block_start, block_end) for the
+    *last* '# Timestep: N' block found.
+ 
+    block_start is the index of the first *data* line (i.e. the line after
+    the '# Timestep:' header).  block_end is one past the last data line.
+ 
+    Raises ValueError if fewer than two timestep blocks are found (we always
+    skip Timestep 0, so at least one production block must exist).
+    """
+    timestep_header_re = re.compile(r"^#\s*Timestep:\s*(\d+)", re.IGNORECASE)
+ 
+    block_starts: list[tuple[int, int]] = []   # (timestep_value, line_index_of_header)
+ 
+    for i, line in enumerate(lines):
+        m = timestep_header_re.match(line.strip())
+        if m:
+            block_starts.append((int(m.group(1)), i))
+ 
+    if len(block_starts) < 2:
+        raise ValueError(
+            f"Expected at least 2 timestep blocks (including the t=0 reference), "
+            f"but found {len(block_starts)}."
+        )
+ 
+    # Take the last block
+    last_ts_value, last_header_idx = block_starts[-1]
+ 
+    # Data starts on the line after the header
+    block_start = last_header_idx + 1
+ 
+    # Data ends at the end of the file (there is no subsequent block)
+    block_end = len(lines)
+ 
+    return last_ts_value, block_start, block_end
+ 
+def read_lammps_acf(filepath: str | Path, 
+                    lag_col: str = "lag_time") -> pd.DataFrame:
+    """
+    Read a LAMMPS stress-ACF output file and return the last timestep block
+    as a tidy Pandas DataFrame.
+ 
+    Parameters
+    ----------
+    filepath : str or Path
+        Path to the LAMMPS ACF text file.
+    lag_col : str, optional
+        Name to give the lag-time column (default: ``'lag_time'``).
+ 
+    Returns
+    -------
+    pd.DataFrame
+        Columns:
+          - ``lag_col``         : float - physical lag time
+          - one column per ACF  : float - autocorrelation values
+          - ``timestep``        : int   - the LAMMPS timestep of this block
+    """
+    filepath = Path(filepath)
+ 
+    if not filepath.is_file():
+        raise FileNotFoundError(f"No such file: {filepath}")
+ 
+    with filepath.open("r") as fh:
+        lines = fh.readlines()
+ 
+    # ------------------------------------------------------------------
+    # 1.  Parse column names from line 1 (comma-separated)
+    # ------------------------------------------------------------------
+    acf_columns = [c.strip() for c in lines[0].strip().split(",") if c.strip()]
+ 
+    # ------------------------------------------------------------------
+    # 2.  Locate the last timestep block
+    # ------------------------------------------------------------------
+    timestep_value, block_start, block_end = _find_last_timestep_block(lines)
+ 
+    # ------------------------------------------------------------------
+    # 3.  Parse data rows (skip blank / comment lines inside the block)
+    # ------------------------------------------------------------------
+    records: list[list[float]] = []
+ 
+    for line in lines[block_start:block_end]:
+        stripped = line.strip()
+        if not stripped or stripped.startswith("#"):
+            continue
+        try:
+            values = [float(v) for v in stripped.split()]
+        except ValueError:
+            # Silently skip any malformed lines
+            continue
+ 
+        if len(values) != len(acf_columns) + 1:
+            # Unexpected column count — skip with a warning
+            import warnings
+            warnings.warn(
+                f"Skipping line with unexpected column count "
+                f"(got {len(values)}, expected {len(acf_columns) + 1}): {stripped!r}",
+                stacklevel=2,
+            )
+            continue
+ 
+        records.append(values)
+ 
+    if not records:
+        raise ValueError(
+            f"No valid data rows found in the last timestep block "
+            f"(Timestep: {timestep_value})."
+        )
+ 
+    # ------------------------------------------------------------------
+    # 4.  Build DataFrame
+    # ------------------------------------------------------------------
+    all_columns = [lag_col] + acf_columns
+    df = pd.DataFrame(records, columns=all_columns)
+ 
+    # Ensure correct dtypes
+    df[lag_col] = df[lag_col].astype(float)
+    for col in acf_columns:
+        df[col] = df[col].astype(float)
+ 
+    # Attach the timestep as a scalar column
+    df["timestep"] = timestep_value
+ 
+    return df

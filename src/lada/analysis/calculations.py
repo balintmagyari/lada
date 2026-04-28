@@ -119,7 +119,6 @@ def calculate_avg_rg_sq(
         return list(rg_sq_by_timestep.values())[0]
     else:
         return rg_sq_by_timestep
-    
 
 def calculate_avg_ree_sq(
     df: pd.DataFrame | np.ndarray,
@@ -204,7 +203,6 @@ def calculate_avg_ree_sq(
         return list(ree_sq_by_timestep.values())[0]
     else:
         return ree_sq_by_timestep
-    
 
 def calculate_ree_vectors(
     df: pd.DataFrame | np.ndarray,
@@ -306,3 +304,155 @@ def calculate_ree_vectors(
         result_df = result_df.drop(columns=timestep_col)
     
     return result_df
+
+
+# ---------------------------------------------------------------------------
+# Column name constants
+# ---------------------------------------------------------------------------
+ 
+_SHEAR_COLS = ("ACF_Sxy", "ACF_Sxz", "ACF_Syz")
+ 
+# Accept both the correct name and the known typo from the LAMMPS script
+_NORMAL_COLS_CANONICAL = ("ACF_Nxy", "ACF_Nxz", "ACF_Nyz")
+_NORMAL_COLS_TYPO      = ("ACF_Nxy", "ACF_Nxz", "ACF_yz")
+ 
+ 
+def _resolve_normal_cols(df: pd.DataFrame) -> tuple[str, str, str]:
+    """
+    Return the actual normal-stress-difference column names present in *df*,
+    tolerating the known 'ACF_yz' typo for 'ACF_Nyz'.
+ 
+    Raises
+    ------
+    KeyError
+        If neither the canonical nor the typo variant of any column is found.
+    """
+    resolved = []
+    for canonical, typo in zip(_NORMAL_COLS_CANONICAL, _NORMAL_COLS_TYPO):
+        if canonical in df.columns:
+            resolved.append(canonical)
+        elif typo in df.columns:
+            resolved.append(typo)
+        else:
+            raise KeyError(
+                f"Could not find normal-stress ACF column '{canonical}' "
+                f"(also tried '{typo}') in the DataFrame. "
+                f"Available columns: {list(df.columns)}"
+            )
+    return tuple(resolved)
+ 
+ 
+def _validate_columns(df: pd.DataFrame, cols: tuple[str, ...]) -> None:
+    missing = [c for c in cols if c not in df.columns]
+    if missing:
+        raise KeyError(
+            f"The following expected columns are missing from the DataFrame: "
+            f"{missing}. Available columns: {list(df.columns)}"
+        )
+ 
+ 
+# ---------------------------------------------------------------------------
+# Public API
+# ---------------------------------------------------------------------------
+ 
+def calc_stress_relaxation(
+    df: pd.DataFrame,
+    volume: float,
+    temperature: float,
+    lag_col: str = "lag_time",
+) -> pd.DataFrame:
+    """
+    Calculate the stress relaxation modulus G(t) from a LAMMPS ACF DataFrame
+    using the Green-Kubo (GK) and Full Stress Relaxation (FSR) methods.
+ 
+    Assumes LJ units (k_B = 1), so the prefactor is simply V / T.
+ 
+    Parameters
+    ----------
+    df : pd.DataFrame
+        ACF DataFrame as returned by ``read_lammps_acf``.  Must contain
+        columns for the shear ACFs (ACF_Sxy, ACF_Sxz, ACF_Syz) and the
+        normal stress difference ACFs (ACF_Nxy, ACF_Nxz, ACF_Nyz — or the
+        known typo variant ACF_yz for the last one).
+    volume : float
+        System volume in LJ units (length^3).
+    temperature : float
+        System temperature in LJ units (energy).
+    lag_col : str, optional
+        Name of the lag-time column in *df* (default: ``'lag_time'``).
+ 
+    Returns
+    -------
+    pd.DataFrame
+        A DataFrame with three columns:
+          - ``lag_time``  : float – physical lag time (copied from *df*)
+          - ``G_GK``      : float – Green-Kubo relaxation modulus
+          - ``G_FSR``     : float – Full stress relaxation modulus
+ 
+    Raises
+    ------
+    KeyError
+        If any required ACF column is absent from *df*.
+    ValueError
+        If *volume* or *temperature* are non-positive, or if *lag_col* is
+        not found in *df*.
+    """
+    # ------------------------------------------------------------------
+    # Input validation
+    # ------------------------------------------------------------------
+    if volume <= 0:
+        raise ValueError(f"volume must be positive, got {volume}.")
+    if temperature <= 0:
+        raise ValueError(f"temperature must be positive, got {temperature}.")
+    if lag_col not in df.columns:
+        raise ValueError(
+            f"Lag-time column '{lag_col}' not found in DataFrame. "
+            f"Available columns: {list(df.columns)}"
+        )
+ 
+    _validate_columns(df, _SHEAR_COLS)
+    n_xy, n_xz, n_yz = _resolve_normal_cols(df)
+ 
+    # ------------------------------------------------------------------
+    # Prefactor  (V / k_B T),  k_B = 1 in LJ units
+    # ------------------------------------------------------------------
+    prefactor = volume / temperature
+ 
+    # ------------------------------------------------------------------
+    # Green-Kubo
+    # G_GK(t) = (V/T) * (1/3) * ( ACF_Sxy + ACF_Sxz + ACF_Syz )
+    # ------------------------------------------------------------------
+    shear_mean = (
+        df["ACF_Sxy"] + df["ACF_Sxz"] + df["ACF_Syz"]
+    ) / 3.0
+ 
+    G_GK = prefactor * shear_mean
+ 
+    # ------------------------------------------------------------------
+    # Full Stress Relaxation
+    # G_FSR(t) = (V/T) * (1/5) * [   ACF_Sxy  + ACF_Sxz  + ACF_Syz
+    #                               + (1/2)*ACF_Nxy
+    #                               + (1/2)*ACF_Nxz
+    #                               + (1/2)*ACF_Nyz ]
+    # ------------------------------------------------------------------
+    fsr_sum = (
+          df["ACF_Sxy"]
+        + df["ACF_Sxz"]
+        + df["ACF_Syz"]
+        + 0.5 * df[n_xy]
+        + 0.5 * df[n_xz]
+        + 0.5 * df[n_yz]
+    )
+ 
+    G_FSR = prefactor * fsr_sum / 5.0
+ 
+    # ------------------------------------------------------------------
+    # Assemble output DataFrame
+    # ------------------------------------------------------------------
+    result = pd.DataFrame({
+        "lag_time" : df[lag_col].values,
+        "G_GK"     : G_GK.values,
+        "G_FSR"    : G_FSR.values,
+    })
+ 
+    return result

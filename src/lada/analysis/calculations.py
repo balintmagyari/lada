@@ -349,18 +349,16 @@ def _validate_columns(df: pd.DataFrame, cols: tuple[str, ...]) -> None:
             f"The following expected columns are missing from the DataFrame: "
             f"{missing}. Available columns: {list(df.columns)}"
         )
- 
- 
+
 # ---------------------------------------------------------------------------
 # Public API
 # ---------------------------------------------------------------------------
  
-def calc_stress_relaxation(
-    df: pd.DataFrame,
-    volume: float,
-    temperature: float,
-    lag_col: str = "lag_time",
-) -> pd.DataFrame:
+def calc_stress_relaxation(df: pd.DataFrame, 
+                           volume: float, 
+                           temperature: float, 
+                           lag_col: str = "lag_time",
+                           kB: float = 1.0) -> pd.DataFrame:
     """
     Calculate the stress relaxation modulus G(t) from a LAMMPS ACF DataFrame
     using the Green-Kubo (GK) and Full Stress Relaxation (FSR) methods.
@@ -385,9 +383,9 @@ def calc_stress_relaxation(
     -------
     pd.DataFrame
         A DataFrame with three columns:
-          - ``lag_time``  : float – physical lag time (copied from *df*)
-          - ``G_GK``      : float – Green-Kubo relaxation modulus
-          - ``G_FSR``     : float – Full stress relaxation modulus
+          - ``lag_time``  : float - physical lag time (copied from *df*)
+          - ``G_GK``      : float - Green-Kubo relaxation modulus
+          - ``G_FSR``     : float - Full stress relaxation modulus
  
     Raises
     ------
@@ -416,11 +414,11 @@ def calc_stress_relaxation(
     # ------------------------------------------------------------------
     # Prefactor  (V / k_B T),  k_B = 1 in LJ units
     # ------------------------------------------------------------------
-    prefactor = volume / temperature
+    prefactor = volume / (temperature * kB)
  
     # ------------------------------------------------------------------
     # Green-Kubo
-    # G_GK(t) = (V/T) * (1/3) * ( ACF_Sxy + ACF_Sxz + ACF_Syz )
+    # G_GK(t) = (V/T*kB) * (1/3) * ( ACF_Sxy + ACF_Sxz + ACF_Syz )
     # ------------------------------------------------------------------
     shear_mean = (
         df["ACF_Sxy"] + df["ACF_Sxz"] + df["ACF_Syz"]

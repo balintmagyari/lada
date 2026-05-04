@@ -306,10 +306,10 @@ def calculate_ree_vectors(
     
     return result_df
 
-def calculate_end_to_end_acf(trajectory_file: str, 
-                             end_pairs: np.ndarray, 
-                             time_per_frame: float
-                             ) -> NDArray[np.float64]:
+def calculate_segment_acf(trajectory_file: str, 
+                          segment_pairs: np.ndarray, 
+                          time_per_frame: float
+                          ) -> NDArray[np.float64]:
     """
     Calculates the normalized end-to-end vector autocorrelation function (ACF) 
     for polymer chains from a compressed NumPy trajectory.
@@ -354,8 +354,8 @@ def calculate_end_to_end_acf(trajectory_file: str,
     coords = data['coords']  # Shape: (n_frames, n_atoms, 3)
     
     # Extract the head and tail indices
-    heads = end_pairs[:, 0]
-    tails = end_pairs[:, 1]
+    heads = segment_pairs[:, 0]
+    tails = segment_pairs[:, 1]
     
     # Calculate the end-to-end vector for ALL chains at ALL frames
     R = coords[:, tails, :] - coords[:, heads, :]

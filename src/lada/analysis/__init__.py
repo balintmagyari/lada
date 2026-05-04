@@ -1,1 +1,1 @@
-from .calculations import calculate_end_to_end_acf
+from .calculations import calculate_segment_acf

@@ -1,5 +1,6 @@
 import pandas as pd
 import numpy as np
+from numpy.typing import NDArray
 from icecream import ic
 from tqdm import tqdm
 # from typing import Union, List, Optional, Dict
@@ -305,6 +306,83 @@ def calculate_ree_vectors(
     
     return result_df
 
+def calculate_end_to_end_acf(trajectory_file: str, 
+                             end_pairs: np.ndarray, 
+                             time_per_frame: float
+                             ) -> NDArray[np.float64]:
+    """
+    Calculates the normalized end-to-end vector autocorrelation function (ACF) 
+    for polymer chains from a compressed NumPy trajectory.
+
+    This function computes the ensemble-averaged, time-correlated memory loss of 
+    the polymer chain conformations. It uses a highly vectorized sliding-window 
+    approach to calculate the dot product <R(t) . R(0)> across all valid time 
+    origins (t0) and averages the result over all specified chains in the system.
+
+    Parameters
+    ----------
+    trajectory_file : str
+        Path to the compressed NumPy archive (.npz) containing the simulation 
+        trajectory. The archive must contain an array accessed via the 'coords' 
+        keyword, structured with shape (n_frames, n_atoms, 3).
+    end_pairs : numpy.ndarray
+        A 2D array of integers of shape (n_chains, 2) containing the 0-indexed 
+        indices of the head and tail beads for every polymer chain in the melt. 
+        Column 0 corresponds to the head indices, and Column 1 corresponds to 
+        the tail indices.
+    time_per_frame : float
+        The physical simulation time elapsed between consecutive saved frames 
+        in the trajectory (e.g., MD_timestep * steps_between_saves).
+
+    Returns
+    -------
+    numpy.ndarray
+        A 2D array of floats of shape (n_frames, 2) containing the final data:
+        - Column 0: The physical lag time (delta t) for the correlation window.
+        - Column 1: The normalized autocorrelation value, C(t). The value at 
+                    C(0) is strictly normalized to 1.0.
+
+    Notes
+    -----
+    Statistical reliability decreases linearly as the lag time approaches the 
+    total trajectory length due to the decreasing number of available time 
+    origins for the ensemble average. It is standard practice to discard or 
+    visually ignore the final 10% to 20% of the returned array when extracting 
+    terminal relaxation times.
+    """
+    data = np.load(trajectory_file, allow_pickle=False)
+    coords = data['coords']  # Shape: (n_frames, n_atoms, 3)
+    
+    # Extract the head and tail indices
+    heads = end_pairs[:, 0]
+    tails = end_pairs[:, 1]
+    
+    # Calculate the end-to-end vector for ALL chains at ALL frames
+    R = coords[:, tails, :] - coords[:, heads, :]
+    
+    n_frames, n_chains, _ = R.shape
+    acf = np.zeros(n_frames)
+    
+    # Slide the time window (lag) across the trajectory
+    for lag in tqdm(range(n_frames), "Calculating autocorrelation"):
+        R_start = R[:n_frames - lag]
+        R_lag = R[lag:]
+        
+        # Calculate the dot product and average
+        dot_products = np.sum(R_start * R_lag, axis=2)
+        acf[lag] = np.mean(dot_products)
+        
+    # Normalize the function
+    acf_normalized = acf / acf[0]
+    
+    # --- Generate Time Axis and Stack ---
+    # Create an array of physical time values starting at 0
+    time_array = np.arange(n_frames) * time_per_frame
+    
+    # Stack the time and ACF arrays into a 2D matrix of shape (n_frames, 2)
+    final_output = np.column_stack((time_array, acf_normalized))
+    
+    return final_output
 
 # ---------------------------------------------------------------------------
 # Column name constants
@@ -340,7 +418,6 @@ def _resolve_normal_cols(df: pd.DataFrame) -> tuple[str, str, str]:
                 f"Available columns: {list(df.columns)}"
             )
     return tuple(resolved)
- 
  
 def _validate_columns(df: pd.DataFrame, cols: tuple[str, ...]) -> None:
     missing = [c for c in cols if c not in df.columns]

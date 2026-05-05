@@ -384,6 +384,114 @@ def calculate_segment_acf(trajectory_file: str,
     
     return final_output
 
+def calculate_rouse_mode_acf(trajectory_file: str, 
+                             chain_indices: np.ndarray, 
+                             p: int, 
+                             time_per_frame: float
+                             ) -> NDArray[np.float64]:
+    """
+    Calculates the normalized autocorrelation function (ACF) for a specific 
+    Rouse mode of polymer chains from a compressed NumPy trajectory.
+
+    This function isolates independent, orthogonal harmonic motions (modes) of 
+    a polymer chain using a discrete cosine transform. It projects the 3D bead 
+    coordinates into mode space to find the mode amplitude X_p(t), and then 
+    computes the ensemble-averaged time-correlation <X_p(t) . X_p(0)> using a 
+    vectorized sliding-window approach.
+
+    Parameters
+    ----------
+    trajectory_file : str
+        Path to the compressed NumPy archive (.npz) containing the simulation 
+        trajectory. The archive must contain an array accessed via the 'coords' 
+        keyword, structured with shape (n_frames, n_atoms, 3).
+    chain_indices : numpy.ndarray
+        A 2D array of integers of shape (n_chains, beads_per_chain) containing 
+        the 0-indexed indices of every bead in every polymer chain. The beads 
+        must be sequentially ordered from one end of the chain to the other 
+        along the backbone.
+    p : int
+        The Rouse mode number to calculate. Must be an integer bounded by 
+        0 <= p < N, where N is the number of beads per chain. 
+        - p=0 returns the center-of-mass translation (does not decay to zero).
+        - p=1 returns the fundamental mode (whole chain relaxation).
+        - Higher p values isolate increasingly localized segmental vibrations.
+    time_per_frame : float
+        The physical simulation time elapsed between consecutive saved frames 
+        in the trajectory.
+
+    Returns
+    -------
+    numpy.ndarray
+        A 2D array of floats of shape (n_frames, 2) containing the final data:
+        - Column 0: The physical lag time (delta t) for the correlation window.
+        - Column 1: The normalized autocorrelation value, C(t). The value at 
+                    C(0) is strictly normalized to 1.0.
+
+    Raises
+    ------
+    ValueError
+        If the requested mode `p` is negative or greater than or equal to the 
+        number of beads per chain (N), violating the Nyquist limit for discrete 
+        polymer representations.
+
+    Notes
+    -----
+    Statistical reliability decreases linearly as the lag time approaches the 
+    total trajectory length. It is standard practice to discard the terminal 
+    10% to 20% of the returned array when extracting relaxation times (tau_p).
+    """
+    data = np.load(trajectory_file, allow_pickle=False)
+    coords = data['coords']  # Shape: (n_frames, n_atoms, 3)
+    
+    # 1. Isolate the chains. 
+    # chain_coords shape becomes: (n_frames, n_chains, beads_per_chain, 3)
+    chain_coords = coords[:, chain_indices, :] 
+    
+    n_frames, n_chains, N, _ = chain_coords.shape
+
+    # ---------------------------------------------------------
+    # VALIDATION CHECK: Enforce the physical limits of p
+    # ---------------------------------------------------------
+    if not (0 <= p < N):
+        raise ValueError(
+            f"Mathematical constraint violated! You requested mode p={p}. "
+            f"For a chain containing N={N} beads, the Rouse mode number 'p' "
+            f"must be an integer strictly between 0 and {N-1}."
+        )
+    # ---------------------------------------------------------
+    
+    # 2. Build the cosine weights
+    # We use 1-based indexing for the math formula, so n goes from 1 to N
+    n_array = np.arange(1, N + 1)
+    
+    # Calculate the cosine term for each bead
+    weights = np.cos(p * np.pi * (n_array - 0.5) / N)
+    
+    # Reshape weights to (1, 1, N, 1) so it broadcasts perfectly against chain_coords
+    weights = weights.reshape(1, 1, N, 1)
+    
+    # 3. Calculate the Rouse mode amplitudes X_p(t)
+    # Multiply the coordinates by the weights, then sum across the bead axis (axis=2)
+    # Resulting X_p shape: (n_frames, n_chains, 3)
+    X_p = np.sum(chain_coords * weights, axis=2) 
+    
+    acf = np.zeros(n_frames)
+    
+    # 4. Sliding time window (identical to the end-to-end ACF)
+    for lag in tqdm(range(n_frames), desc=f"Mode {p} ACF"):
+        X_start = X_p[:n_frames - lag]
+        X_lag = X_p[lag:]
+        
+        dot_products = np.sum(X_start * X_lag, axis=2)
+        acf[lag] = np.mean(dot_products)
+        
+    # 5. Normalize and Format
+    acf_normalized = acf / acf[0]
+    time_array = np.arange(n_frames) * time_per_frame
+    
+    return np.column_stack((time_array, acf_normalized))
+
 # ---------------------------------------------------------------------------
 # Column name constants
 # ---------------------------------------------------------------------------

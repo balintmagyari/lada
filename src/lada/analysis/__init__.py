@@ -1,1 +1,1 @@
-from .calculations import calculate_segment_acf
+from .calculations import calculate_segment_acf, calculate_rouse_mode_acf

@@ -492,6 +492,137 @@ def calculate_rouse_mode_acf(trajectory_file: str,
     
     return np.column_stack((time_array, acf_normalized))
 
+def _generate_q_vectors(q_magnitude: float, n_vectors: int = 50) -> np.ndarray:
+    """
+    Generates an array of 3D scattering vectors uniformly distributed on the 
+    surface of a sphere of radius |q| using a Fibonacci lattice.
+
+    Parameters
+    ----------
+    q_magnitude : float
+        The desired magnitude |q| of the scattering vectors. This defines the 
+        physical length scale being probed (q = 2*pi / d).
+    n_vectors : int, optional
+        The number of vectors to generate for isotropic averaging. Default is 50.
+        Higher numbers give smoother averages but linearly increase the 
+        computational time of the ISF calculation.
+
+    Returns
+    -------
+    numpy.ndarray
+        A 2D array of shape (n_vectors, 3) containing the [qx, qy, qz] components.
+    """
+    # The golden angle in radians
+    phi = np.pi * (3.0 - np.sqrt(5.0)) 
+    
+    # Array of indices from 0 to n_vectors - 1
+    indices = np.arange(n_vectors)
+    
+    # Calculate the Z coordinates (evenly spaced from 1 down to -1)
+    # We use n_vectors - 1 to ensure we hit the exact poles if n > 1
+    z = 1.0 - (indices / float(n_vectors - 1)) * 2.0
+    
+    # Calculate the radius of the slice at each Z coordinate
+    radius = np.sqrt(1.0 - z * z)
+    
+    # Calculate the angle theta for each point using the golden angle
+    theta = phi * indices
+    
+    # Calculate X and Y coordinates
+    x = np.cos(theta) * radius
+    y = np.sin(theta) * radius
+    
+    # Stack them together into a (N, 3) array
+    unit_vectors = np.column_stack((x, y, z))
+    
+    # Scale the unit vectors by the requested physical magnitude
+    return unit_vectors * q_magnitude
+
+def calculate_isf(trajectory_file: str, 
+                  time_per_frame: float,
+                  q_magnitude: float, 
+                  n_vectors: int = 50
+                  ) -> NDArray[np.float64]:
+    """
+    Calculates the coherent Intermediate Scattering Function, F(q,t), 
+    for a specific scattering vector magnitude |q|.
+
+    This function uses the density fluctuation autocorrelation method to achieve 
+    O(N) scaling. It evaluates the time-dependent memory loss of spatial 
+    density waves across the simulation box.
+
+    Parameters
+    ----------
+    trajectory_file : str
+        Path to the compressed NumPy archive (.npz) containing the coordinates.
+    time_per_frame : float
+        The physical simulation time elapsed between saved frames.
+    q_magnitude : float
+        The desired magnitude |q| of the scattering vectors. This defines the 
+        physical length scale being probed (q = 2*pi / d).
+    n_vectors : int, default=50
+        The number of vectors to dynamically generate for isotropic averaging 
+        using a Fibonacci lattice. Default is 50. Higher numbers give smoother 
+        averages but linearly increase computational time.
+
+    Returns
+    -------
+    numpy.ndarray
+        A 2D array of shape (n_frames, 2):
+        - Column 0: Lag time (delta t).
+        - Column 1: The normalized ISF value, F(q,t) / F(q,0).
+    """
+    data = np.load(trajectory_file, allow_pickle=False)
+    coords = data['coords']  # Shape: (n_frames, n_atoms, 3)
+
+    q_vectors = _generate_q_vectors(q_magnitude, n_vectors)
+    
+    n_frames, n_atoms, _ = coords.shape
+    n_q = q_vectors.shape[0]
+    
+    # We will accumulate the ACF for all q-vectors to average at the end
+    avg_acf = np.zeros(n_frames)
+    
+    # Loop over each q-vector in the provided list
+    for q_idx in tqdm(range(n_q), "Calculating ISF for vectors"):
+        q_vec = q_vectors[q_idx]  # Shape: (3,)
+        
+        # 1. Calculate the phase for every atom at every frame: q . r(t)
+        # coords shape: (n_frames, n_atoms, 3) dot (3,) -> (n_frames, n_atoms)
+        phases = np.dot(coords, q_vec)
+        
+        # 2. Calculate the density fluctuation rho(q, t)
+        # Sum the complex exponentials across all atoms (axis=1)
+        # Resulting rho shape: (n_frames,)
+        rho = np.sum(np.exp(-1j * phases), axis=1)
+        
+        # 3. Calculate the autocorrelation of rho using the sliding window
+        acf_q = np.zeros(n_frames, dtype=np.complex128)
+        
+        for lag in range(n_frames):
+            rho_start = rho[:n_frames - lag]
+            rho_lag = rho[lag:]
+            
+            # Multiply rho(t+lag) by the complex conjugate of rho(t)
+            correlations = rho_lag * np.conj(rho_start)
+            acf_q[lag] = np.mean(correlations)
+            
+        # The true physical ISF should be purely real. Any imaginary component 
+        # is numerical noise that vanishes upon averaging. We take the real part.
+        avg_acf += np.real(acf_q) / n_atoms
+        
+    # Average across all the q-vectors provided
+    avg_acf /= n_q
+    
+    # Normalize the function so F(q, 0) = 1.0
+    isf_normalized = avg_acf / avg_acf[0]
+    
+    # Generate time axis and format output
+    time_array = np.arange(n_frames) * time_per_frame
+    final_output = np.column_stack((time_array, isf_normalized))
+    
+    return final_output
+
 # ---------------------------------------------------------------------------
 # Column name constants
 # ---------------------------------------------------------------------------

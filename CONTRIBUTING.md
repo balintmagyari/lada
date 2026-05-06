@@ -25,3 +25,29 @@ We use the standard GitHub Fork and Pull Request workflow. Please do not request
 5. **Push the branch** back to your forked repository.
 
 ---
+
+## Running Tests Locally
+
+Before submitting a pull request, ensure all tests pass:
+
+```bash
+# Install dev dependencies
+pip install -e ".[dev]"
+
+# Run all tests
+pytest tests/ -v
+
+# Run tests for a specific module
+pytest tests/test_parsers/ -v
+pytest tests/test_analysis/ -v
+```
+
+Tests are automatically run on pull requests via GitHub Actions. Your PR must pass all tests before merging.
+
+### Test Structure
+
+Tests are organized by module:
+- `tests/test_parsers/` — Tests for dump, log, and data file parsers
+- `tests/test_analysis/` — Tests for analysis calculations
+
+Please add tests for any new functionality.

@@ -1,5 +1,7 @@
 # LaDa
 
+[![Tests](https://github.com/balintmagyari/lada/actions/workflows/tests.yml/badge.svg)](https://github.com/YOUR_USERNAME/lada/actions/workflows/tests.yml)
+
 **LaDa** (LAMMPS Data Access) is a lightweight Python package for parsing common LAMMPS output formats. The name is, quite intentionally, borrowed from the legendary Soviet car brand **LADA**—because much like its cars, this library aims to be simple, reliable, and able to run just about anywhere without unnecessary luxury features.
 
 In its current state, the library provides straightforward, user-friendly access to LAMMPS dump files, log files, and data files, while keeping external dependencies to a minimum.

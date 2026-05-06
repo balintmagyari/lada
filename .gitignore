@@ -1,6 +1,23 @@
-tests/
+# Exclude ONLY large production test data files
+# Keep small sample files (<10MB each) for test coverage on GitHub Actions
+# Production files are too large for git version control
+tests/data/Atoms.dump
+tests/data/Bonds.dump
+tests/data/Vitrimer.data
+tests/data/Atoms\ copy.dump
+tests/data/log.lammps
+
+# Small sample files ARE committed (11K total, provides full test coverage)
+# DO NOT ignore: sample.data, sample_dump.dump, sample_log.lammps, sample_acf.txt
+
 venv/
 __pycache__/
 .DS_Store
 dist/
+build/
+*.egg-info/
+.pytest_cache/
+
+# Claude analysis documents (for git exclusion)
 Claude_*.md
+Claude_test_out.txt

@@ -219,7 +219,7 @@ def read_dump(filepath: str, timestep_col: str = 'timestep') -> pd.DataFrame:
         df.insert(0, timestep_col, df.pop(timestep_col))    # Move TIMESTEP column as first column
         dfs.append(df)
 
-    return pd.concat(dfs, ignore_index=True, copy=False)
+    return pd.concat(dfs, ignore_index=True)
 
 
 # Old function that eventually need to be depreciated

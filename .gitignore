@@ -3,4 +3,4 @@ venv/
 __pycache__/
 .DS_Store
 dist/
-test*
+Claude_*.md

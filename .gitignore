@@ -19,5 +19,5 @@ build/
 .pytest_cache/
 
 # Claude analysis documents (for git exclusion)
-Claude_*.md
-Claude_test_out.txt
+CLAUDE.md
+MEMORY.md

@@ -12,9 +12,9 @@ description = "LAMMPS Data Access library"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
-  "numpy~=2.4.2",
-  "pandas~=3.0.1",
-  "tqdm~=4.67.3"
+  "numpy>=2.0",
+  "pandas>=3.0",
+  "tqdm>=4.60"
 ]
 classifiers = [
     "Programming Language :: Python :: 3",

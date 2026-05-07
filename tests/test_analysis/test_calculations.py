@@ -293,13 +293,13 @@ class TestCalcStressRelaxation:
     def test_g_gk_formula(self):
         # With all ACF values = 1 and V=10, T=1: G_GK = (10/1) * (3/3) = 10
         result = calc_stress_relaxation(make_acf_df(), volume=10.0, temperature=1.0)
-        np.testing.assert_allclose(result["G_GK"].values, 10.0)
+        assert result["G_GK"].values == pytest.approx(10.0) 
 
     def test_g_fsr_formula(self):
         # With all ACF values = 1 and V=10, T=1:
         # G_FSR = (10/1) * (1/6) * (3 + (1/4)*3) = 10 * 3.75/6 = 6.25
         result = calc_stress_relaxation(make_acf_df(), volume=10.0, temperature=1.0)
-        np.testing.assert_allclose(result["G_FSR"].values, 6.25)
+        assert result["G_FSR"].values == pytest.approx(6.25)
 
     def test_lag_time_column_is_preserved(self):
         df = make_acf_df(n=5)

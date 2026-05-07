@@ -716,21 +716,21 @@ def calc_stress_relaxation(df: pd.DataFrame,
 
     # ------------------------------------------------------------------
     # Full Stress Relaxation
-    # G_FSR(t) = (V/T) * (1/5) * [   ACF_Sxy  + ACF_Sxz  + ACF_Syz
-    #                               + (1/2)*ACF_Nxy
-    #                               + (1/2)*ACF_Nxz
-    #                               + (1/2)*ACF_Nyz ]
+    # G_FSR(t) = (V/kB*T) * (1/6) * [   ACF_Sxy  + ACF_Sxz  + ACF_Syz
+    #                               + (1/4)*ACF_Nxy
+    #                               + (1/4)*ACF_Nxz
+    #                               + (1/4)*ACF_Nyz ]
     # ------------------------------------------------------------------
     fsr_sum = (
           df["ACF_Sxy"]
         + df["ACF_Sxz"]
         + df["ACF_Syz"]
-        + 0.5 * df["ACF_Nxy"]
-        + 0.5 * df["ACF_Nxz"]
-        + 0.5 * df["ACF_Nyz"]
+        + 0.25 * df["ACF_Nxy"]
+        + 0.25 * df["ACF_Nxz"]
+        + 0.25 * df["ACF_Nyz"]
     )
  
-    G_FSR = prefactor * fsr_sum / 5.0
+    G_FSR = prefactor * fsr_sum / 6.0
  
     # ------------------------------------------------------------------
     # Assemble output DataFrame

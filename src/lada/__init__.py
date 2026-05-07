@@ -1,12 +1,13 @@
 """LaDa: LAMMPS Data Analysis and reading.
 
-A lightweight Python package for parsing LAMMPS output files (dumps, logs, 
+A lightweight Python package for parsing LAMMPS output files (dumps, logs,
 data files) and performing vectorized molecular dynamics analysis calculations.
 
 Core modules:
 - parsers: Extract data from LAMMPS output files
 - analysis: Calculate molecular properties (Rg, end-to-end distance, ACF, ISF, etc.)
 - modifiers: Manipulate LAMMPS topology files
+- exporters: Write analysis results to files for external tools (e.g. pgfplots/LaTeX)
 """
 
 # Parsers
@@ -33,6 +34,9 @@ from .analysis import (
 # Modifiers
 from .modifiers import rewrite_end_beads
 
+# Exporters
+from .exporters import write_pgfplots_table
+
 __all__ = [
     # Parsers
     "iter_dump_frames",
@@ -51,4 +55,6 @@ __all__ = [
     "calc_stress_relaxation",
     # Modifiers
     "rewrite_end_beads",
+    # Exporters
+    "write_pgfplots_table",
 ]

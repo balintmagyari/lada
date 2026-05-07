@@ -7,6 +7,7 @@ from lada.analysis import (
     calculate_avg_rg_sq,
     calculate_avg_ree_sq,
     calculate_ree_vectors,
+    calc_stress_relaxation,
 )
 
 
@@ -257,6 +258,82 @@ class TestCalculateReeVectors:
         # Should have data for multiple molecules
         assert isinstance(vectors, pd.DataFrame)
         assert len(vectors) == 2  # One row per molecule
+
+
+def make_acf_df(n=5, use_typo=False, drop_col=None):
+    """Build a minimal valid ACF DataFrame for stress relaxation tests."""
+    normal_yz_col = "ACF_yz" if use_typo else "ACF_Nyz"
+    df = pd.DataFrame({
+        "lag_time": np.linspace(0, 1, n),
+        "ACF_Sxy":  np.ones(n),
+        "ACF_Sxz":  np.ones(n),
+        "ACF_Syz":  np.ones(n),
+        "ACF_Nxy":  np.ones(n),
+        "ACF_Nxz":  np.ones(n),
+        normal_yz_col: np.ones(n),
+    })
+    if drop_col:
+        df = df.drop(columns=drop_col)
+    return df
+
+
+class TestCalcStressRelaxation:
+    """Tests for calc_stress_relaxation()."""
+
+    def test_returns_dataframe_with_correct_columns(self):
+        result = calc_stress_relaxation(make_acf_df(), volume=10.0, temperature=1.0)
+        assert isinstance(result, pd.DataFrame)
+        assert list(result.columns) == ["lag_time", "G_GK", "G_FSR"]
+
+    def test_output_length_matches_input(self):
+        df = make_acf_df(n=8)
+        result = calc_stress_relaxation(df, volume=10.0, temperature=1.0)
+        assert len(result) == 8
+
+    def test_g_gk_formula(self):
+        # With all ACF values = 1 and V=10, T=1: G_GK = (10/1) * (3/3) = 10
+        result = calc_stress_relaxation(make_acf_df(), volume=10.0, temperature=1.0)
+        np.testing.assert_allclose(result["G_GK"].values, 10.0)
+
+    def test_g_fsr_formula(self):
+        # With all ACF values = 1 and V=10, T=1:
+        # G_FSR = (10/1) * (1/5) * (3 + 0.5*3) = 10 * 4.5/5 = 9.0
+        result = calc_stress_relaxation(make_acf_df(), volume=10.0, temperature=1.0)
+        np.testing.assert_allclose(result["G_FSR"].values, 9.0)
+
+    def test_lag_time_column_is_preserved(self):
+        df = make_acf_df(n=5)
+        result = calc_stress_relaxation(df, volume=5.0, temperature=2.0)
+        np.testing.assert_array_equal(result["lag_time"].values, df["lag_time"].values)
+
+    def test_missing_shear_column_raises_key_error(self):
+        df = make_acf_df(drop_col="ACF_Sxy")
+        with pytest.raises(KeyError):
+            calc_stress_relaxation(df, volume=10.0, temperature=1.0)
+
+    def test_missing_normal_column_raises_key_error(self):
+        df = make_acf_df(drop_col="ACF_Nyz")
+        with pytest.raises(KeyError):
+            calc_stress_relaxation(df, volume=10.0, temperature=1.0)
+
+    def test_typo_column_name_raises_key_error(self):
+        # The old 'ACF_yz' typo is no longer accepted — must use 'ACF_Nyz'
+        df = make_acf_df(use_typo=True)
+        with pytest.raises(KeyError):
+            calc_stress_relaxation(df, volume=10.0, temperature=1.0)
+
+    def test_non_positive_volume_raises_value_error(self):
+        with pytest.raises(ValueError):
+            calc_stress_relaxation(make_acf_df(), volume=0.0, temperature=1.0)
+
+    def test_non_positive_temperature_raises_value_error(self):
+        with pytest.raises(ValueError):
+            calc_stress_relaxation(make_acf_df(), volume=10.0, temperature=-1.0)
+
+    def test_missing_lag_col_raises_value_error(self):
+        df = make_acf_df(drop_col="lag_time")
+        with pytest.raises(ValueError):
+            calc_stress_relaxation(df, volume=10.0, temperature=1.0)
 
 
 class TestEdgeCases:

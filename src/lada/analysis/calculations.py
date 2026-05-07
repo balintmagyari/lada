@@ -625,38 +625,11 @@ def calculate_isf(trajectory_file: str,
 # ---------------------------------------------------------------------------
 # Column name constants
 # ---------------------------------------------------------------------------
- 
+
 _SHEAR_COLS = ("ACF_Sxy", "ACF_Sxz", "ACF_Syz")
- 
-# Accept both the correct name and the known typo from the LAMMPS script
 _NORMAL_COLS_CANONICAL = ("ACF_Nxy", "ACF_Nxz", "ACF_Nyz")
-_NORMAL_COLS_TYPO      = ("ACF_Nxy", "ACF_Nxz", "ACF_yz")
- 
- 
-def _resolve_normal_cols(df: pd.DataFrame) -> tuple[str, str, str]:
-    """
-    Return the actual normal-stress-difference column names present in *df*,
-    tolerating the known 'ACF_yz' typo for 'ACF_Nyz'.
- 
-    Raises
-    ------
-    KeyError
-        If neither the canonical nor the typo variant of any column is found.
-    """
-    resolved = []
-    for canonical, typo in zip(_NORMAL_COLS_CANONICAL, _NORMAL_COLS_TYPO):
-        if canonical in df.columns:
-            resolved.append(canonical)
-        elif typo in df.columns:
-            resolved.append(typo)
-        else:
-            raise KeyError(
-                f"Could not find normal-stress ACF column '{canonical}' "
-                f"(also tried '{typo}') in the DataFrame. "
-                f"Available columns: {list(df.columns)}"
-            )
-    return tuple(resolved)
- 
+
+
 def _validate_columns(df: pd.DataFrame, cols: tuple[str, ...]) -> None:
     missing = [c for c in cols if c not in df.columns]
     if missing:
@@ -724,13 +697,13 @@ def calc_stress_relaxation(df: pd.DataFrame,
         )
  
     _validate_columns(df, _SHEAR_COLS)
-    n_xy, n_xz, n_yz = _resolve_normal_cols(df)
- 
+    _validate_columns(df, _NORMAL_COLS_CANONICAL)
+
     # ------------------------------------------------------------------
     # Prefactor  (V / k_B T),  k_B = 1 in LJ units
     # ------------------------------------------------------------------
     prefactor = volume / (temperature * kB)
- 
+
     # ------------------------------------------------------------------
     # Green-Kubo
     # G_GK(t) = (V/T*kB) * (1/3) * ( ACF_Sxy + ACF_Sxz + ACF_Syz )
@@ -738,9 +711,9 @@ def calc_stress_relaxation(df: pd.DataFrame,
     shear_mean = (
         df["ACF_Sxy"] + df["ACF_Sxz"] + df["ACF_Syz"]
     ) / 3.0
- 
+
     G_GK = prefactor * shear_mean
- 
+
     # ------------------------------------------------------------------
     # Full Stress Relaxation
     # G_FSR(t) = (V/T) * (1/5) * [   ACF_Sxy  + ACF_Sxz  + ACF_Syz
@@ -752,9 +725,9 @@ def calc_stress_relaxation(df: pd.DataFrame,
           df["ACF_Sxy"]
         + df["ACF_Sxz"]
         + df["ACF_Syz"]
-        + 0.5 * df[n_xy]
-        + 0.5 * df[n_xz]
-        + 0.5 * df[n_yz]
+        + 0.5 * df["ACF_Nxy"]
+        + 0.5 * df["ACF_Nxz"]
+        + 0.5 * df["ACF_Nyz"]
     )
  
     G_FSR = prefactor * fsr_sum / 5.0

@@ -13,11 +13,14 @@ tests/data/log.lammps
 venv/
 __pycache__/
 .DS_Store
+.obsidian
 dist/
 build/
 *.egg-info/
 .pytest_cache/
+.ruff_cache/
 
 # Claude analysis documents (for git exclusion)
 CLAUDE.md
 MEMORY.md
+DEVELOPMENT_PLAN.md

@@ -18,7 +18,7 @@ We use the standard GitHub Fork and Pull Request workflow. Please do not request
 
 1. **Fork the repository** to your own GitHub account.
 2. **Clone your fork** locally to your machine:
-   `git clone https://github.com/YOUR-USERNAME/[Repository-Name].git`
+   `git clone https://github.com/YOUR-USERNAME/lada.git`
 3. **Create a new branch** for your feature or bug fix:
    `git checkout -b feature/your-feature-name` (or `bugfix/issue-description`)
 4. **Commit your changes** with clear, descriptive commit messages.
@@ -34,13 +34,19 @@ Before submitting a pull request, ensure all tests pass:
 # Install dev dependencies
 pip install -e ".[dev]"
 
-# Run all tests
-pytest tests/ -v
+# Run the full test suite
+python3 -m pytest
 
 # Run tests for a specific module
-pytest tests/test_parsers/ -v
-pytest tests/test_analysis/ -v
+python3 -m pytest tests/test_parsers/
+python3 -m pytest tests/test_analysis/
+python3 -m pytest tests/test_exporters/
+
+# Run a single test function
+python3 -m pytest tests/test_parsers/test_dump_parsers.py::TestClassName::test_function_name -v
 ```
+
+> Use `python3 -m pytest` rather than bare `pytest` to ensure the command resolves against the Python interpreter and packages in your active environment.
 
 Tests are automatically run on pull requests via GitHub Actions. Your PR must pass all tests before merging.
 
@@ -49,5 +55,6 @@ Tests are automatically run on pull requests via GitHub Actions. Your PR must pa
 Tests are organized by module:
 - `tests/test_parsers/` — Tests for dump, log, and data file parsers
 - `tests/test_analysis/` — Tests for analysis calculations
+- `tests/test_exporters/` — Tests for the pgfplots/LaTeX exporter
 
 Please add tests for any new functionality.

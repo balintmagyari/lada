@@ -7,6 +7,25 @@ on:
     branches: [ main, develop ]
 
 jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.12'
+
+    - name: Install ruff
+      run: pip install ruff
+
+    - name: Lint
+      run: ruff check src/ tests/
+
+    - name: Format check
+      run: ruff format --check src/ tests/
+
   test:
     runs-on: ubuntu-latest
     strategy:
@@ -28,4 +47,4 @@ jobs:
     
     - name: Run tests
       run: |
-        pytest tests/ -v
+        python -m pytest tests/ -v

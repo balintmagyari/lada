@@ -1,166 +1,349 @@
 # LaDa
 
-[![Tests](https://github.com/balintmagyari/lada/actions/workflows/tests.yml/badge.svg)](https://github.com/YOUR_USERNAME/lada/actions/workflows/tests.yml)
+[![Tests](https://github.com/balintmagyari/lada/actions/workflows/tests.yml/badge.svg)](https://github.com/balintmagyari/lada/actions/workflows/tests.yml)
 
-**LaDa** (LAMMPS Data Access) is a lightweight Python package for parsing common LAMMPS output formats. The name is, quite intentionally, borrowed from the legendary Soviet car brand **LADA**—because much like its cars, this library aims to be simple, reliable, and able to run just about anywhere without unnecessary luxury features.
-
-In its current state, the library provides straightforward, user-friendly access to LAMMPS dump files, log files, and data files, while keeping external dependencies to a minimum.
-
-Future development will expand the package beyond parsing, adding analysis tools that operate directly on the retrieved simulation data.
-
-Like a classic LADA: it may not come with heated seats or chrome trim, but it will get your data from point A to point B without complaint.
+**LaDa** (LAMMPS Data Access) is a Python package for parsing LAMMPS output files, performing polymer MD analysis, and exporting results for LaTeX/pgfplots. The name is, quite intentionally, borrowed from the legendary Soviet car brand **LADA**—because much like its cars, this library aims to be simple, reliable, and able to run just about anywhere without unnecessary luxury features.
 
 ---
 
-## 🚀 Installation
-
-Install using `pip` from PyPI:
+## Installation
 
 ```bash
 pip install lada
 ```
 
-> Note: The package is designed to be used with Python 3.12+.
+> Requires Python 3.12+.
 
 ---
 
-## 📦 Package structure
-
-The core parser modules are located in `src/lada/parsers/`:
-
-- `dump_parser.py` - streaming parser for LAMMPS dump files (i.e., output from [`dump`](https://docs.lammps.org/dump.html) command) using `dump_frames()`
-- `log_parser.py` - parser for LAMMPS log files using `read_lammps_log()`
-- `data_parser.py` - parser for LAMMPS data files (i.e., output from [`write_data`](https://docs.lammps.org/write_data.html) command) using `read_data_file()`
-
-To keep imports simple, the package exports the most common entry point:
+## Quick example
 
 ```python
-from lada import dump_frames, read_lammps_log, read_data_file
+from lada import read_dump, read_lammps_acf
+from lada.analysis import calculate_avg_rg_sq, calc_stress_relaxation
+from lada.exporters import write_pgfplots_table
+
+# Load a dump trajectory and compute Rg² per timestep
+df = read_dump("trajectory.dump")
+rg_sq = calculate_avg_rg_sq(df, coord_cols=['xu', 'yu', 'zu'], molecule_col='mol')
+
+# Load stress ACF data and compute the relaxation modulus
+acf_df = read_lammps_acf("acf_output.txt")
+G = calc_stress_relaxation(acf_df, volume=500.0, temperature=1.0)
+
+# Export G(t) for pgfplots
+write_pgfplots_table(G, "G_t.dat", comment="Stress relaxation modulus, T=1.0")
 ```
 
 ---
 
-## 🧩 1) Parsing LAMMPS dump files (`dump_parser.py`)
+## Package structure
 
-### Iterate through frames from dump file
+| Submodule | Purpose |
+|---|---|
+| `lada.parsers` | Read LAMMPS dump, log, data, and ACF files |
+| `lada.analysis` | Vectorized polymer MD calculations |
+| `lada.exporters` | Export data to LaTeX/pgfplots-compatible files |
+| `lada.modifiers` | Modify LAMMPS topology data files |
+
+---
+
+## 1) Parsers
+
+### 1a) Dump files — `dump_frames` / `read_dump`
+
+#### Iterate frame-by-frame
+
+Useful when you want to process one timestep at a time without loading the full trajectory into memory.
 
 ```python
 from lada import dump_frames
 
-for frame in dump_frames("path/to/dump_file.dump"):
-    # metadata is a dict of "ITEM:" blocks before main data
-    timestep = frame.metadata["TIMESTEP"]          # int
-    box_bounds = frame.metadata["BOX BOUNDS pp pp pp"]
+for frame in dump_frames("trajectory.dump"):
+    timestep = frame.metadata["TIMESTEP"]              # int
+    box      = frame.metadata["BOX BOUNDS pp pp pp"]   # np.ndarray (3, 2)
 
-    # get numeric columns by name
     ids = frame.get_column("id")
     xs  = frame.get_column("x")
 
-    # convert the main data block into a pandas DataFrame
     df = frame.to_pandas()
 ```
 
-> This functionality is useful for performing calculations iteratively on 
-data belonging to individual timesteps (e.g. radius of gyration). However, 
-for calculations that require more than one timestep's data, the `read_dump`
-function is more appropriate, the usage of which is [described below](#read-entire-main-data-from-dump-file).
-
-#### Notes on metadata conversion
-
-- `TIMESTEP` is returned as an `int`.
-- `NUMBER OF ...` entries (e.g., `NUMBER OF ATOMS`) are converted to `int`.
-- `BOX BOUNDS ...` entries are parsed into numeric values:
-  - For orthogonal boxes, you get a 2D NumPy array shape `(3, 2)`.
-  - For triclinic boxes, you get a 2D NumPy array shape `(3, 3)` where the 3rd column contains tilt factors (xy, xz, yz).
-
-#### Column helpers
-
-These helpers avoid manual index lookups:
+**`DumpFrame` column helpers:**
 
 ```python
-ids = frame.get_column("id")
-atom_ids = frame.get_column_or("id", default=None)
-col_idx = frame.column_index("type")
+ids    = frame.get_column("id")                       # raises KeyError if absent
+result = frame.get_column_or("charge", default=None)  # returns None if absent
+idx    = frame.column_index("type")                   # raw integer index
 ```
 
-### Read entire main data from dump file
+**Metadata conversion rules:**
+- `TIMESTEP` → `int`
+- `NUMBER OF ...` entries → `int`
+- `BOX BOUNDS ...` → `np.ndarray` of shape `(3, 2)` for orthogonal boxes, `(3, 3)` for triclinic boxes (third column contains tilt factors xy, xz, yz)
+
+#### Load entire trajectory into a single DataFrame
 
 ```python
 from lada import read_dump
 
-df = read_dump("path/to/dump_file.dump", timestep_col="Timestep") # value of 'timestep_col' determines the column name of the timesteps data
+df = read_dump("trajectory.dump")
+# df has a leading 'timestep' column followed by all atom data columns
 ```
 
-#### Notes on usage
-
-While the previously described `dump_frames` function reads not only 
-the main data from the dump file but also the metadata written at the 
-beginning of each block, the `read_dump` function does not save any of
-the metadata information other than the current timestep, whose data
-is appended to the final dataframe as a separate column next to the 
-bulk data read from the dump file.
+The `timestep_col` argument (default: `'timestep'`) controls the name of the prepended column.
 
 ---
 
-## 📝 2) Parsing LAMMPS log files (`log_parser.py`)
+### 1b) Log files — `read_lammps_log`
 
-### Main API
+Extracts the thermodynamic table written between the `Per MPI rank memory allocation` and `Loop time` markers.
 
 ```python
 from lada import read_lammps_log
 
 thermo = read_lammps_log("log.lammps")
-print(thermo.columns)        # column names (Step, Temp, E_pair, ...)
-print(thermo.get("E_pair")) # numpy array of E_pair values
-
-# Convert to pandas DataFrame
-df = thermo.to_pandas()
+print(thermo.columns)          # ['Step', 'Temp', 'E_pair', ...]
+energy = thermo.get("E_pair")  # np.ndarray
+df = thermo.to_pandas()        # pd.DataFrame
 ```
-
-**What it parses**
-- It extracts the table between the `Per MPI rank memory allocation` marker and the `Loop time` marker.
-- The first non-empty line in that section is treated as the header.
 
 ---
 
-## 🧬 3) Parsing LAMMPS data files (`data_parser.py`)
+### 1c) Data files — `read_data_file`
 
-### Regular LAMMPS data files
-
-#### Main API
+Parses LAMMPS data files written by `write_data`. Auto-detects the atom style from the `Atoms # style` comment.
 
 ```python
 from lada import read_data_file
 
-lammps_data = read_data_file("data.lmp")
+data = read_data_file("system.data")
 
-# Get a parsed section as a NumPy array
-atoms = lammps_data.get("Atoms")
+atoms = data.get("Atoms")   # np.ndarray
+bonds = data.get("Bonds")   # np.ndarray
 
-# Convert a section to pandas (smart infer columns for Atoms/Bonds/Velocities)
-df_atoms = lammps_data.to_pandas(section="Atoms")
+df_atoms = data.to_pandas(section="Atoms")   # columns inferred from atom style
+df_bonds = data.to_pandas(section="Bonds")   # columns: bond_id, bond_type, atom1_id, atom2_id
 ```
 
-#### Notes on atom style detection
+Supported sections for `to_pandas`: `Atoms`, `Bonds`, `Masses`, `Velocities`, `Angles`, `Dihedrals`, `Impropers`, and coefficient sections. Unrecognised sections fall back to generic `col_0`, `col_1`, ... column names.
 
-- The parser attempts to detect the atom style from the comment in the `Atoms` section header,
-  e.g. `Atoms # atomic`.
-- If detected, it uses the correct column layout for that style (e.g., `x y z` vs `qx qy qz`).
+**Supported atom styles:** `atomic`, `charge`, `bond`, `molecular`, `full`.
 
-### Autocorrelation data files
+---
 
-These files refer to files written using LAMMPS' `fix ave/correlate/long` command ([LAMMPS
-documentation](https://docs.lammps.org/fix_ave_correlate_long.html)). 
+### 1d) ACF files — `read_lammps_acf`
 
-#### Main API
+Reads output from LAMMPS [`fix ave/correlate/long`](https://docs.lammps.org/fix_ave_correlate_long.html). Automatically locates and returns the **last** timestep block in the file (earlier blocks are preliminary averages).
 
 ```python
 from lada import read_lammps_acf
 
-df = read_lammps_acf('data.txt')
+df = read_lammps_acf("acf_output.txt")
+# Columns: lag_time, ACF_Sxy, ACF_Sxz, ACF_Syz, ACF_Nxy, ACF_Nxz, ACF_Nyz, timestep
 ```
 
-The output from the `read_lammps_acf` function is a standard pandas dataframe.
+The `lag_col` argument (default: `'lag_time'`) controls the name of the lag-time column.
+
+---
+
+## 2) Analysis
+
+All DataFrame-based functions accept either a `pd.DataFrame` or a `np.ndarray` (pass `columns=list_of_names` for arrays). Single-frame data returns a `float`; multi-frame trajectories return `dict[timestep, float]`.
+
+Functions that operate on `.npz` trajectory files expect the archive to contain a `'coords'` key with shape `(n_frames, n_atoms, 3)` and return a `np.ndarray` of shape `(n_frames, 2)` with columns `[lag_time, value]`.
+
+---
+
+### 2a) Radius of gyration — `calculate_avg_rg_sq`
+
+Ensemble-average squared radius of gyration, optionally mass-weighted. Use **unwrapped** coordinates (`xu`, `yu`, `zu`) to avoid periodic-boundary artifacts.
+
+```python
+from lada.analysis import calculate_avg_rg_sq
+
+# Single timestep → float
+rg_sq = calculate_avg_rg_sq(df, coord_cols=['xu', 'yu', 'zu'], molecule_col='mol')
+
+# Multi-frame trajectory → dict[timestep, float]
+rg_sq = calculate_avg_rg_sq(df, coord_cols=['xu', 'yu', 'zu'],
+                             molecule_col='mol', timestep_col='timestep')
+
+# With mass weighting
+rg_sq = calculate_avg_rg_sq(df, coord_cols=['xu', 'yu', 'zu'],
+                             molecule_col='mol', mass_col='mass')
+```
+
+---
+
+### 2b) End-to-end distance — `calculate_avg_ree_sq`
+
+Ensemble-average squared end-to-end distance. Chain ends are identified as the minimum and maximum atom ID within each molecule.
+
+```python
+from lada.analysis import calculate_avg_ree_sq
+
+ree_sq = calculate_avg_ree_sq(df, coord_cols=['xu', 'yu', 'zu'],
+                               molecule_col='mol', timestep_col='timestep')
+```
+
+---
+
+### 2c) End-to-end vectors — `calculate_ree_vectors`
+
+Returns the full end-to-end vector for every molecule at every timestep as a DataFrame with columns `[mol, dx, dy, dz]` (plus `timestep` when the input has multiple frames).
+
+```python
+from lada.analysis import calculate_ree_vectors
+
+vectors = calculate_ree_vectors(df, coord_cols=['xu', 'yu', 'zu'], molecule_col='mol')
+```
+
+---
+
+### 2d) Segment end-to-end ACF — `calculate_segment_acf`
+
+Normalized autocorrelation function C(t) = ⟨R(t)·R(0)⟩ / ⟨R(0)·R(0)⟩ of the chain end-to-end vector, averaged over all chains.
+
+```python
+from lada.analysis import calculate_segment_acf
+import numpy as np
+
+# segment_pairs: (n_chains, 2) array of 0-indexed [head_bead, tail_bead] indices
+segment_pairs = np.array([[0, 49], [50, 99]])  # two 50-bead chains
+result = calculate_segment_acf("trajectory.npz", segment_pairs, time_per_frame=0.5)
+# shape: (n_frames, 2) — columns [lag_time, C(t)]
+```
+
+> Discard the last 10–20 % of the output when fitting relaxation times, as statistical quality decreases at long lags.
+
+---
+
+### 2e) Rouse mode ACF — `calculate_rouse_mode_acf`
+
+Normalized ACF for the Rouse mode amplitude X_p(t), computed via a discrete cosine projection. Used to extract mode-dependent relaxation times τ_p.
+
+```python
+from lada.analysis import calculate_rouse_mode_acf
+import numpy as np
+
+# chain_indices: (n_chains, beads_per_chain) array of 0-indexed bead indices
+chain_indices = np.arange(100).reshape(2, 50)
+result = calculate_rouse_mode_acf("trajectory.npz", chain_indices, p=1, time_per_frame=0.5)
+# shape: (n_frames, 2) — columns [lag_time, C_p(t)]
+```
+
+- `p=0`: center-of-mass translation (does not decay to zero)
+- `p=1`: fundamental (whole-chain) relaxation mode
+- `p>1`: increasingly local segmental motions
+
+Raises `ValueError` if `p >= beads_per_chain`.
+
+---
+
+### 2f) Intermediate scattering function — `calculate_isf`
+
+Coherent intermediate scattering function F(q, t) / F(q, 0), computed via the density-fluctuation autocorrelation method. Isotropic orientational averaging is performed over `n_vectors` scattering vectors distributed on a Fibonacci lattice.
+
+```python
+from lada.analysis import calculate_isf
+
+result = calculate_isf("trajectory.npz", time_per_frame=0.5, q_magnitude=7.0, n_vectors=50)
+# shape: (n_frames, 2) — columns [lag_time, F(q,t)/F(q,0)]
+```
+
+---
+
+### 2g) Stress relaxation modulus — `calc_stress_relaxation`
+
+Computes G(t) from a stress-ACF DataFrame (as returned by `read_lammps_acf`) using two methods:
+
+- **G_GK** — standard Green-Kubo formula: average over the three independent shear stress ACFs
+- **G_FSR** — full stress relaxation formula: extends Green-Kubo with the three normal stress difference ACFs, using the isotropic identity ⟨(σ_αα − σ_ββ)²⟩ = 4⟨σ_αβ²⟩ to set the relative weighting
+
+```python
+from lada.analysis import calc_stress_relaxation
+
+G = calc_stress_relaxation(acf_df, volume=500.0, temperature=1.0)
+# G is a DataFrame with columns: lag_time, G_GK, G_FSR
+```
+
+**Required input columns:**
+
+| Column | Description |
+|---|---|
+| `ACF_Sxy`, `ACF_Sxz`, `ACF_Syz` | Shear stress ACFs |
+| `ACF_Nxy`, `ACF_Nxz`, `ACF_Nyz` | Normal stress difference ACFs |
+| `lag_time` | Lag-time column (name configurable via `lag_col`) |
+
+Assumes LJ units (k_B = 1) by default. Supply `kB` to override.
+
+---
+
+## 3) Exporters
+
+### `write_pgfplots_table`
+
+Writes a delimited data file consumable by pgfplots `\addplot table` in LaTeX. Accepts `pd.DataFrame`, `np.ndarray`, or `dict`.
+
+```python
+from lada.exporters import write_pgfplots_table
+
+# From a DataFrame (column names become the header automatically)
+write_pgfplots_table(df, "results.dat")
+
+# From a dict of arrays
+write_pgfplots_table(
+    {"lag_time": t, "G_GK": g_gk, "G_FSR": g_fsr},
+    "G_t.dat",
+    delimiter=',',
+    comment="Stress relaxation, T=1.0, V=500",
+)
+
+# From a NumPy array with explicit column names
+write_pgfplots_table(
+    np.column_stack([time, rg_sq]),
+    "rg.dat",
+    columns=["t", "Rg2"],
+    fmt="%.4f",
+)
+```
+
+**Usage in LaTeX:**
+
+```latex
+\addplot table[x=t, y=Rg2, col sep=space]{rg.dat};
+```
+
+Change `col sep` to `comma` or `tab` to match `delimiter=','` or `delimiter='\t'`.
+
+**Parameters:**
+
+| Parameter | Default | Description |
+|---|---|---|
+| `delimiter` | `' '` | Field separator: `' '`, `'\t'`, or `','` |
+| `fmt` | `'%.6g'` | Printf-style format applied to every numeric value |
+| `comment` | `None` | Text prepended to the file; each line prefixed with `%` |
+| `columns` | `None` | Override or supply column names |
+
+---
+
+## 4) Modifiers
+
+### `rewrite_end_beads`
+
+Reads a LAMMPS data file, identifies the terminal beads of each polymer chain (minimum and maximum atom ID per molecule), and rewrites the topology with those beads assigned a new atom type. Clones mass and pair coefficients from an existing type and updates the header atom-types count automatically.
+
+```python
+from lada.modifiers import rewrite_end_beads
+
+rewrite_end_beads(
+    input_file="system.data",
+    output_file="system_endtype.data",
+    new_end_type=3,
+    base_type=1,
+)
+```
 
 ---
 

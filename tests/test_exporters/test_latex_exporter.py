@@ -9,7 +9,7 @@ from lada.exporters import write_pgfplots_table
 
 def read_lines(path):
     """Return non-empty lines from a file as a list of strings."""
-    return [l.rstrip("\n") for l in path.read_text().splitlines() if l.strip()]
+    return [line.rstrip("\n") for line in path.read_text().splitlines() if line.strip()]
 
 
 # ---------------------------------------------------------------------------
@@ -174,7 +174,8 @@ class TestComment:
     def test_no_comment_no_percent_lines(self, tmp_path):
         df = pd.DataFrame({"x": [1.0]})
         write_pgfplots_table(df, tmp_path / "out.dat")
-        assert not any(l.startswith("%") for l in (tmp_path / "out.dat").read_text().splitlines())
+        lines = (tmp_path / "out.dat").read_text().splitlines()
+        assert not any(line.startswith("%") for line in lines)
 
 
 # ---------------------------------------------------------------------------

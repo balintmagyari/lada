@@ -75,7 +75,10 @@ class LammpsData:
                 valid_columns = columns[: data_array.shape[1]]
                 return pd.DataFrame(data_array, columns=valid_columns)
             except KeyError:
-                warnings.warn("No atom style detected in file. Returning generic columns.")
+                warnings.warn(
+                    "No atom style detected in file. Returning generic columns.",
+                    stacklevel=2,
+                )
                 return pd.DataFrame(
                     data_array, columns=[f"col_{i}" for i in range(data_array.shape[1])]
                 )
@@ -93,7 +96,8 @@ class LammpsData:
 
         else:
             warnings.warn(
-                "No hardcoding done for this section's column names! Returning to generic columns."
+                "No hardcoding done for this section's column names! Returning to generic columns.",
+                stacklevel=2,
             )
             return pd.DataFrame(
                 data_array, columns=[f"col_{i}" for i in range(data_array.shape[1])]

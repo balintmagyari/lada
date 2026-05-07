@@ -17,7 +17,8 @@ class DumpFrame:
     dataframes.
 
     Attributes:
-        metadata (Dict[str, list[str] | np.ndarray | int]): global parameters of the current timestep
+        metadata (dict[str, list[str] | np.ndarray | int]):
+            global parameters of the current timestep
         columns (List[str]): column names for the main data
         data (np.ndarray): main data
     """
@@ -66,8 +67,9 @@ def dump_frames(filepath: str) -> Iterator[DumpFrame]:
     the function will not work properly!
 
     Frames are yielded as `DumpFrame` objects with:
-    - `metadata`: dict where each key is the `ITEM:` header (e.g., "TIMESTEP", "BOX BOUNDS pp pp pp") and
-      each value is the list of following lines for that block (converted when possible).
+    - `metadata`: dict where each key is the `ITEM:` header
+      (e.g., "TIMESTEP", "BOX BOUNDS pp pp pp") and each value is the list of
+      following lines for that block (converted when possible).
     - `columns`: atom column names specified in the `ITEM: ATOMS ...` line.
     - `data`: a NumPy array built from the atom data block (via `np.loadtxt`).
 
@@ -175,7 +177,7 @@ def dump_frames(filepath: str) -> Iterator[DumpFrame]:
                     current_data = []  # Reset current data to empty list
 
                 else:
-                    current_header = header_content  # Reset current_header to new if no data is present underneath it (or if current header has not been assigned yet)
+                    current_header = header_content  # Reset to new header (no data under previous)
 
             else:
                 current_data.append(stripped)
@@ -249,8 +251,9 @@ def iter_dump_frames(filepath: str) -> Iterator[DumpFrame]:
     the function will not work properly!
 
     Frames are yielded as `DumpFrame` objects with:
-    - `metadata`: dict where each key is the `ITEM:` header (e.g., "TIMESTEP", "BOX BOUNDS pp pp pp") and
-      each value is the list of following lines for that block (converted when possible).
+    - `metadata`: dict where each key is the `ITEM:` header
+      (e.g., "TIMESTEP", "BOX BOUNDS pp pp pp") and each value is the list of
+      following lines for that block (converted when possible).
     - `columns`: atom column names specified in the `ITEM: ATOMS ...` line.
     - `data`: a NumPy array built from the atom data block (via `np.loadtxt`).
 

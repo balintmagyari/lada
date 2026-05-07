@@ -1,9 +1,11 @@
+import warnings
+from collections.abc import Iterator
+from dataclasses import dataclass, field
+
 import numpy as np
 import pandas as pd
-from dataclasses import dataclass, field
-from typing import Iterator, Mapping, Optional
-import warnings
 from tqdm import tqdm
+
 
 @dataclass
 class DumpFrame:
@@ -19,9 +21,12 @@ class DumpFrame:
         columns (List[str]): column names for the main data
         data (np.ndarray): main data
     """
-    metadata: dict[str, list[str] | np.ndarray | int]  # Stores any ITEM block as a list of strings (or parsed numpy arrays)
-    columns: list[str]                           # The names of the atom data columns
-    data: np.ndarray                             # The numerical atom data
+
+    metadata: dict[
+        str, list[str] | np.ndarray | int
+    ]  # Stores any ITEM block as a list of strings (or parsed numpy arrays)
+    columns: list[str]  # The names of the atom data columns
+    data: np.ndarray  # The numerical atom data
 
     # Internal cache for fast column lookups
     _column_index: dict[str, int] = field(init=False, repr=False)
@@ -38,7 +43,7 @@ class DumpFrame:
         """Return the data values for a given column name."""
         return self.data[:, self.column_index(name)]
 
-    def get_column_or(self, name: str, default: Optional[np.ndarray] = None) -> Optional[np.ndarray]:
+    def get_column_or(self, name: str, default: np.ndarray | None = None) -> np.ndarray | None:
         """Return the column values if present, otherwise return a default."""
         idx = self._column_index.get(name)
         return self.data[:, idx] if idx is not None else default
@@ -80,7 +85,9 @@ def dump_frames(filepath: str) -> Iterator[DumpFrame]:
         DumpFrame objects for each timestep found in the file.
     """
 
-    def _convert_metadata(meta: dict[str, list[str] | np.ndarray | int]) -> dict[str, list[str] | np.ndarray | int]:
+    def _convert_metadata(
+        meta: dict[str, list[str] | np.ndarray | int],
+    ) -> dict[str, list[str] | np.ndarray | int]:
         """Normalize/convert common metadata values.
 
         This helper mutates `meta` in-place (on a copy) and returns it.
@@ -121,24 +128,24 @@ def dump_frames(filepath: str) -> Iterator[DumpFrame]:
                     pass
 
         return meta
-    
+
     metadata = {}
     columns = []
     current_data = []
     current_header = None
-    
-    with open(filepath, 'r') as f:
+
+    with open(filepath) as f:
         for line in f:
             stripped = line.strip()
             if not stripped:
-                continue    # Continue if empty line
-                
+                continue  # Continue if empty line
+
             # Check if new data block starts (identified by the "ITEM:" keyword)
             if stripped.startswith("ITEM:"):
                 # Extract the name of the header (e.g., "TIMESTEP", "BOX BOUNDS pp pp pp")
                 header_content = stripped[5:].strip()
-                
-                # If we hit a new TIMESTEP and we already have atom data, 
+
+                # If we hit a new TIMESTEP and we already have atom data,
                 # we know the previous frame is finished. Yield it!
                 if header_content.startswith("TIMESTEP") and current_data:
                     frame_metadata = _convert_metadata(metadata.copy())
@@ -149,28 +156,30 @@ def dump_frames(filepath: str) -> Iterator[DumpFrame]:
                     yield DumpFrame(
                         metadata=frame_metadata,
                         columns=columns.copy(),
-                        data=np.loadtxt(current_data)
+                        data=np.loadtxt(current_data),
                     )
 
-                    current_header = 'TIMESTEP'
+                    current_header = "TIMESTEP"
 
                     # Reset the containers for the next frame
                     metadata = {}
                     columns = []
                     current_data = []
-                
+
                 # Check if a current header exists and if there is data under that header
                 elif current_header and current_data:
-                    metadata[current_header] = current_data         # Add metadata using the current header and data
-                    current_header = header_content                 # Change current_header to new value
-                    current_data = []                               # Reset current data to empty list
+                    metadata[current_header] = (
+                        current_data  # Add metadata using the current header and data
+                    )
+                    current_header = header_content  # Change current_header to new value
+                    current_data = []  # Reset current data to empty list
 
                 else:
-                    current_header = header_content                 # Reset current_header to new if no data is present underneath it (or if current header has not been assigned yet)
-                
+                    current_header = header_content  # Reset current_header to new if no data is present underneath it (or if current header has not been assigned yet)
+
             else:
                 current_data.append(stripped)
-                
+
         # When the file ends, yield the very last frame
         if current_data:
             frame_metadata = _convert_metadata(metadata.copy())
@@ -179,12 +188,11 @@ def dump_frames(filepath: str) -> Iterator[DumpFrame]:
             columns = header_parts[1:] if len(header_parts) > 1 else []
 
             yield DumpFrame(
-                metadata=frame_metadata,
-                columns=columns.copy(),
-                data=np.loadtxt(current_data)
+                metadata=frame_metadata, columns=columns.copy(), data=np.loadtxt(current_data)
             )
 
-def read_dump(filepath: str, timestep_col: str = 'timestep') -> pd.DataFrame:
+
+def read_dump(filepath: str, timestep_col: str = "timestep") -> pd.DataFrame:
     """Read a dump file and concatenate every timestep into a single DataFrame.
 
     Each row in the returned DataFrame corresponds to one atom from a single
@@ -197,7 +205,7 @@ def read_dump(filepath: str, timestep_col: str = 'timestep') -> pd.DataFrame:
         Path to a LAMMPS dump file.
     timestep_col : str, default='timestep'
         If the dump file contains a 'TIMESTEP' metadata block, its data is added
-        as a column with the column name defined by this parameter. 
+        as a column with the column name defined by this parameter.
 
     Returns
     -------
@@ -215,8 +223,10 @@ def read_dump(filepath: str, timestep_col: str = 'timestep') -> pd.DataFrame:
     for frame in tqdm(frames, desc="Reading dump file"):
         df = frame.to_pandas(copy=False)
         if "TIMESTEP" in frame.metadata:
-            df = df.assign(**{timestep_col: frame.metadata["TIMESTEP"]}) # Use dictionary unpacking to feed keyword arguments to the 'assign' function
-        df.insert(0, timestep_col, df.pop(timestep_col))    # Move TIMESTEP column as first column
+            df = df.assign(
+                **{timestep_col: frame.metadata["TIMESTEP"]}
+            )  # Use dictionary unpacking to feed keyword arguments to the 'assign' function
+        df.insert(0, timestep_col, df.pop(timestep_col))  # Move TIMESTEP column as first column
         dfs.append(df)
 
     return pd.concat(dfs, ignore_index=True)
@@ -227,7 +237,7 @@ def iter_dump_frames(filepath: str) -> Iterator[DumpFrame]:
     """Yield frames from a LAMMPS dump file.
 
     .. deprecated:: 1.1.0
-       `iter_dump_frames` will be removed in lada 2.0.0. 
+       `iter_dump_frames` will be removed in lada 2.0.0.
        Please use `dump_frames` function instead.
 
     Each frame corresponds to a single timestep block in the dump file. The function
@@ -262,10 +272,12 @@ def iter_dump_frames(filepath: str) -> Iterator[DumpFrame]:
         "Call to depreciated function 'iter_dump_frames'. "
         "This function will be removed in version 2.0.0. Use 'dump_frames instead.",
         category=DeprecationWarning,
-        stacklevel=2
+        stacklevel=2,
     )
 
-    def _convert_metadata(meta: dict[str, list[str] | np.ndarray | int]) -> dict[str, list[str] | np.ndarray | int]:
+    def _convert_metadata(
+        meta: dict[str, list[str] | np.ndarray | int],
+    ) -> dict[str, list[str] | np.ndarray | int]:
         """Normalize/convert common metadata values.
 
         This helper mutates `meta` in-place (on a copy) and returns it.
@@ -306,38 +318,36 @@ def iter_dump_frames(filepath: str) -> Iterator[DumpFrame]:
                     pass
 
         return meta
-    
+
     metadata = {}
     columns = []
     bulk_data = []
     current_header = None
-    
-    with open(filepath, 'r') as f:
+
+    with open(filepath) as f:
         for line in f:
             stripped = line.strip()
             if not stripped:
-                continue    # Continue if empty line
-                
+                continue  # Continue if empty line
+
             # Check if new data block starts (identified by the "ITEM:" keyword)
             if stripped.startswith("ITEM:"):
                 # Extract the name of the header (e.g., "TIMESTEP", "BOX BOUNDS pp pp pp")
                 header_content = stripped[5:].strip()
-                
-                # If we hit a new TIMESTEP and we already have atom data, 
+
+                # If we hit a new TIMESTEP and we already have atom data,
                 # we know the previous frame is finished. Yield it!
                 if header_content.startswith("TIMESTEP") and bulk_data:
                     frame_metadata = _convert_metadata(metadata.copy())
                     yield DumpFrame(
-                        metadata=frame_metadata,
-                        columns=columns.copy(),
-                        data=np.loadtxt(bulk_data)
+                        metadata=frame_metadata, columns=columns.copy(), data=np.loadtxt(bulk_data)
                     )
-                    
+
                     # Reset the containers for the next frame
                     metadata = {}
                     columns = []
                     bulk_data = []
-                
+
                 # Special handling for the ATOMS block to extract column names
                 if header_content.startswith("ATOMS"):
                     current_header = "ATOMS"
@@ -352,23 +362,19 @@ def iter_dump_frames(filepath: str) -> Iterator[DumpFrame]:
                     # Grab everything after "BONDS" as the column names
                     columns = parts[1:] if len(parts) > 1 else []
                     continue
-                    
+
                 # For any other generic header, set it as the active dictionary key
                 current_header = header_content
                 metadata[current_header] = []
-                
+
             else:
                 # We are reading the data lines belonging to the current header
                 if current_header == "ATOMS" or current_header == "BONDS":
                     bulk_data.append(stripped)
                 elif current_header is not None:
                     metadata[current_header].append(stripped)
-                    
+
         # When the file ends, yield the very last frame
         if bulk_data:
             frame_metadata = _convert_metadata(metadata)
-            yield DumpFrame(
-                metadata=frame_metadata,
-                columns=columns,
-                data=np.loadtxt(bulk_data)
-            )
+            yield DumpFrame(metadata=frame_metadata, columns=columns, data=np.loadtxt(bulk_data))

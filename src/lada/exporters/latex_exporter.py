@@ -1,14 +1,15 @@
+from typing import Literal
+
 import numpy as np
 import pandas as pd
-from typing import Literal
 
 
 def write_pgfplots_table(
     data: pd.DataFrame | np.ndarray | dict,
     filepath: str,
     columns: list[str] | None = None,
-    delimiter: Literal[' ', '\t', ','] = ' ',
-    fmt: str = '%.6g',
+    delimiter: Literal[" ", "\t", ","] = " ",
+    fmt: str = "%.6g",
     comment: str | None = None,
 ) -> None:
     """Write data to a delimited file for use with pgfplots \\addplot table in LaTeX.
@@ -88,7 +89,7 @@ def write_pgfplots_table(
         if len(set(lengths)) > 1:
             raise ValueError(
                 f"All arrays in the dict must have the same length; "
-                f"got lengths {dict(zip(data.keys(), lengths))}."
+                f"got lengths {dict(zip(data.keys(), lengths, strict=False))}."
             )
         header = list(data.keys()) if columns is None else columns
         arr = np.column_stack(list(data.values()))
@@ -99,25 +100,23 @@ def write_pgfplots_table(
 
     else:
         raise TypeError(
-            f"'data' must be a pd.DataFrame, np.ndarray, or dict; "
-            f"got {type(data).__name__}."
+            f"'data' must be a pd.DataFrame, np.ndarray, or dict; got {type(data).__name__}."
         )
 
     # --- Validate column count ---
     if header is not None and len(header) != arr.shape[1]:
         raise ValueError(
-            f"'columns' has {len(header)} entries but data has "
-            f"{arr.shape[1]} column(s)."
+            f"'columns' has {len(header)} entries but data has {arr.shape[1]} column(s)."
         )
 
     # --- Write file ---
-    with open(filepath, 'w') as f:
+    with open(filepath, "w") as f:
         if comment:
             for line in comment.splitlines():
                 f.write(f"% {line}\n")
 
         if header is not None:
-            f.write(delimiter.join(header) + '\n')
+            f.write(delimiter.join(header) + "\n")
 
         for row in arr:
-            f.write(delimiter.join(fmt % v for v in row) + '\n')
+            f.write(delimiter.join(fmt % v for v in row) + "\n")

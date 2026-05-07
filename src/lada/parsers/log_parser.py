@@ -13,7 +13,7 @@ Example:
 """
 
 from dataclasses import dataclass
-from typing import List
+
 import numpy as np
 
 
@@ -28,7 +28,7 @@ class ThermoData:
             A 2D float array with shape (n_steps, n_columns).
     """
 
-    columns: List[str]
+    columns: list[str]
     data: np.ndarray
 
     def get(self, property_name: str) -> np.ndarray:
@@ -89,29 +89,29 @@ def read_lammps_log(filepath: str) -> ThermoData:
     """
     columns = []
     data_lines = []
-    
+
     in_table = False
     header_found = False
 
-    with open(filepath, 'r') as f:
+    with open(filepath) as f:
         for line in f:
             stripped = line.strip()
-            
+
             # Skip empty lines
             if not stripped:
                 continue
-                
+
             # 1. Check for the start marker
             if "Per MPI rank memory allocation" in stripped:
                 in_table = True
                 header_found = False  # Reset so we know to grab the header next
                 continue
-                
+
             # 2. Check for the end marker
             if "Loop time of" in stripped:
                 in_table = False
                 continue
-                
+
             # 3. If we are currently inside the data block
             if in_table:
                 if not header_found:
@@ -124,5 +124,5 @@ def read_lammps_log(filepath: str) -> ThermoData:
 
     # Convert the collected text strings into a 2D NumPy array
     data_array = np.loadtxt(data_lines) if data_lines else np.array([])
-    
+
     return ThermoData(columns=columns, data=data_array)

@@ -1,9 +1,10 @@
 """Tests for LAMMPS log file parser."""
 
 import os
-import pytest
-from lada import read_lammps_log
 
+import pytest
+
+from lada import read_lammps_log
 
 # Get the directory containing test data files
 TEST_DATA_DIR = os.path.join(os.path.dirname(__file__), "../data")
@@ -17,7 +18,7 @@ def create_minimal_log_file(filepath):
     filepath : str
         Path where the log file will be created
     """
-    with open(filepath, 'w') as f:
+    with open(filepath, "w") as f:
         # Pre-run message
         f.write("LAMMPS (2 Aug 2023 - Update 3)\n")
         f.write("Using OpenMP\n")
@@ -113,7 +114,7 @@ class TestReadLammpsLog:
 
         temps = thermo.get("Temp")
         # Should be numeric
-        assert all(isinstance(x, (int, float)) or hasattr(x, '__float__') for x in temps)
+        assert all(isinstance(x, (int, float)) or hasattr(x, "__float__") for x in temps)
 
     def test_read_lammps_log_multiple_blocks(self, synthetic_log_file):
         """Test that multiple thermo blocks are handled."""
@@ -125,7 +126,7 @@ class TestReadLammpsLog:
 
     @pytest.mark.skipif(
         not os.path.exists(os.path.join(TEST_DATA_DIR, "sample_log.lammps")),
-        reason="sample_log.lammps not available"
+        reason="sample_log.lammps not available",
     )
     def test_read_lammps_log_with_sample_data(self, sample_log_file):
         """Test with actual sample log file if provided."""

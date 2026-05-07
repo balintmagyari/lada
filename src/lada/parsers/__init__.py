@@ -6,9 +6,9 @@ This module provides streaming and bulk parsers for LAMMPS output files:
 - data_parser: Parses topology/data files and autocorrelation data
 """
 
-from .dump_parser import iter_dump_frames, dump_frames, read_dump
-from .log_parser import read_lammps_log
 from .data_parser import read_data_file, read_lammps_acf
+from .dump_parser import dump_frames, iter_dump_frames, read_dump
+from .log_parser import read_lammps_log
 
 __all__ = [
     "iter_dump_frames",

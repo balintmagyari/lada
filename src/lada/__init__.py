@@ -11,31 +11,30 @@ Core modules:
 """
 
 # Parsers
-from .parsers import (
-    iter_dump_frames,
-    dump_frames,
-    read_dump,
-    read_lammps_log,
-    read_data_file,
-    read_lammps_acf,
-)
-
 # Analysis
 from .analysis import (
-    calculate_avg_rg_sq,
-    calculate_avg_ree_sq,
-    calculate_ree_vectors,
-    calculate_segment_acf,
-    calculate_rouse_mode_acf,
-    calculate_isf,
     calc_stress_relaxation,
+    calculate_avg_ree_sq,
+    calculate_avg_rg_sq,
+    calculate_isf,
+    calculate_ree_vectors,
+    calculate_rouse_mode_acf,
+    calculate_segment_acf,
 )
-
-# Modifiers
-from .modifiers import rewrite_end_beads
 
 # Exporters
 from .exporters import write_pgfplots_table
+
+# Modifiers
+from .modifiers import rewrite_end_beads
+from .parsers import (
+    dump_frames,
+    iter_dump_frames,
+    read_data_file,
+    read_dump,
+    read_lammps_acf,
+    read_lammps_log,
+)
 
 __all__ = [
     # Parsers

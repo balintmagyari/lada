@@ -1,9 +1,10 @@
 """Tests for LAMMPS data file parser."""
 
 import os
-import pytest
-from lada import read_data_file, read_lammps_acf
 
+import pytest
+
+from lada import read_data_file, read_lammps_acf
 
 # Get the directory containing test data files
 TEST_DATA_DIR = os.path.join(os.path.dirname(__file__), "../data")
@@ -21,7 +22,7 @@ def create_minimal_data_file(filepath, num_atoms=10, num_bonds=5):
     num_bonds : int
         Number of bonds to include
     """
-    with open(filepath, 'w') as f:
+    with open(filepath, "w") as f:
         f.write("Test data file\n\n")
 
         # Header
@@ -127,7 +128,7 @@ class TestReadDataFile:
 
     @pytest.mark.skipif(
         not os.path.exists(os.path.join(TEST_DATA_DIR, "sample.data")),
-        reason="sample.data not available"
+        reason="sample.data not available",
     )
     def test_read_data_file_with_sample_data(self, sample_data_file):
         """Test with actual sample data file if provided."""
@@ -150,7 +151,7 @@ class TestReadLammpsACF:
         Then: # Timestep: N blocks with data rows
         lag_time acf_value1 acf_value2 ...
         """
-        with open(filepath, 'w') as f:
+        with open(filepath, "w") as f:
             # LINE 1: Column names (comma-separated) — REQUIRED by parser
             f.write("acf_x,acf_y,acf_z\n")
 
@@ -205,12 +206,12 @@ class TestReadLammpsACF:
         df = read_lammps_acf(str(acf_file))
 
         # Check it's a DataFrame-like object
-        assert hasattr(df, 'shape')
-        assert hasattr(df, 'columns')
+        assert hasattr(df, "shape")
+        assert hasattr(df, "columns")
 
     @pytest.mark.skipif(
         not os.path.exists(os.path.join(TEST_DATA_DIR, "sample_acf.txt")),
-        reason="sample_acf.txt not available"
+        reason="sample_acf.txt not available",
     )
     def test_read_lammps_acf_with_sample_data(self):
         """Test with actual sample ACF file if provided."""

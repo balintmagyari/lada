@@ -1,10 +1,11 @@
 """Tests for LAMMPS dump file parsers."""
 
 import os
-import pytest
-import numpy as np
-from lada import iter_dump_frames, dump_frames, read_dump
 
+import numpy as np
+import pytest
+
+from lada import dump_frames, read_dump
 
 # Get the directory containing test data files
 TEST_DATA_DIR = os.path.join(os.path.dirname(__file__), "../data")
@@ -22,7 +23,7 @@ def create_minimal_dump_file(filepath, num_atoms=10, num_timesteps=2):
     num_timesteps : int
         Number of timesteps to include
     """
-    with open(filepath, 'w') as f:
+    with open(filepath, "w") as f:
         for ts in range(num_timesteps):
             timestep = ts * 1000  # Timestep values
             f.write("ITEM: TIMESTEP\n")
@@ -124,7 +125,7 @@ class TestDumpFrames:
 
     @pytest.mark.skipif(
         not os.path.exists(os.path.join(TEST_DATA_DIR, "sample_dump.dump")),
-        reason="sample_dump.dump not available"
+        reason="sample_dump.dump not available",
     )
     def test_dump_frames_with_sample_data(self, sample_dump_file):
         """Test with actual sample dump file if provided."""
@@ -154,8 +155,8 @@ class TestReadDump:
         df = read_dump(synthetic_dump_file)
 
         # Check it's a DataFrame-like object
-        assert hasattr(df, 'shape')
-        assert hasattr(df, 'columns')
+        assert hasattr(df, "shape")
+        assert hasattr(df, "columns")
         assert len(df.shape) == 2
 
     def test_read_dump_timestep_column(self, synthetic_dump_file):
@@ -169,7 +170,7 @@ class TestReadDump:
 
     @pytest.mark.skipif(
         not os.path.exists(os.path.join(TEST_DATA_DIR, "sample_dump.dump")),
-        reason="sample_dump.dump not available"
+        reason="sample_dump.dump not available",
     )
     def test_read_dump_with_sample_data(self, sample_dump_file):
         """Test bulk reading with actual sample data if provided."""

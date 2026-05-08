@@ -392,9 +392,10 @@ def calculate_segment_acf(
         Path to the compressed NumPy archive (.npz) containing the simulation
         trajectory. The archive must contain an array accessed via the 'coords'
         keyword, structured with shape (n_frames, n_atoms, 3).
-    end_pairs : numpy.ndarray
+    segment_pairs : numpy.ndarray
         A 2D array of integers of shape (n_chains, 2) containing the 0-indexed
-        indices of the head and tail beads for every polymer chain in the melt.
+        indices of the head and tail beads for every polymer chain segment that 
+        the user want to perform autocorrealtion for.
         Column 0 corresponds to the head indices, and Column 1 corresponds to
         the tail indices.
     time_per_frame : float

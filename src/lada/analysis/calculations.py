@@ -395,7 +395,7 @@ def calculate_segment_acf(
     segment_pairs : numpy.ndarray
         A 2D array of integers of shape (n_chains, 2) containing the 0-indexed
         indices of the head and tail beads for every polymer chain segment that
-        the user want to perform autocorrealtion for.
+        the user want to perform autocorrelation for.
         Column 0 corresponds to the head indices, and Column 1 corresponds to
         the tail indices.
     time_per_frame : float
@@ -700,6 +700,7 @@ _NORMAL_COLS_CANONICAL = ("ACF_Nxy", "ACF_Nxz", "ACF_Nyz")
 
 
 def _validate_columns(df: pd.DataFrame, cols: tuple[str, ...]) -> None:
+    """Raise KeyError listing any columns from *cols* absent in *df*."""
     missing = [c for c in cols if c not in df.columns]
     if missing:
         raise KeyError(
@@ -726,15 +727,18 @@ def calc_stress_relaxation(
     ----------
     df : pd.DataFrame
         ACF DataFrame as returned by ``read_lammps_acf``.  Must contain
-        columns for the shear ACFs (ACF_Sxy, ACF_Sxz, ACF_Syz) and the
-        normal stress difference ACFs (ACF_Nxy, ACF_Nxz, ACF_Nyz — or the
-        known typo variant ACF_yz for the last one).
+        columns for the shear ACFs (``ACF_Sxy``, ``ACF_Sxz``, ``ACF_Syz``)
+        and the normal stress difference ACFs (``ACF_Nxy``, ``ACF_Nxz``,
+        ``ACF_Nyz``). Column names are matched exactly — no typo tolerance.
     volume : float
-        System volume in LJ units (length^3).
+        System volume in LJ units (length³).
     temperature : float
         System temperature in LJ units (energy).
     lag_col : str, optional
         Name of the lag-time column in *df* (default: ``'lag_time'``).
+    kB : float, optional
+        Boltzmann constant. Default is ``1.0`` for LJ reduced units. Set to
+        the physical value (e.g. ``1.380649e-23``) when using SI units.
 
     Returns
     -------

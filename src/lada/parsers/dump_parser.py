@@ -50,7 +50,21 @@ class DumpFrame:
         return self.data[:, idx] if idx is not None else default
 
     def to_pandas(self, copy: bool = True) -> pd.DataFrame:
-        """Return the data block as a pandas DataFrame."""
+        """Return the data block as a pandas DataFrame.
+
+        Parameters
+        ----------
+        copy : bool, default True
+            When ``True`` (the default) a copy of the underlying data is
+            returned so that in-place modifications do not affect the
+            ``DumpFrame``. Pass ``False`` to skip the copy for read-only
+            downstream use.
+
+        Returns
+        -------
+        pd.DataFrame
+            DataFrame with column names from ``self.columns``.
+        """
         df = pd.DataFrame(self.data, columns=self.columns)
         return df.copy() if copy else df
 

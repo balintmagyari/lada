@@ -32,10 +32,41 @@ ALLOWED_SECTIONS = (
 
 @dataclass
 class LammpsData:
+    """Container for a parsed LAMMPS data file.
+
+    Attributes
+    ----------
+    metadata : dict
+        Global header values extracted from the file, including atom/bond/angle
+        counts, box dimensions, and the detected atom style (key ``'atom style'``).
+        The raw first-line description is stored under ``'description'``.
+    sections : dict[str, np.ndarray]
+        One entry per named section found in the file (e.g. ``'Atoms'``,
+        ``'Bonds'``, ``'Masses'``). Each value is a 2-D float NumPy array.
+    """
+
     metadata: dict[str, Any]
     sections: dict[str, np.ndarray]
 
     def get(self, section_name: str) -> np.ndarray:
+        """Return the raw NumPy array for a named section.
+
+        Parameters
+        ----------
+        section_name : str
+            Name of the section to retrieve (e.g. ``'Atoms'``, ``'Bonds'``,
+            ``'Masses'``).
+
+        Returns
+        -------
+        np.ndarray
+            2-D float array for the requested section.
+
+        Raises
+        ------
+        KeyError
+            If *section_name* is not present in the parsed file.
+        """
         if section_name not in self.sections:
             raise KeyError(
                 f"Section '{section_name}' not found in data. "
@@ -60,6 +91,39 @@ class LammpsData:
             "Improper Coeffs",
         ] = "Atoms",
     ):
+        """Convert a named section to a pandas DataFrame with typed column names.
+
+        Column names are resolved as follows:
+
+        * ``'Atoms'``      — derived from the detected atom style
+          (``atomic``, ``charge``, ``bond``, ``molecular``, or ``full``).
+          Falls back to generic ``col_0``, ``col_1`` … with a warning if the
+          style was not detected.
+        * ``'Bonds'``      — ``bond_id``, ``bond_type``, ``atom1_id``, ``atom2_id``
+        * ``'Velocities'`` — ``atom_id``, ``vx``, ``vy``, ``vz``
+        * ``'Masses'``     — ``atom_id``, ``mass``
+        * all others       — generic ``col_0``, ``col_1`` … with a warning.
+
+        Parameters
+        ----------
+        section : str, optional
+            Name of the section to convert (default: ``'Atoms'``). Must be one of
+            ``Masses``, ``Atoms``, ``Bonds``, ``Velocities``, ``Angles``,
+            ``Dihedrals``, ``Impropers``, ``Nonbond Coeffs``, ``Bond Coeffs``,
+            ``Angle Coeffs``, ``Dihedral Coeffs``, ``Improper Coeffs``.
+
+        Returns
+        -------
+        pd.DataFrame
+            DataFrame whose column names reflect the section's known schema.
+
+        Raises
+        ------
+        ValueError
+            If *section* is not in the list of allowed section names.
+        KeyError
+            If *section* was not present in the parsed file.
+        """
         # Force the code to crash if an invalid string slips through
         if section not in ALLOWED_SECTIONS:
             raise ValueError(f"Invalid section: '{section}'. Must be one of: {ALLOWED_SECTIONS}")
@@ -105,6 +169,35 @@ class LammpsData:
 
 
 def read_data_file(filepath: str) -> LammpsData:
+    """Parse a LAMMPS data file and return its contents as a ``LammpsData`` object.
+
+    The parser reads global metadata from the header (atom/bond/angle counts,
+    box dimensions, etc.) and collects each named section (``Atoms``, ``Bonds``,
+    ``Masses``, etc.) into a 2-D NumPy array. The atom style is auto-detected
+    from the inline comment on the ``Atoms`` section header
+    (e.g. ``Atoms # molecular``).
+
+    Parameters
+    ----------
+    filepath : str
+        Path to the LAMMPS data file.
+
+    Returns
+    -------
+    LammpsData
+        Dataclass with:
+
+        * ``metadata`` — dict of global header values (counts, box bounds,
+          detected atom style, etc.). The raw first-line description is stored
+          under ``'description'``.
+        * ``sections`` — dict mapping each section name to its 2-D float array.
+
+    Notes
+    -----
+    Inline ``#`` comments are stripped from data lines before parsing.
+    Key–value pairs on the first line (e.g. ``timestep = 10000000``) are split
+    on ``=`` and stored as individual metadata entries.
+    """
     with open(filepath) as f:
         lines = f.readlines()
 

@@ -75,7 +75,10 @@ for frame in dump_frames("trajectory.dump"):
 ids    = frame.get_column("id")                       # raises KeyError if absent
 result = frame.get_column_or("charge", default=None)  # returns None if absent
 idx    = frame.column_index("type")                   # raw integer index
+df     = frame.to_pandas(copy=False)                  # skip the defensive copy for read-only use
 ```
+
+> **Deprecated alias:** `iter_dump_frames` behaves the same as `dump_frames` but emits a `DeprecationWarning` and will be removed in lada 2.0.0. Use `dump_frames` in new code.
 
 **Metadata conversion rules:**
 - `TIMESTEP` → `int`
@@ -119,6 +122,11 @@ from lada import read_data_file
 
 data = read_data_file("system.data")
 
+# Global header values are stored on `metadata`
+style       = data.metadata["atom style"]   # auto-detected from the `Atoms # <style>` comment
+description = data.metadata["description"]  # raw first-line description of the file
+n_atoms     = data.metadata.get("atoms")    # header counts (atoms, bonds, angles, ...)
+
 atoms = data.get("Atoms")   # np.ndarray
 bonds = data.get("Bonds")   # np.ndarray
 
@@ -126,7 +134,7 @@ df_atoms = data.to_pandas(section="Atoms")   # columns inferred from atom style
 df_bonds = data.to_pandas(section="Bonds")   # columns: bond_id, bond_type, atom1_id, atom2_id
 ```
 
-Supported sections for `to_pandas`: `Atoms`, `Bonds`, `Masses`, `Velocities`, `Angles`, `Dihedrals`, `Impropers`, and coefficient sections. Unrecognised sections fall back to generic `col_0`, `col_1`, ... column names.
+**Allowed `section` values:** `Atoms`, `Bonds`, `Masses`, `Velocities`, `Angles`, `Dihedrals`, `Impropers`, `Nonbond Coeffs`, `Bond Coeffs`, `Angle Coeffs`, `Dihedral Coeffs`, `Improper Coeffs`. Hardcoded column names are provided for `Atoms` (via atom style), `Bonds`, `Masses`, and `Velocities`; the remaining sections fall back to generic `col_0`, `col_1`, ... with a warning.
 
 **Supported atom styles:** `atomic`, `charge`, `bond`, `molecular`, `full`.
 
@@ -134,16 +142,19 @@ Supported sections for `to_pandas`: `Atoms`, `Bonds`, `Masses`, `Velocities`, `A
 
 ### 1d) ACF files — `read_lammps_acf`
 
-Reads output from LAMMPS [`fix ave/correlate/long`](https://docs.lammps.org/fix_ave_correlate_long.html). Automatically locates and returns the **last** timestep block in the file (earlier blocks are preliminary averages).
+Reads output from LAMMPS [`fix ave/correlate/long`](https://docs.lammps.org/fix_ave_correlate_long.html). Automatically locates and returns the **last** `# Timestep: N` block in the file (earlier blocks are preliminary averages).
 
 ```python
 from lada import read_lammps_acf
 
 df = read_lammps_acf("acf_output.txt")
-# Columns: lag_time, ACF_Sxy, ACF_Sxz, ACF_Syz, ACF_Nxy, ACF_Nxz, ACF_Nyz, timestep
+# Columns: lag_time, <ACF columns from line 1 of the file>, timestep
+# e.g. lag_time, ACF_Sxy, ACF_Sxz, ACF_Syz, ACF_Nxy, ACF_Nxz, ACF_Nyz, timestep
 ```
 
-The `lag_col` argument (default: `'lag_time'`) controls the name of the lag-time column.
+The ACF column names are read from the **comma-separated header on line 1** of the input file — they are not hardcoded. The `lag_col` argument (default: `'lag_time'`) controls the name of the lag-time column.
+
+> Requires at least two `# Timestep:` blocks in the file (the t=0 reference plus at least one production block); otherwise raises `ValueError`.
 
 ---
 
@@ -268,7 +279,7 @@ G = calc_stress_relaxation(acf_df, volume=500.0, temperature=1.0)
 # G is a DataFrame with columns: lag_time, G_GK, G_FSR
 ```
 
-**Required input columns:**
+**Required input columns** (matched exactly — no typo tolerance):
 
 | Column | Description |
 |---|---|
@@ -276,7 +287,16 @@ G = calc_stress_relaxation(acf_df, volume=500.0, temperature=1.0)
 | `ACF_Nxy`, `ACF_Nxz`, `ACF_Nyz` | Normal stress difference ACFs |
 | `lag_time` | Lag-time column (name configurable via `lag_col`) |
 
-Assumes LJ units (k_B = 1) by default. Supply `kB` to override.
+**Parameters:**
+
+| Parameter | Default | Description |
+|---|---|---|
+| `volume` | — | System volume in length³ |
+| `temperature` | — | System temperature (energy units) |
+| `lag_col` | `'lag_time'` | Name of the lag-time column in the input |
+| `kB` | `1.0` | Boltzmann constant. Default is for LJ reduced units; set to the physical value (e.g. `1.380649e-23`) when using SI units |
+
+Raises `KeyError` if any required ACF column is absent and `ValueError` if `volume`/`temperature` are non-positive or `lag_col` is missing.
 
 ---
 

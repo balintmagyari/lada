@@ -829,9 +829,9 @@ def calc_dynamic_moduli_prony(
     n_omega: int = ...,
     omega_min: float | None = ...,
     omega_max: float | None = ...,
-    return_fit: Literal[False] = ...
-) -> pd.DataFrame:
-    ...
+    return_fit: Literal[False] = ...,
+) -> pd.DataFrame: ...
+
 
 # 2. Overload for when return_fit is True
 @overload
@@ -844,9 +844,9 @@ def calc_dynamic_moduli_prony(
     n_omega: int = ...,
     omega_min: float | None = ...,
     omega_max: float | None = ...,
-    return_fit: Literal[True] = ...
-) -> tuple[pd.DataFrame, pd.DataFrame]:
-    ...
+    return_fit: Literal[True] = ...,
+) -> tuple[pd.DataFrame, pd.DataFrame]: ...
+
 
 def calc_dynamic_moduli_prony(
     df: pd.DataFrame,
@@ -860,7 +860,7 @@ def calc_dynamic_moduli_prony(
     return_fit: bool = False,
 ) -> pd.DataFrame | tuple[pd.DataFrame, pd.DataFrame]:
     """
-    Compute G'(ω) and G''(ω) via a Prony-series fit of G(t) followed by an 
+    Compute G'(ω) and G''(ω) via a Prony-series fit of G(t) followed by an
     exact analytical Fourier-Laplace transform.
 
     Parameters
@@ -929,9 +929,7 @@ def calc_dynamic_moduli_prony(
     mask = (t_all >= t_min) & (t_all <= t_end)
     n_fit = int(mask.sum())
     if n_fit < 2:
-        raise ValueError(
-            f"The time window [{t_min}, {t_end}] leaves fewer than two data points."
-        )
+        raise ValueError(f"The time window [{t_min}, {t_end}] leaves fewer than two data points.")
     if n_fit < n_modes:
         raise ValueError(
             f"The fitting window contains only {n_fit} data points but n_modes={n_modes}. "
@@ -951,45 +949,45 @@ def calc_dynamic_moduli_prony(
 
     # ------------------------------------------------------------------
     # Output omega grid
-    # If explicit bounds are provided, use them. Otherwise, default to 
+    # If explicit bounds are provided, use them. Otherwise, default to
     # physics-based bounds derived from the simulation time limits.
     # ------------------------------------------------------------------
     if omega_min is None:
         omega_min = 2 * np.pi / (tau[-1] * 10.0)
-    
+
     if omega_max is None:
         omega_max = np.pi / t_fit[0]
-        
+
     assert omega_min is not None, "omega_min failed to initialize."
     assert omega_max is not None, "omega_max failed to initialize."
 
     omega = np.logspace(np.log10(omega_min), np.log10(omega_max), n_omega)
-    
+
     # ------------------------------------------------------------------
     # Inner function: NNLS fit + Analytical Calculation + Fit Evaluation
     # ------------------------------------------------------------------
     def _fit_and_transform(g_fit: np.ndarray) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
         # Perform NNLS fit
         G_i, _ = nnls(A, g_fit)
-        
+
         # Evaluate the time-domain fit directly using the design matrix A
         g_fit_eval = A @ G_i
-        
+
         # Filter out inactive modes for computational efficiency
         active_mask = G_i > 0
         g_active = G_i[active_mask]
         tau_active = tau[active_mask]
-        
+
         w = omega[:, None]
         t = tau_active[None, :]
         g_m = g_active[None, :]
-        
+
         wt = w * t
         denominator = 1.0 + wt**2
-        
+
         g_prime = np.sum((g_m * wt**2) / denominator, axis=1)
         g_dprime = np.sum((g_m * wt) / denominator, axis=1)
-        
+
         return g_prime, g_dprime, g_fit_eval
 
     # ------------------------------------------------------------------
@@ -1001,29 +999,29 @@ def calc_dynamic_moduli_prony(
     if method in ("GK", "both"):
         g_data = df_fit["G_GK"].to_numpy(dtype=float)
         gp, gdp, g_fit_eval = _fit_and_transform(g_data)
-        
+
         suffix = "_GK" if method == "both" else ""
         out_freq[f"G_prime{suffix}"] = gp
         out_freq[f"G_dprime{suffix}"] = gdp
-        
+
         out_time[f"G_data{suffix}"] = g_data
         out_time[f"G_fit{suffix}"] = g_fit_eval
 
     if method in ("FSR", "both"):
         g_data = df_fit["G_FSR"].to_numpy(dtype=float)
         gp, gdp, g_fit_eval = _fit_and_transform(g_data)
-        
+
         suffix = "_FSR" if method == "both" else ""
         out_freq[f"G_prime{suffix}"] = gp
         out_freq[f"G_dprime{suffix}"] = gdp
-        
+
         out_time[f"G_data{suffix}"] = g_data
         out_time[f"G_fit{suffix}"] = g_fit_eval
 
     df_moduli = pd.DataFrame(out_freq)
-    
+
     if return_fit:
         df_time = pd.DataFrame(out_time)
         return df_moduli, df_time
-        
+
     return df_moduli

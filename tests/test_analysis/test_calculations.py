@@ -5,6 +5,7 @@ import pandas as pd
 import pytest
 
 from lada.analysis import (
+    calc_dynamic_moduli_prony,
     calc_stress_relaxation,
     calculate_avg_ree_sq,
     calculate_avg_rg_sq,
@@ -336,3 +337,89 @@ class TestEdgeCases:
             df, coord_cols=["xu", "yu", "zu"], molecule_col="mol", timestep_col="timestep"
         )
         assert isinstance(rg_sq_large, float)
+
+
+def make_maxwell_df(G0=1.0, tau=1.0, t_max=20.0, n=2000, uniform=True, t_start=0.0):
+    """Maxwell model G(t) = G0*exp(-t/tau) as a calc_stress_relaxation-style DataFrame."""
+    if uniform:
+        t = np.linspace(t_start, t_max, n)
+    else:
+        t = np.sort(
+            np.concatenate([[t_start], np.random.default_rng(42).uniform(t_start, t_max, n - 1)])
+        )
+    G = G0 * np.exp(-t / tau)
+    return pd.DataFrame({"lag_time": t, "G_GK": G, "G_FSR": G * 0.8})
+
+
+class TestCalcDynamicModuliProny:
+    """Tests for calc_dynamic_moduli_prony()."""
+
+    def test_columns_method_gk(self):
+        df = make_maxwell_df(t_max=20.0, n=500)
+        result = calc_dynamic_moduli_prony(df, method="GK")
+        assert list(result.columns) == ["omega", "G_prime", "G_dprime"]
+
+    def test_columns_method_fsr(self):
+        df = make_maxwell_df(t_max=20.0, n=500)
+        result = calc_dynamic_moduli_prony(df, method="FSR")
+        assert list(result.columns) == ["omega", "G_prime", "G_dprime"]
+
+    def test_columns_method_both(self):
+        df = make_maxwell_df(t_max=20.0, n=500)
+        result = calc_dynamic_moduli_prony(df, method="both")
+        assert list(result.columns) == [
+            "omega",
+            "G_prime_GK",
+            "G_dprime_GK",
+            "G_prime_FSR",
+            "G_dprime_FSR",
+        ]
+
+    def test_n_omega_controls_output_length(self):
+        df = make_maxwell_df(t_max=20.0, n=500)
+        for n in (50, 100, 300):
+            result = calc_dynamic_moduli_prony(df, n_omega=n)
+            assert len(result) == n
+
+    def test_maxwell_model_accuracy(self):
+        """Prony fit of G(t)=exp(-t) should recover G' and G'' within 5%."""
+        # Maxwell: G'(ω)=(ωτ)²/(1+(ωτ)²), G''(ω)=ωτ/(1+(ωτ)²) with G0=τ=1
+        df = make_maxwell_df(G0=1.0, tau=1.0, t_max=20.0, n=500)
+        result = calc_dynamic_moduli_prony(df, method="GK", n_modes=30, n_omega=80, t_min=0.1)
+
+        omega = result["omega"].to_numpy()
+        g_prime_analytical = (omega**2) / (1 + omega**2)
+        g_dprime_analytical = omega / (1 + omega**2)
+
+        # Test in the mid-frequency range well within the omega grid
+        mid = (omega > 0.3) & (omega < 5.0)
+        np.testing.assert_allclose(
+            result["G_prime"].to_numpy()[mid], g_prime_analytical[mid], rtol=0.05
+        )
+        np.testing.assert_allclose(
+            result["G_dprime"].to_numpy()[mid], g_dprime_analytical[mid], rtol=0.05
+        )
+
+    def test_missing_column_raises_key_error(self):
+        df = make_maxwell_df().drop(columns="G_FSR")
+        with pytest.raises(KeyError):
+            calc_dynamic_moduli_prony(df)
+
+    def test_invalid_method_raises_value_error(self):
+        with pytest.raises(ValueError, match="method must be"):
+            calc_dynamic_moduli_prony(make_maxwell_df(), method="invalid")
+
+    def test_t_min_above_t_end_raises_value_error(self):
+        df = make_maxwell_df(t_max=20.0, n=100)
+        with pytest.raises(ValueError, match="must be less than the upper time limit"):
+            calc_dynamic_moduli_prony(df, t_min=25.0)
+
+    def test_n_modes_exceeds_window_raises_value_error(self):
+        df = make_maxwell_df(t_max=20.0, n=30)
+        with pytest.raises(ValueError, match="n_modes"):
+            calc_dynamic_moduli_prony(df, n_modes=200)
+
+    def test_t_cutoff_beyond_data_raises_value_error(self):
+        df = make_maxwell_df(t_max=20.0, n=100)
+        with pytest.raises(ValueError, match="exceeds the last lag_time"):
+            calc_dynamic_moduli_prony(df, t_cutoff=50.0)

@@ -6,6 +6,7 @@ end-to-end distances, and dynamical properties (ACF, ISF, stress relaxation).
 """
 
 from .calculations import (
+    calc_dynamic_moduli_prony,
     calc_stress_relaxation,
     calculate_avg_ree_sq,
     calculate_avg_rg_sq,
@@ -23,4 +24,5 @@ __all__ = [
     "calculate_rouse_mode_acf",
     "calculate_isf",
     "calc_stress_relaxation",
+    "calc_dynamic_moduli_prony",
 ]

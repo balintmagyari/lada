@@ -822,14 +822,14 @@ def calc_stress_relaxation(
 @overload
 def calc_dynamic_moduli_prony(
     df: pd.DataFrame,
-    method: Literal["GK", "FSR", "both"] = ...,
-    t_min: float = ...,
-    t_cutoff: float | None = ...,
-    n_modes: int = ...,
-    n_omega: int = ...,
-    omega_min: float | None = ...,
-    omega_max: float | None = ...,
-    return_fit: Literal[False] = ...,
+    method: Literal["GK", "FSR", "both"] = "GK",
+    t_min: float = 1.0,
+    t_cutoff: float | None = None,
+    n_modes: int = 50,
+    n_omega: int = 200,
+    omega_min: float | None = None,
+    omega_max: float | None = None,
+    return_fit: bool = False,
 ) -> pd.DataFrame: ...
 
 
@@ -837,14 +837,14 @@ def calc_dynamic_moduli_prony(
 @overload
 def calc_dynamic_moduli_prony(
     df: pd.DataFrame,
-    method: Literal["GK", "FSR", "both"] = ...,
-    t_min: float = ...,
-    t_cutoff: float | None = ...,
-    n_modes: int = ...,
-    n_omega: int = ...,
-    omega_min: float | None = ...,
-    omega_max: float | None = ...,
-    return_fit: Literal[True] = ...,
+    method: Literal["GK", "FSR", "both"] = "GK",
+    t_min: float = 1.0,
+    t_cutoff: float | None = None,
+    n_modes: int = 50,
+    n_omega: int = 200,
+    omega_min: float | None = None,
+    omega_max: float | None = None,
+    return_fit: bool = False,
 ) -> tuple[pd.DataFrame, pd.DataFrame]: ...
 
 

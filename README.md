@@ -300,6 +300,57 @@ Raises `KeyError` if any required ACF column is absent and `ValueError` if `volu
 
 ---
 
+### 2h) Storage and Loss Moduli — `calc_dynamic_moduli_prony`
+
+Compute G'(ω) and G''(ω) via a Prony-series fit of G(t) followed by an exact analytical Fourier-Laplace transform. The fit uses non-negative least squares (NNLS) with log-spaced Maxwell modes across the fitting window, ensuring a physically meaningful (non-negative) spectrum.
+
+```python
+from lada.analysis import calc_dynamic_moduli_prony
+
+# Basic usage — fit G_GK over the full time range
+df_moduli = calc_dynamic_moduli_prony(G, method="GK")
+# df_moduli columns: omega, G_prime, G_dprime
+
+# Fit both methods, restrict window, and retrieve the time-domain fit for validation
+df_moduli, df_time = calc_dynamic_moduli_prony(
+    G,
+    method="both",
+    t_min=1.0,
+    t_cutoff=1000.0,
+    n_modes=50,
+    return_fit=True,
+)
+# df_moduli columns: omega, G_prime_GK, G_dprime_GK, G_prime_FSR, G_dprime_FSR
+# df_time  columns: lag_time, G_data_GK, G_fit_GK, G_data_FSR, G_fit_FSR
+```
+
+The input `G` must be the DataFrame returned by `calc_stress_relaxation` (columns `lag_time`, `G_GK`, `G_FSR`).
+
+**Output columns by `method`:**
+
+| `method` | `df_moduli` columns |
+|---|---|
+| `"GK"` | `omega`, `G_prime`, `G_dprime` |
+| `"FSR"` | `omega`, `G_prime`, `G_dprime` |
+| `"both"` | `omega`, `G_prime_GK`, `G_dprime_GK`, `G_prime_FSR`, `G_dprime_FSR` |
+
+**Parameters:**
+
+| Parameter | Default | Description |
+|---|---|---|
+| `method` | `'GK'` | Which G(t) to fit: `'GK'`, `'FSR'`, or `'both'` |
+| `t_min` | `1.0` | Lower bound of the fitting window |
+| `t_cutoff` | `None` | Upper bound of the fitting window. `None` uses the full range |
+| `n_modes` | `50` | Number of Maxwell modes. Must not exceed the number of data points in the window |
+| `n_omega` | `200` | Number of angular frequency points in the output |
+| `omega_min` | `None` | Manual lower bound for the frequency grid. Defaults to `2π / (τ_max × 10)` |
+| `omega_max` | `None` | Manual upper bound for the frequency grid. Defaults to `π / t_min` |
+| `return_fit` | `False` | If `True`, returns `(df_moduli, df_time)` so the Prony fit can be visually validated against the raw G(t) |
+
+Raises `KeyError` if required columns are absent, and `ValueError` for invalid parameter combinations (e.g. `t_min ≥ t_cutoff`, `n_modes > n_fit`, or `p` out of range).
+
+---
+
 ## 3) Exporters
 
 ### `write_pgfplots_table`

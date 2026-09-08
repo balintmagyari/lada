@@ -1,0 +1,63 @@
+{# Chain topology fieldset, shared by the segment ACF and Rouse mode pages.
+   Set `rouse_mode_field = true` before including it to add the mode number p,
+   which needs the bead count held in this fieldset's Alpine state. #}
+<fieldset x-data="{ mode: 'uniform', beads: 8 }">
+  <legend>Chain topology</legend>
+  <p class="field-help">.npz files carry no atom ids. Atom order is assumed to match ascending atom id, 0-indexed. Check the first and last indices against your data file.</p>
+
+  <div class="field">
+    <label for="mode-uniform" class="field-checkbox">
+      <input type="radio" id="mode-uniform" name="mode" value="uniform" x-model="mode" checked>
+      Chains of equal length, one after the other
+    </label>
+    <label for="mode-custom" class="field-checkbox">
+      <input type="radio" id="mode-custom" name="mode" value="custom" x-model="mode">
+      Custom chains, listed by hand
+    </label>
+  </div>
+
+  <div x-show="mode === 'uniform'">
+    <div class="field">
+      <label for="n_chains">Number of chains</label>
+      <input type="number" id="n_chains" name="n_chains" min="1" step="1" required
+             aria-describedby="n_chains-help" :disabled="mode !== 'uniform'">
+      <small class="field-help" id="n_chains-help">How many chains the trajectory holds.</small>
+    </div>
+    <div class="field">
+      <label for="beads_per_chain">Beads per chain</label>
+      <input type="number" id="beads_per_chain" name="beads_per_chain" value="8" min="2" step="1"
+             required aria-describedby="beads_per_chain-help" x-model.number="beads"
+             :disabled="mode !== 'uniform'">
+      <small class="field-help" id="beads_per_chain-help">Every chain has the same number of
+        beads.</small>
+    </div>
+    <div class="field">
+      <label for="first_index">Index of the first bead</label>
+      <input type="number" id="first_index" name="first_index" value="0" min="0" step="1" required
+             aria-describedby="first_index-help" :disabled="mode !== 'uniform'">
+      <small class="field-help" id="first_index-help">Where the chains start in the coordinate
+        array. Leave it at 0 unless other particles come first.</small>
+    </div>
+  </div>
+
+  <div x-show="mode === 'custom'">
+    <div class="field">
+      <label for="custom">Chains</label>
+      <textarea id="custom" name="custom" rows="6" placeholder="0,7&#10;8,15"
+                aria-describedby="custom-help" :disabled="mode !== 'custom'"></textarea>
+      <small class="field-help" id="custom-help">One chain per line: <code>head,tail</code> or the
+        full bead list. Separate the indices with commas or spaces. Lines starting with
+        <code>#</code> are ignored.</small>
+    </div>
+  </div>
+
+  {% if rouse_mode_field %}
+  <div class="field">
+    <label for="p">Mode number p</label>
+    <input type="number" id="p" name="p" value="1" min="0" step="1" required
+           :max="beads - 1" aria-describedby="p-help">
+    <small class="field-help" id="p-help">p must be below the beads per chain. p = 0 is the centre
+      of mass, p = 1 is the relaxation of the whole chain, higher p is more local motion.</small>
+  </div>
+  {% endif %}
+</fieldset>

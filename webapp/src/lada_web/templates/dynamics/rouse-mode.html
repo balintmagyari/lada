@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+{% import "_macros.html" as f %}
+{% block title %}{{ calc.title }}{% endblock %}
+{% block content %}
+<article class="calc">
+  <header>
+    <h1>{{ calc.title }}</h1>
+    <p>Upload a NumPy <code>.npz</code> trajectory and get the normalized autocorrelation of one
+       Rouse mode amplitude, C(t) = &lt;X<sub>p</sub>(t)&#183;X<sub>p</sub>(0)&gt; /
+       &lt;X<sub>p</sub>(0)&#183;X<sub>p</sub>(0)&gt;. Every chain must have the same number of
+       beads, listed in backbone order.</p>
+    <p>Statistical noise grows with lag time; ignore roughly the last 10–20 % of points when
+       fitting relaxation times.</p>
+  </header>
+  <form id="calc-form" method="post" enctype="multipart/form-data" hx-encoding="multipart/form-data">
+    {{ f.file_field('file', 'Trajectory file', '.npz',
+                    'A NumPy archive holding an array named coords of shape (frames, atoms, 3).') }}
+    {{ f.number_field('time_per_frame', 'Time per frame', 1.0, step='any', min=0,
+                      help='Simulation time between two saved frames, greater than zero.') }}
+    {% set rouse_mode_field = true %}
+    {% include "dynamics/_topology.html" %}
+    {{ f.calculate_button('Calculate Rouse mode ACF', '/api/dynamics/rouse-mode') }}
+  </form>
+  {{ f.results_area() }}
+</article>
+{% endblock %}

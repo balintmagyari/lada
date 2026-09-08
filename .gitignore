@@ -25,3 +25,5 @@ CLAUDE.md
 MEMORY.md
 DEVELOPMENT_PLAN.md
 .claude
+# Local virtual environments
+.venv/

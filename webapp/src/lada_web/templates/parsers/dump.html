@@ -1,0 +1,20 @@
+{% extends "base.html" %}
+{% import "_macros.html" as f %}
+{% block title %}{{ calc.title }}{% endblock %}
+{% block content %}
+<article class="calc">
+  <header>
+    <h1>{{ calc.title }}</h1>
+    <p>Upload a LAMMPS dump file. Preview frames gives one summary row per timestep and is
+       cheap even for a large trajectory. Load full atom table concatenates every frame's
+       atom data into a single table, which can take longer and produce a large download.</p>
+  </header>
+  <form id="calc-form" method="post" enctype="multipart/form-data" hx-encoding="multipart/form-data">
+    {{ f.file_field('file', 'LAMMPS dump file', '.dump,.lammpstrj,.txt',
+                    'A trajectory file written by dump ... custom.') }}
+    {{ f.calculate_button('Preview frames', '/api/parsers/dump/preview') }}
+    {{ f.calculate_button('Load full atom table', '/api/parsers/dump/table') }}
+  </form>
+  {{ f.results_area() }}
+</article>
+{% endblock %}

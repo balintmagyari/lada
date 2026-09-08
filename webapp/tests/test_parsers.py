@@ -2,6 +2,7 @@ import io
 
 import numpy as np
 import pandas as pd
+import pytest
 
 from .conftest import upload
 
@@ -111,3 +112,89 @@ def test_oversized_upload_is_413_and_leaves_nothing_behind(client, temp_root):
     assert r.status_code == 413
     assert "upload limit" in r.json()["detail"]
     assert not temp_root.exists() or list(temp_root.iterdir()) == []
+
+
+DUMP = "sample_dump.dump"  # 3 frames × 50 atoms, columns id mol type xu yu zu
+
+
+def test_dump_preview_summarises_each_frame(client, data_dir):
+    r = client.post("/api/parsers/dump/preview", files=upload(data_dir / DUMP))
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["columns"] == ["timestep", "n_atoms", "box_x", "box_y", "box_z", "columns"]
+    assert body["n_rows_total"] == 3
+    assert body["rows"][0][1] == 50 and body["rows"][0][2] == 20.0
+    assert body["rows"][0][5] == "id mol type xu yu zu"
+    assert body["plot"] is None
+
+
+def test_dump_preview_htmx_has_no_download_buttons(client, data_dir, htmx):
+    r = client.post("/api/parsers/dump/preview", files=upload(data_dir / DUMP), headers=htmx)
+    assert r.status_code == 200 and "formaction=" not in r.text
+
+
+def test_dump_table_is_capped_on_screen_but_full_on_download(client, data_dir):
+    view = client.post("/api/parsers/dump/table", files=upload(data_dir / DUMP)).json()
+    assert view["columns"] == ["timestep", "id", "mol", "type", "xu", "yu", "zu"]
+    assert view["n_rows_total"] == 150 and len(view["rows"]) == 20 and view["truncated"]
+    r = client.post("/api/parsers/dump/table/download?fmt=csv", files=upload(data_dir / DUMP))
+    df = pd.read_csv(io.BytesIO(r.content))
+    assert len(df) == 150 and list(df.columns) == view["columns"]
+    assert np.allclose(df.to_numpy()[:20], np.array(view["rows"], dtype=float))
+
+
+@pytest.mark.parametrize(
+    "section,first_col", [("Atoms", "id"), ("Bonds", "bond_id"), ("Masses", "atom_id")]
+)
+def test_data_table_sections(client, data_dir, section, first_col):
+    r = client.post(
+        "/api/parsers/data/table", files=upload(data_dir / "sample.data"), data={"section": section}
+    )
+    assert r.status_code == 200, r.text
+    assert r.json()["columns"][0] == first_col
+
+
+def test_data_table_invalid_and_missing_sections_are_422(client, data_dir):
+    r = client.post(
+        "/api/parsers/data/table", files=upload(data_dir / "sample.data"), data={"section": "Nope"}
+    )
+    assert r.status_code == 422 and "Invalid section" in r.json()["detail"]
+    r = client.post(
+        "/api/parsers/data/table",
+        files=upload(data_dir / "sample.data"),
+        data={"section": "Velocities"},
+    )
+    assert r.status_code == 422 and "not found" in r.json()["detail"]
+
+
+def test_data_table_download_roundtrip(client, data_dir):
+    view = client.post(
+        "/api/parsers/data/table", files=upload(data_dir / "sample.data"), data={"section": "Bonds"}
+    ).json()
+    r = client.post(
+        "/api/parsers/data/table/download?fmt=pgfplots",
+        files=upload(data_dir / "sample.data"),
+        data={"section": "Bonds"},
+    )
+    assert r.headers["content-disposition"] == 'attachment; filename="sample_Bonds.dat"'
+    assert np.allclose(
+        np.loadtxt(io.BytesIO(r.content), skiprows=1)[:20], np.array(view["rows"], dtype=float)
+    )
+
+
+def test_acf_table(client, data_dir):
+    r = client.post("/api/parsers/acf/table", files=upload(data_dir / "sample_acf.txt"))
+    assert r.status_code == 200, r.text
+    assert r.json()["columns"] == ["lag_time", "acf_x", "acf_y", "acf_z", "timestep"]
+    assert r.json()["n_rows_total"] == 10
+
+
+def test_acf_table_rejects_non_acf_file(client, data_dir):
+    r = client.post("/api/parsers/acf/table", files=upload(data_dir / "sample_log.lammps"))
+    assert r.status_code == 422 and "timestep blocks" in r.json()["detail"]
+
+
+@pytest.mark.parametrize("page", ["/parsers/dump", "/parsers/data", "/parsers/acf"])
+def test_parser_pages_render(client, page):
+    r = client.get(page)
+    assert r.status_code == 200 and 'id="calc-form"' in r.text and 'name="file"' in r.text

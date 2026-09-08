@@ -1,0 +1,17 @@
+{% extends "base.html" %}
+{% import "_macros.html" as f %}
+{% block title %}{{ calc.title }}{% endblock %}
+{% block content %}
+<article class="calc">
+  <header>
+    <h1>{{ calc.title }}</h1>
+    <p>Upload a stress autocorrelation file and read its last timestep block as a table.</p>
+  </header>
+  <form id="calc-form" method="post" enctype="multipart/form-data" hx-encoding="multipart/form-data">
+    {{ f.file_field('file', 'Stress ACF file', '.txt,.dat',
+                    'The output file written by a LAMMPS fix ave/correlate command.') }}
+    {{ f.calculate_button('Read ACF table', '/api/parsers/acf/table') }}
+  </form>
+  {{ f.results_area() }}
+</article>
+{% endblock %}

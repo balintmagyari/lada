@@ -16,6 +16,14 @@ ONE_ROW_LOG = (
     "Loop time of 0.1 on 1 procs for 0 steps\n"
 )
 
+# What `thermo_style custom step` writes: several rows, one column.
+ONE_COLUMN_LOG = (
+    "Per MPI rank memory allocation = 2.5 Mbytes\n"
+    "Step\n"
+    "0\n100\n200\n300\n"
+    "Loop time of 0.1 on 1 procs for 300 steps\n"
+)
+
 
 def test_log_table_json(client, data_dir):
     r = client.post(LOG_URL, files=upload(data_dir / "sample_log.lammps"))
@@ -36,6 +44,17 @@ def test_log_with_one_thermo_row_is_read(client, tmp_path):
     assert body["columns"] == ["Step", "Temp", "Press", "PotEng", "TotEng"]
     assert body["n_rows_total"] == 1
     assert body["rows"] == [[0.0, 300.0, 1.0, -500.0, -350.0]]
+
+
+def test_log_with_one_thermo_column_is_read(client, tmp_path):
+    path = tmp_path / "one_column.lammps"
+    path.write_text(ONE_COLUMN_LOG)
+    r = client.post(LOG_URL, files=upload(path))
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["columns"] == ["Step"]
+    assert body["n_rows_total"] == 4
+    assert body["rows"] == [[0.0], [100.0], [200.0], [300.0]]
 
 
 def test_log_table_htmx_partial(client, data_dir, htmx):

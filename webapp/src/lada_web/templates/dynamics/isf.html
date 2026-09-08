@@ -20,8 +20,8 @@
     {{ f.number_field('q_magnitude', 'Scattering vector magnitude q', 7.0, step='any', min=0,
                       help='Greater than zero. The first structure factor peak is a common choice.')
     }}
-    {{ f.number_field('n_vectors', 'Number of q directions', 50, step=1, min=1, max=1000,
-                      help='Directions to average over, up to 1000. Use 2 or more; each one costs time.')
+    {{ f.number_field('n_vectors', 'Number of q directions', 50, step=1, min=2, max=1000,
+                      help='Directions to average over, 2 to 1000. More directions smooth the curve and cost more time.')
     }}
     {{ f.calculate_button('Calculate F(q,t)', '/api/dynamics/isf') }}
   </form>

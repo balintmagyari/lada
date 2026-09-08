@@ -284,6 +284,15 @@ def test_isf_needs_a_positive_q(client, data_dir):
     assert r.status_code == 422
 
 
+def test_isf_rejects_a_single_q_direction(client, data_dir):
+    # lada spreads the directions over n_vectors - 1 steps, so a single one has no meaning.
+    form = {"time_per_frame": "1.0", "q_magnitude": "1.0", "n_vectors": "1"}
+    r = client.post(ISF_URL, files=upload(trajectory(data_dir)), data=form)
+    assert r.status_code == 422
+    detail = r.json()["detail"]
+    assert any("n_vectors" in error["loc"] for error in detail)
+
+
 def test_isf_csv_download(client, data_dir):
     form = {"time_per_frame": "1.0", "q_magnitude": "1.0", "n_vectors": "5"}
     r = client.post(ISF_URL + "/download?fmt=csv", files=upload(trajectory(data_dir)), data=form)

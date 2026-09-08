@@ -64,7 +64,8 @@ class IsfParams:
     def __init__(
         self,
         q_magnitude: Annotated[float, Form(gt=0)],
-        n_vectors: Annotated[int, Form(ge=1, le=1000)] = 50,
+        # Two directions is the floor: lada spreads the vectors over n_vectors - 1 steps.
+        n_vectors: Annotated[int, Form(ge=2, le=1000)] = 50,
     ) -> None:
         self.q_magnitude = q_magnitude
         self.n_vectors = n_vectors

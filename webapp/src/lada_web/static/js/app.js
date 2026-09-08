@@ -4,7 +4,31 @@
 (function () {
   "use strict";
 
-  var PLOT_COLORS = ["#1b4fd8", "#b4661b", "#2e7d5b", "#8c2f6b", "#4a6572"];
+  // The identity lives in app.css. Read the shared tokens from there so a palette edit
+  // reaches the plot too; the literals are only a fallback if the stylesheet is missing.
+  var FALLBACK = {
+    "--accent": "#1b4fd8",
+    "--ink": "#14232e",
+    "--grid-major": "#dbe1da",
+    "--rule": "#c6d0c9"
+  };
+
+  var palette = null;
+
+  function token(name) {
+    if (!palette) {
+      palette = getComputedStyle(document.documentElement);
+    }
+    var value = (palette.getPropertyValue(name) || "").trim();
+    return value || FALLBACK[name];
+  }
+
+  // Only the first series is part of the identity; the rest keep the plot readable.
+  var COMPANIONS = ["#b4661b", "#2e7d5b", "#8c2f6b", "#4a6572"];
+
+  function seriesColor(index) {
+    return index === 0 ? token("--accent") : COMPANIONS[(index - 1) % COMPANIONS.length];
+  }
 
   // Error responses carry the partial to display, so let htmx swap them in.
   document.body.addEventListener("htmx:beforeSwap", function (evt) {
@@ -18,7 +42,7 @@
     var results = document.getElementById("results");
     if (results) {
       results.innerHTML =
-        '<section class="result result-error" role="alert">' +
+        '<section class="result result-error" id="result" role="alert">' +
         "<h2>The server could not be reached</h2>" +
         "<p>Check that the app is still running, then try again.</p>" +
         "</section>";
@@ -47,28 +71,33 @@
         name: name,
         type: "scatter",
         mode: "lines+markers",
-        marker: { size: 5, color: PLOT_COLORS[index % PLOT_COLORS.length] },
-        line: { width: 2, color: PLOT_COLORS[index % PLOT_COLORS.length] }
+        marker: { size: 5, color: seriesColor(index) },
+        line: { width: 2, color: seriesColor(index) }
       };
     });
+
+    var axis = {
+      gridcolor: token("--grid-major"),
+      zerolinecolor: token("--rule")
+    };
 
     var layout = {
       margin: { l: 64, r: 16, t: 16, b: 52 },
       showlegend: plot.y.length > 1,
       paper_bgcolor: "rgba(0,0,0,0)",
       plot_bgcolor: "rgba(0,0,0,0)",
-      font: { color: "#14232e" },
+      font: { color: token("--ink") },
       xaxis: {
         title: { text: plot.x_label || plot.x },
         type: axisType(plot.x_log),
-        gridcolor: "#dbe1da",
-        zerolinecolor: "#c6d0c9"
+        gridcolor: axis.gridcolor,
+        zerolinecolor: axis.zerolinecolor
       },
       yaxis: {
         title: { text: plot.y_label || plot.y.join(", ") },
         type: axisType(plot.y_log),
-        gridcolor: "#dbe1da",
-        zerolinecolor: "#c6d0c9"
+        gridcolor: axis.gridcolor,
+        zerolinecolor: axis.zerolinecolor
       }
     };
 

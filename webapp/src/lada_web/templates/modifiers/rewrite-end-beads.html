@@ -6,10 +6,10 @@
   <header>
     <h1>{{ calc.title }}</h1>
     <p>Upload a LAMMPS data file whose <code>Atoms</code> section uses a molecular-style layout
-       (<code>bond</code>, <code>molecular</code> or <code>full</code>). A chain end is the lowest
-       and the highest atom id within each molecule; every chain end is reassigned to the new atom
-       type below, and its mass and pair coefficients are cloned from the base type so LAMMPS has
-       valid parameters for it. Submitting the form starts the download immediately — there is no
+       (<code>bond</code>, <code>molecular</code> or <code>full</code>). Chain ends are the atoms with
+       the smallest and the largest atom ID in each molecule; every chain end is reassigned to the
+       new atom type below, and its mass and pair coefficients are cloned from the base type so
+       LAMMPS has valid parameters for it. Submitting the form starts the download immediately — there is no
        preview.</p>
   </header>
   <form id="calc-form" method="post" enctype="multipart/form-data" hx-encoding="multipart/form-data">

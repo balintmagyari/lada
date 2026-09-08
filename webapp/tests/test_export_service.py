@@ -77,3 +77,16 @@ def test_meta_is_copied_onto_the_result():
         frame(), title="T", download_stem="t", max_rows=10, meta={"rows": 5}
     )
     assert result.meta == {"rows": 5}
+
+
+def test_boolean_columns_become_ints_not_true_false():
+    """bool is an int subclass, so it has to be converted before the int branch."""
+    df = pd.DataFrame({"flag": [True, False]})
+    result = table_result_from_df(df, title="T", download_stem="t", max_rows=10)
+    assert [type(row[0]) for row in result.rows] == [int, int]
+    assert result.rows == [[1], [0]]
+
+    plot = PlotSpec(x="flag", y=["flag"])
+    with_plot = table_result_from_df(df, title="T", download_stem="t", max_rows=10, plot=plot)
+    assert with_plot.plot is not None
+    assert with_plot.plot.series["flag"] == [1.0, 0.0]

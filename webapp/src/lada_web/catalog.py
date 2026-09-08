@@ -79,14 +79,14 @@ CALCULATIONS: list[Calculation] = [
         "parsers",
         "data",
         "Data file",
-        "Read one section (Atoms, Bonds, Masses, ...) of a LAMMPS data file.",
+        "Read one section of a LAMMPS data file, for example Atoms, Bonds or Masses.",
         "data",
     ),
     Calculation(
         "parsers",
         "acf",
         "Stress ACF file",
-        "Read the last timestep block of a fix ave/correlate output file.",
+        "Read the last timestep block of a fix ave/correlate output file as a table.",
         "acf",
     ),
     Calculation(
@@ -121,14 +121,14 @@ CALCULATIONS: list[Calculation] = [
         "dynamics",
         "rouse-mode",
         "Rouse mode autocorrelation",
-        "Normalized autocorrelation of one Rouse mode p.",
+        "Normalized autocorrelation of the amplitude of one Rouse mode.",
         "npz",
     ),
     Calculation(
         "dynamics",
         "isf",
         "Intermediate scattering function",
-        "Coherent F(q,t)/F(q,0) at one scattering vector magnitude.",
+        "Coherent F(q,t) / F(q,0) at one scattering vector magnitude.",
         "npz",
     ),
     Calculation(

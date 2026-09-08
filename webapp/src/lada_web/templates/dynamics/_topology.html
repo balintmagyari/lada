@@ -3,7 +3,7 @@
    which needs the bead count held in this fieldset's Alpine state. #}
 <fieldset x-data="{ mode: 'uniform', beads: 8 }">
   <legend>Chain topology</legend>
-  <p class="field-help">.npz files carry no atom ids. Atom order is assumed to match ascending atom id, 0-indexed. Check the first and last indices against your data file.</p>
+  <p class="field-help">.npz files carry no atom ids. Atom order is assumed to match ascending atom ID, 0-indexed. Check the first and last indices against your data file.</p>
 
   <div class="field">
     <label for="mode-uniform" class="field-checkbox">
@@ -40,7 +40,7 @@
     </div>
   </div>
 
-  <div x-show="mode === 'custom'">
+  <div x-show="mode === 'custom'" x-cloak>
     <div class="field">
       <label for="custom">Chains</label>
       <textarea id="custom" name="custom" rows="6" placeholder="0,7&#10;8,15"

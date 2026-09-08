@@ -19,11 +19,11 @@
 <article class="calc">
   <header>
     <h1>{{ calc.title }}</h1>
-    <p>Upload a LAMMPS data file and read one of its sections as a table. Column names
+    <p>Upload a LAMMPS data file and get one of its sections as a table. Column names
        follow the section's known schema, or generic names when the section has none.</p>
   </header>
   <form id="calc-form" method="post" enctype="multipart/form-data" hx-encoding="multipart/form-data">
-    {{ f.file_field('file', 'LAMMPS data file', '.data,.txt',
+    {{ f.file_field('file', 'LAMMPS data file', '.data,.lmp,.txt',
                     'A topology file read by read_data in a LAMMPS input script.') }}
     {{ f.select_field('section', 'Section', options, value='Atoms',
                       help='Which section of the data file to read.') }}

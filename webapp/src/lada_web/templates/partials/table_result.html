@@ -2,7 +2,8 @@
   <header class="result-header">
     <h2>{{ result.title }}</h2>
     <p class="result-summary">
-      {{ result.n_rows_total }} rows, {{ result.columns | length }} columns.
+      {{ result.n_rows_total }} {{ 'row' if result.n_rows_total == 1 else 'rows' }},
+      {{ result.columns | length }} {{ 'column' if result.columns | length == 1 else 'columns' }}.
       {%- for key, value in result.meta.items() %} {{ key | replace('_', ' ') | capitalize }}: {{ value }}.{% endfor %}
     </p>
   </header>
@@ -13,7 +14,7 @@
   </div>
   <div class="plot" id="result-plot"></div>
   {% endif %}
-  <div class="table-scroll">
+  <div class="table-scroll" tabindex="0" role="region" aria-label="{{ result.title }} table">
     <table class="numbers">
       <thead><tr>{% for c in result.columns %}<th scope="col">{{ c }}</th>{% endfor %}</tr></thead>
       <tbody>

@@ -187,8 +187,16 @@ def test_segment_acf_custom_matches_the_library(client, data_dir):
     assert np.allclose(body["plot"]["series"]["acf"], expected[:, 1])
 
 
-def test_segment_acf_rejects_an_index_beyond_the_last_atom(client, data_dir):
-    form = {"mode": "custom", "custom": "0,7\n8,40", "time_per_frame": "1.0"}
+@pytest.mark.parametrize(
+    "form",
+    [
+        {"mode": "custom", "custom": "0,7\n8,40", "time_per_frame": "1.0"},
+        # 4 chains x 8 beads starting at index 8 runs to index 39; the fixture has 32 atoms.
+        UNIFORM | {"first_index": "8", "time_per_frame": "1.0"},
+    ],
+    ids=["custom", "uniform"],
+)
+def test_segment_acf_rejects_an_index_beyond_the_last_atom(client, data_dir, form):
     r = client.post(SEGMENT_URL, files=upload(trajectory(data_dir)), data=form)
     assert r.status_code == 422
     assert "32 atoms" in r.json()["detail"]
@@ -342,10 +350,18 @@ def test_topology_pages_carry_the_alpine_toggle(client, slug):
     assert "x-data" in r.text
     assert 'name="mode"' in r.text
     assert 'name="custom"' in r.text
-    assert "Atom order is assumed to match ascending atom id" in r.text
+    assert "Atom order is assumed to match ascending atom ID" in r.text
+    assert "x-show=\"mode === 'custom'\" x-cloak" in r.text
 
 
 def test_rouse_page_binds_the_mode_number_to_the_bead_count(client):
     r = client.get("/dynamics/rouse-mode")
     assert ':max="beads - 1"' in r.text
     assert 'name="p"' in r.text
+
+
+def test_segment_acf_page_has_no_mode_number_field(client):
+    """The segment ACF route takes no `p`; a required input for it would block the form."""
+    r = client.get("/dynamics/segment-acf")
+    assert r.status_code == 200
+    assert 'name="p"' not in r.text

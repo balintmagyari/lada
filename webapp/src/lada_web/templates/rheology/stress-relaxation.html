@@ -14,10 +14,10 @@
   <form id="calc-form" method="post" enctype="multipart/form-data" hx-encoding="multipart/form-data">
     {{ f.file_field('file', 'Stress ACF file', '.txt,.dat',
                     'A fix ave/correlate output file with ACF_Sxy/Sxz/Syz and ACF_Nxy/Nxz/Nyz columns.') }}
-    {{ f.number_field('volume', 'Volume', none, step='any', min=0,
-                       help='System volume in LJ units (length cubed). Must be positive.') }}
-    {{ f.number_field('temperature', 'Temperature', none, step='any', min=0,
-                       help='System temperature in LJ units. Must be positive.') }}
+    {{ f.number_field('volume', 'Volume', none, step='any', min=f.POSITIVE,
+                      help='System volume in LJ units (length cubed). Must be positive.') }}
+    {{ f.number_field('temperature', 'Temperature', none, step='any', min=f.POSITIVE,
+                      help='System temperature in LJ units. Must be positive.') }}
     {{ f.calculate_button('Calculate G(t)', '/api/rheology/stress-relaxation') }}
   </form>
   {{ f.results_area() }}

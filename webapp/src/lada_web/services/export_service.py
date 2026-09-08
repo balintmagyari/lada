@@ -35,6 +35,10 @@ def write_table(df: pd.DataFrame, directory: Path, stem: str, fmt: Format) -> Pa
 
 
 def _cell(value: object) -> Cell:
+    # bool is a subclass of int, so it has to be caught before the int branch below,
+    # or a boolean column would leave as True/False instead of 1/0.
+    if isinstance(value, bool | np.bool_):
+        return int(value)
     if isinstance(value, np.integer):
         return int(value)
     if isinstance(value, float | np.floating):

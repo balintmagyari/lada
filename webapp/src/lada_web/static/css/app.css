@@ -88,6 +88,11 @@ body {
   left: 0;
 }
 
+/* Alpine is deferred; anything it owns stays hidden until it boots. */
+[x-cloak] {
+  display: none !important;
+}
+
 /* --- Masthead ------------------------------------------------------------ */
 
 .masthead {
@@ -157,6 +162,16 @@ body {
 
 .lede {
   font-size: 1.05rem;
+}
+
+.flow {
+  max-width: 68ch;
+  margin: 1rem 0 1.25rem;
+  padding-left: 1.35rem;
+}
+
+.flow li {
+  margin-bottom: 0.3rem;
 }
 
 /* --- Navigation ---------------------------------------------------------- */
@@ -388,8 +403,13 @@ body {
 
 .table-scroll {
   overflow-x: auto;
+  overscroll-behavior-x: contain;
   margin-top: 1.25rem;
   border: 1px solid var(--rule);
+}
+
+.table-scroll:focus-visible {
+  outline-offset: 0;
 }
 
 .numbers {
@@ -435,6 +455,7 @@ body {
   background: var(--fault-tint);
 }
 
+.result-error h1,
 .result-error h2 {
   margin-bottom: 0.35rem;
   font-size: 1.15rem;
@@ -444,6 +465,10 @@ body {
 .result-error p {
   margin: 0;
   max-width: 68ch;
+}
+
+.result-error .result-note {
+  margin-top: 0.9rem;
 }
 
 /* --- Footer -------------------------------------------------------------- */

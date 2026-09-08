@@ -1,3 +1,7 @@
+{# The smallest value a browser will accept where the server requires a strictly positive
+   number. HTML has no "greater than zero", and min="0" would let a 0 through to a 422. #}
+{% set POSITIVE = '1e-12' %}
+
 {% macro _help(name, help) -%}
 {% if help %}<small class="field-help" id="{{ name }}-help">{{ help }}</small>{% endif %}
 {%- endmacro %}

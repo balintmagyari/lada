@@ -2,10 +2,10 @@
 {% block title %}{{ title }}{% endblock %}
 {% block content %}
 <article class="calc">
-  <header>
+  <section class="result result-error">
     <h1>{{ title }}</h1>
     <p>{{ message }}</p>
-  </header>
-  <p><a href="/">Back to the calculation list</a></p>
+    <p class="result-note"><a href="/">Back to the calculation list</a></p>
+  </section>
 </article>
 {% endblock %}

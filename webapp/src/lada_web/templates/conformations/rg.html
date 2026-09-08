@@ -5,19 +5,19 @@
 <article class="calc">
   <header>
     <h1>{{ calc.title }}</h1>
-    <p>Upload a LAMMPS dump trajectory and get the ensemble-average squared radius of
+    <p>Upload a LAMMPS dump file and get the ensemble-average squared radius of
        gyration (⟨Rg²⟩) of the chains at every timestep. Use unwrapped coordinates
        (<code>xu yu zu</code>) so atoms that crossed a periodic boundary do not distort
        the result.</p>
   </header>
   <form id="calc-form" method="post" enctype="multipart/form-data" hx-encoding="multipart/form-data">
-    {{ f.file_field('file', 'Dump trajectory file', '.dump,.lammpstrj,.txt',
+    {{ f.file_field('file', 'LAMMPS dump file', '.dump,.lammpstrj,.txt',
                     'A LAMMPS dump file with unwrapped coordinate columns.') }}
     {{ f.text_field('coord_cols', 'Coordinate columns', 'xu,yu,zu',
                     'Three comma-separated column names for the unwrapped x, y, z coordinates.') }}
     {{ f.text_field('molecule_col', 'Molecule column', 'mol',
                     'Column name identifying which chain each atom belongs to.') }}
-    {{ f.text_field('mass_col', 'Mass column (optional)', '',
+    {{ f.text_field('mass_col', 'Mass column', '',
                     'Column name for per-atom mass. Leave blank to weight every atom equally.') }}
     {{ f.calculate_button('Calculate Rg²', '/api/conformations/rg') }}
   </form>

@@ -12,9 +12,9 @@
        fitting relaxation times.</p>
   </header>
   <form id="calc-form" method="post" enctype="multipart/form-data" hx-encoding="multipart/form-data">
-    {{ f.file_field('file', 'Trajectory file', '.npz',
+    {{ f.file_field('file', 'NumPy .npz trajectory', '.npz',
                     'A NumPy archive holding an array named coords of shape (frames, atoms, 3).') }}
-    {{ f.number_field('time_per_frame', 'Time per frame', 1.0, step='any', min=0,
+    {{ f.number_field('time_per_frame', 'Time per frame', 1.0, step='any', min=f.POSITIVE,
                       help='Simulation time between two saved frames, greater than zero.') }}
     {% include "dynamics/_topology.html" %}
     {{ f.calculate_button('Calculate end-to-end ACF', '/api/dynamics/segment-acf') }}

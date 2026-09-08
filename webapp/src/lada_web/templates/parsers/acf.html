@@ -5,7 +5,8 @@
 <article class="calc">
   <header>
     <h1>{{ calc.title }}</h1>
-    <p>Upload a stress autocorrelation file and read its last timestep block as a table.</p>
+    <p>Upload a stress autocorrelation file (from <code>fix ave/correlate</code>) and get its
+       last timestep block as a table.</p>
   </header>
   <form id="calc-form" method="post" enctype="multipart/form-data" hx-encoding="multipart/form-data">
     {{ f.file_field('file', 'Stress ACF file', '.txt,.dat',

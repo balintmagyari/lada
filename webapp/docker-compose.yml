@@ -1,0 +1,12 @@
+services:
+  web:
+    build: .
+    ports:
+      - "8000:8000"
+    environment:
+      LADA_WEB_MAX_UPLOAD_MB: "50"
+      LADA_WEB_MAX_TRAJECTORY_MB: "500"
+      LADA_WEB_MAX_TRAJECTORY_FRAMES: "3000"
+      LADA_WEB_MAX_TABLE_ROWS: "500"
+      # LADA_WEB_TEMP_ROOT is unset by default (falls back to the system temp directory);
+      # set it to a path to use a specific/persistent workspace directory instead.

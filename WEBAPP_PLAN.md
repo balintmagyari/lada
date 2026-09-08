@@ -229,7 +229,7 @@ xyz/hdf5 exporters, restart-file parsing).
 
 ## Status
 
-- [ ] Phase 1 — Backend skeleton + parsers + conformations + rheology
-- [ ] Phase 2 — Dynamics / `.npz` endpoints
-- [ ] Phase 3 — Modifiers
-- [ ] Phase 4 — Polish & deploy readiness
+- [x] Phase 1 — Backend skeleton + parsers + conformations + rheology
+- [x] Phase 2 — Dynamics / `.npz` endpoints
+- [x] Phase 3 — Modifiers
+- [x] Phase 4 — Polish & deploy readiness

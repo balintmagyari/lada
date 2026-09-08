@@ -48,6 +48,18 @@ write_pgfplots_table(G, "G_t.dat", comment="Stress relaxation modulus, T=1.0")
 
 ---
 
+## Web front-end
+
+`webapp/` is a separate installable project (`lada-web`) that puts a browser front-end over these
+same functions: upload a LAMMPS output file, pick a calculation, see the result as a table (and a
+chart where one applies), download it as CSV or a pgfplots-ready file. It depends on `lada` rather
+than the other way around, so `pip install lada` stays exactly as lightweight as it is today.
+
+See [`webapp/README.md`](webapp/README.md) for the quick start, the full page and API route list,
+configuration, and Docker deployment.
+
+---
+
 ## 1) Parsers
 
 ### 1a) Dump files — `dump_frames` / `read_dump`

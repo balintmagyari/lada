@@ -212,35 +212,39 @@ vectors = calculate_ree_vectors(df, coord_cols=['xu', 'yu', 'zu'], molecule_col=
 
 ---
 
-### 2d) Segment end-to-end ACF — `calculate_segment_acf`
+### 2d) Segment end-to-end ACF — `calculate_segment_acf_from_trajectory`
 
 Normalized autocorrelation function C(t) = ⟨R(t)·R(0)⟩ / ⟨R(0)·R(0)⟩ of the chain end-to-end vector, averaged over all chains.
 
 ```python
-from lada.analysis import calculate_segment_acf
+from lada.analysis import calculate_segment_acf_from_trajectory
 import numpy as np
 
 # segment_pairs: (n_chains, 2) array of 0-indexed [head_bead, tail_bead] indices
 segment_pairs = np.array([[0, 49], [50, 99]])  # two 50-bead chains
-result = calculate_segment_acf("trajectory.npz", segment_pairs, time_per_frame=0.5)
+result = calculate_segment_acf_from_trajectory("trajectory.npz", segment_pairs, time_per_frame=0.5)
 # shape: (n_frames, 2) — columns [lag_time, C(t)]
 ```
 
 > Discard the last 10–20 % of the output when fitting relaxation times, as statistical quality decreases at long lags.
 
+> **Deprecated alias:** `calculate_segment_acf` behaves the same but emits a `DeprecationWarning` and will be removed in lada 2.0.0. Use `calculate_segment_acf_from_trajectory` in new code.
+
 ---
 
-### 2e) Rouse mode ACF — `calculate_rouse_mode_acf`
+### 2e) Rouse mode ACF — `calculate_rouse_mode_acf_from_trajectory`
 
 Normalized ACF for the Rouse mode amplitude X_p(t), computed via a discrete cosine projection. Used to extract mode-dependent relaxation times τ_p.
 
 ```python
-from lada.analysis import calculate_rouse_mode_acf
+from lada.analysis import calculate_rouse_mode_acf_from_trajectory
 import numpy as np
 
 # chain_indices: (n_chains, beads_per_chain) array of 0-indexed bead indices
 chain_indices = np.arange(100).reshape(2, 50)
-result = calculate_rouse_mode_acf("trajectory.npz", chain_indices, p=1, time_per_frame=0.5)
+result = calculate_rouse_mode_acf_from_trajectory(
+    "trajectory.npz", chain_indices, p=1, time_per_frame=0.5
+)
 # shape: (n_frames, 2) — columns [lag_time, C_p(t)]
 ```
 
@@ -250,18 +254,24 @@ result = calculate_rouse_mode_acf("trajectory.npz", chain_indices, p=1, time_per
 
 Raises `ValueError` if `p >= beads_per_chain`.
 
+> **Deprecated alias:** `calculate_rouse_mode_acf` behaves the same but emits a `DeprecationWarning` and will be removed in lada 2.0.0. Use `calculate_rouse_mode_acf_from_trajectory` in new code.
+
 ---
 
-### 2f) Intermediate scattering function — `calculate_isf`
+### 2f) Intermediate scattering function — `calculate_isf_from_trajectory`
 
 Coherent intermediate scattering function F(q, t) / F(q, 0), computed via the density-fluctuation autocorrelation method. Isotropic orientational averaging is performed over `n_vectors` scattering vectors distributed on a Fibonacci lattice.
 
 ```python
-from lada.analysis import calculate_isf
+from lada.analysis import calculate_isf_from_trajectory
 
-result = calculate_isf("trajectory.npz", time_per_frame=0.5, q_magnitude=7.0, n_vectors=50)
+result = calculate_isf_from_trajectory(
+    "trajectory.npz", time_per_frame=0.5, q_magnitude=7.0, n_vectors=50
+)
 # shape: (n_frames, 2) — columns [lag_time, F(q,t)/F(q,0)]
 ```
+
+> **Deprecated alias:** `calculate_isf` behaves the same but emits a `DeprecationWarning` and will be removed in lada 2.0.0. Use `calculate_isf_from_trajectory` in new code.
 
 ---
 

@@ -17,10 +17,13 @@ from .analysis import (
     calc_stress_relaxation,
     calculate_avg_ree_sq,
     calculate_avg_rg_sq,
-    calculate_isf,
+    calculate_isf,  # deprecated alias
+    calculate_isf_from_trajectory,
     calculate_ree_vectors,
-    calculate_rouse_mode_acf,
-    calculate_segment_acf,
+    calculate_rouse_mode_acf,  # deprecated alias
+    calculate_rouse_mode_acf_from_trajectory,
+    calculate_segment_acf,  # deprecated alias
+    calculate_segment_acf_from_trajectory,
 )
 
 # Exporters
@@ -49,6 +52,9 @@ __all__ = [
     "calculate_avg_rg_sq",
     "calculate_avg_ree_sq",
     "calculate_ree_vectors",
+    "calculate_segment_acf_from_trajectory",
+    "calculate_rouse_mode_acf_from_trajectory",
+    "calculate_isf_from_trajectory",
     "calculate_segment_acf",
     "calculate_rouse_mode_acf",
     "calculate_isf",

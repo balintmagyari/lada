@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "lada"
-version = "1.0.6"
+version = "1.2.0"
 authors = [
   { name="Balint Magyari", email="balint.magyari@unina.it" },
 ]

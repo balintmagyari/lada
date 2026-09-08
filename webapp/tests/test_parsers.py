@@ -8,6 +8,14 @@ from .conftest import upload
 LOG_URL = "/api/parsers/log/table"
 LOG_COLUMNS = ["Step", "Temp", "Press", "Vol", "Lx", "Ly", "Lz", "PotEng", "KinEng", "TotEng"]
 
+# What LAMMPS writes for `run 0`: a thermo block with a single data row.
+ONE_ROW_LOG = (
+    "Per MPI rank memory allocation = 2.5 Mbytes\n"
+    "Step Temp Press PotEng TotEng\n"
+    "0 300.0 1.0 -500.0 -350.0\n"
+    "Loop time of 0.1 on 1 procs for 0 steps\n"
+)
+
 
 def test_log_table_json(client, data_dir):
     r = client.post(LOG_URL, files=upload(data_dir / "sample_log.lammps"))
@@ -17,6 +25,17 @@ def test_log_table_json(client, data_dir):
     assert body["n_rows_total"] == 5 and len(body["rows"]) == 5
     assert body["rows"][0][0] == 0 and body["rows"][-1][0] == 4000
     assert body["download_stem"] == "sample_log_thermo"
+
+
+def test_log_with_one_thermo_row_is_read(client, tmp_path):
+    path = tmp_path / "one_row.lammps"
+    path.write_text(ONE_ROW_LOG)
+    r = client.post(LOG_URL, files=upload(path))
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["columns"] == ["Step", "Temp", "Press", "PotEng", "TotEng"]
+    assert body["n_rows_total"] == 1
+    assert body["rows"] == [[0.0, 300.0, 1.0, -500.0, -350.0]]
 
 
 def test_log_table_htmx_partial(client, data_dir, htmx):

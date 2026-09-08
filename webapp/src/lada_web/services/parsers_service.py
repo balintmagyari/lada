@@ -2,6 +2,7 @@
 
 from pathlib import Path
 
+import numpy as np
 import pandas as pd
 from lada.parsers import read_lammps_log
 
@@ -17,7 +18,6 @@ def log_table(path: Path) -> pd.DataFrame:
     # DataFrame raises a pandas shape error, so check before converting.
     if not thermo.columns or thermo.data.size == 0:
         raise ValueError(NO_THERMO_TABLE)
-    df = thermo.to_pandas()
-    if df.empty:
-        raise ValueError(NO_THERMO_TABLE)
-    return df
+    # np.loadtxt collapses a single data line to 1-D, which to_pandas() cannot label, so
+    # build the frame here instead. A log from `run 0` prints exactly one thermo row.
+    return pd.DataFrame(np.atleast_2d(thermo.data), columns=thermo.columns)

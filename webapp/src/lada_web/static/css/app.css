@@ -398,8 +398,6 @@ body {
 }
 
 .numbers th {
-  position: sticky;
-  top: 0;
   background: var(--paper);
   text-align: right;
   white-space: nowrap;

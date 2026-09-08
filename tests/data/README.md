@@ -184,3 +184,43 @@ If file size or format questions arise, the test runner will tell you exactly wh
 pytest tests/ -v
 # Shows exactly which files are missing or in wrong format
 ```
+
+---
+
+## Committed fixtures added in September 2026
+
+Three additional fixtures, generated deterministically from committed scripts (seed
+`20260908`), support `lada.analysis.dynamics`, `lada.analysis.rheology`, and
+`lada.modifiers.data_modifier`, as well as the `lada-web` app tests in `webapp/tests/`:
+
+### **`sample_trajectory.npz`**
+**Purpose**: Small synthetic polymer trajectory for `lada.analysis.dynamics` functions
+(`calculate_segment_acf_from_trajectory`, `calculate_rouse_mode_acf_from_trajectory`,
+`calculate_isf_from_trajectory`) and the web app's dynamics pages.
+**Contents**: key `coords`, shape `(32, 32, 3)`, float64 — 4 chains of 8 beads each,
+atom index = `chain * 8 + bead` (chain-major, 0-indexed). Frame 0 is a freely-jointed
+chain per molecule; each subsequent frame adds an independent Gaussian kick so the
+autocorrelation functions decay within the 32 frames.
+**Regenerate**: `python tests/data/generate_sample_trajectory.py`
+
+### **`sample_stress_acf.txt`**
+**Purpose**: Stress-autocorrelation fixture for `lada.parsers.read_lammps_acf` and
+`lada.analysis.calc_stress_relaxation`, which require the exact column names
+`ACF_Sxy, ACF_Sxz, ACF_Syz, ACF_Nxy, ACF_Nxz, ACF_Nyz` (unlike `sample_acf.txt` above,
+which uses `acf_x/y/z` and is not compatible with `calc_stress_relaxation`).
+**Contents**: two timestep blocks (`t=0` reference, then `t=1000`); `read_lammps_acf`
+reads the last block — 100 lag rows at `lag_time = 0, 0.5, …, 49.5`. Each ACF column is
+a two-exponential decay (fast + slow relaxation) with small seeded noise, held positive.
+**Regenerate**: `python tests/data/generate_sample_stress_acf.py`
+
+### **`sample_molecular.data`**
+**Purpose**: Molecular-style LAMMPS data fixture for `lada.modifiers.rewrite_end_beads`
+(and `lada.parsers.read_data_file` with `atom_style = molecular`).
+**Contents**: 3 linear chains of 4 beads each (atom ids 1–4, 5–8, 9–12), 2 atom types,
+with `Masses`, `Pair Coeffs`, `Bond Coeffs`, `Angle Coeffs`, `Bonds`, and `Angles`
+sections. Written by hand — there is no generator script for this one.
+
+Guarding tests: `tests/test_fixtures.py` (byte-reproducibility of the two generated
+files from their scripts, and schema checks) and
+`tests/test_modifiers/test_data_modifier.py` (behavioural tests of `rewrite_end_beads`
+against `sample_molecular.data`).

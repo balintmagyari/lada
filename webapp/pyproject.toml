@@ -1,0 +1,40 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "lada-web"
+version = "0.1.0"
+description = "Browser front-end for the lada LAMMPS analysis package"
+readme = "README.md"
+requires-python = ">=3.12"
+license = { text = "MIT" }
+dependencies = [
+  "lada>=1.2.0,<2.0.0",
+  "fastapi>=0.115",
+  "uvicorn[standard]>=0.30",
+  "python-multipart>=0.0.9",
+  "jinja2>=3.1",
+  "pydantic-settings>=2.4",
+]
+
+[project.optional-dependencies]
+dev = ["pytest", "httpx2", "ruff"]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/lada_web"]
+
+[tool.ruff]
+target-version = "py312"
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM"]
+ignore = ["SIM105", "SIM108", "SIM114"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-v --tb=short"
+filterwarnings = [
+  "ignore:The anyio.abc.BlockingPortal alias is deprecated:DeprecationWarning",
+]

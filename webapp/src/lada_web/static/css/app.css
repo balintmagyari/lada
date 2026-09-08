@@ -1,0 +1,483 @@
+/* LaDa web — an instrument, not a marketing site.
+   Sheets of work laid on a plotting pad: pale enamel ground ruled like graph paper,
+   opaque white panels, cobalt for anything you can act on, rust for anything that failed. */
+
+:root {
+  --paper: #edf0ec;
+  --panel: #ffffff;
+  --ink: #14232e;
+  --ink-muted: #55655f;
+  --rule: #c6d0c9;
+  --accent: #1b4fd8;
+  --accent-dark: #143da8;
+  --fault: #9e2b25;
+  --fault-tint: #fbf0ef;
+
+  --grid-minor: #e4e8e3;
+  --grid-major: #dbe1da;
+
+  --font-sans: "IBM Plex Sans", "Source Sans 3", "Segoe UI", system-ui, -apple-system,
+    "Helvetica Neue", Arial, sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+
+  --sheet-radius: 2px;
+  --gutter: 1.5rem;
+}
+
+/* Pico overrides: the identity lives here, not in the templates. */
+:root:not([data-theme="dark"]),
+[data-theme="light"] {
+  --pico-font-family: var(--font-sans);
+  --pico-font-family-monospace: var(--font-mono);
+  --pico-font-size: 100%;
+  --pico-line-height: 1.55;
+  --pico-border-radius: var(--sheet-radius);
+  --pico-background-color: var(--paper);
+  --pico-color: var(--ink);
+  --pico-h1-color: var(--ink);
+  --pico-h2-color: var(--ink);
+  --pico-h3-color: var(--ink);
+  --pico-muted-color: var(--ink-muted);
+  --pico-muted-border-color: var(--rule);
+  --pico-border-color: var(--rule);
+  --pico-primary: var(--accent);
+  --pico-primary-hover: var(--accent-dark);
+  --pico-primary-background: var(--accent);
+  --pico-primary-hover-background: var(--accent-dark);
+  --pico-primary-focus: rgba(27, 79, 216, 0.28);
+  --pico-primary-inverse: #ffffff;
+  --pico-card-background-color: var(--panel);
+  --pico-card-border-color: var(--rule);
+  --pico-card-sectioning-background-color: var(--panel);
+  --pico-form-element-background-color: var(--panel);
+  --pico-form-element-border-color: #a9b7af;
+  --pico-form-element-color: var(--ink);
+  --pico-form-element-focus-color: var(--accent);
+  --pico-code-background-color: #e7ebe6;
+  --pico-code-color: var(--ink);
+  --pico-table-border-color: var(--rule);
+}
+
+/* --- The plotting pad ---------------------------------------------------- */
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  color: var(--ink);
+  background-color: var(--paper);
+  background-image:
+    linear-gradient(var(--grid-minor) 1px, transparent 1px),
+    linear-gradient(90deg, var(--grid-minor) 1px, transparent 1px),
+    linear-gradient(var(--grid-major) 1px, transparent 1px),
+    linear-gradient(90deg, var(--grid-major) 1px, transparent 1px);
+  background-size: 8px 8px, 8px 8px, 40px 40px, 40px 40px;
+  background-position: -1px -1px;
+}
+
+.skip-link {
+  position: absolute;
+  left: -9999px;
+  top: 0;
+  z-index: 10;
+  padding: 0.5rem 0.75rem;
+  background: var(--accent);
+  color: #fff;
+}
+
+.skip-link:focus {
+  left: 0;
+}
+
+/* --- Masthead ------------------------------------------------------------ */
+
+.masthead {
+  display: flex;
+  align-items: baseline;
+  gap: 1rem;
+  flex-wrap: wrap;
+  padding: 1rem var(--gutter) 0.75rem;
+  background: var(--panel);
+  border-bottom: 1px solid var(--rule);
+}
+
+.wordmark {
+  display: flex;
+  align-items: baseline;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+  text-decoration: none;
+  color: var(--ink);
+}
+
+.wordmark-name {
+  font-size: 1.4rem;
+  font-weight: 700;
+  letter-spacing: -0.015em;
+}
+
+.wordmark-role {
+  font-size: 0.85rem;
+  color: var(--ink-muted);
+}
+
+.nav-toggle {
+  display: none;
+  width: auto;
+  margin: 0 0 0 auto;
+  padding: 0.35rem 0.8rem;
+  font-size: 0.9rem;
+}
+
+/* --- Layout -------------------------------------------------------------- */
+
+.layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  align-items: start;
+  gap: 0;
+}
+
+.content {
+  min-width: 0;
+  padding: 1.75rem var(--gutter) 3rem;
+}
+
+.content p,
+.content li,
+.content h1,
+.content h2 {
+  max-width: 68ch;
+}
+
+.calc > header h1 {
+  margin-bottom: 0.5rem;
+  font-size: 1.85rem;
+  letter-spacing: -0.012em;
+}
+
+.lede {
+  font-size: 1.05rem;
+}
+
+/* --- Navigation ---------------------------------------------------------- */
+
+.site-nav {
+  display: none;
+  padding: 1.25rem var(--gutter);
+  background: var(--panel);
+  border-bottom: 1px solid var(--rule);
+}
+
+.site-nav.is-open {
+  display: block;
+}
+
+.nav-section {
+  margin: 1.25rem 0 0.4rem;
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--ink-muted);
+}
+
+.nav-section:first-child {
+  margin-top: 0;
+}
+
+.nav-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.nav-list li {
+  margin: 0;
+}
+
+.nav-link {
+  display: block;
+  padding: 0.3rem 0.6rem;
+  border-left: 3px solid transparent;
+  font-size: 0.95rem;
+  color: var(--ink);
+  text-decoration: none;
+}
+
+.nav-link:hover {
+  border-left-color: var(--rule);
+  background: var(--paper);
+}
+
+.nav-link[aria-current="page"] {
+  border-left-color: var(--accent);
+  background: var(--paper);
+  font-weight: 600;
+}
+
+@media (min-width: 60rem) {
+  .layout {
+    grid-template-columns: 16rem minmax(0, 1fr);
+  }
+
+  .site-nav {
+    display: block;
+    position: sticky;
+    top: 0;
+    align-self: start;
+    max-height: 100vh;
+    overflow-y: auto;
+    border-bottom: 0;
+    border-right: 1px solid var(--rule);
+  }
+
+  .content {
+    padding: 2.25rem 2.5rem 4rem;
+  }
+}
+
+@media (max-width: 59.99rem) {
+  .nav-toggle {
+    display: inline-block;
+  }
+}
+
+/* --- Index listing ------------------------------------------------------- */
+
+.section-group {
+  margin-top: 2.5rem;
+}
+
+.section-group h2 {
+  margin-bottom: 0.25rem;
+  font-size: 1.25rem;
+}
+
+.section-blurb {
+  margin-top: 0;
+  color: var(--ink-muted);
+}
+
+.calc-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.calc-item {
+  max-width: 68ch;
+  margin-bottom: 0.75rem;
+  padding: 0.85rem 1rem;
+  background: var(--panel);
+  border: 1px solid var(--rule);
+  border-radius: var(--sheet-radius);
+}
+
+.calc-link {
+  font-weight: 600;
+}
+
+.calc-summary {
+  margin: 0.25rem 0 0;
+}
+
+.calc-input {
+  margin: 0.35rem 0 0;
+  font-size: 0.85rem;
+  color: var(--ink-muted);
+}
+
+/* --- Form ---------------------------------------------------------------- */
+
+#calc-form {
+  max-width: 44rem;
+  margin: 1.5rem 0 0;
+  padding: 1.25rem 1.35rem 1.35rem;
+  background: var(--panel);
+  border: 1px solid var(--rule);
+  border-radius: var(--sheet-radius);
+}
+
+.field {
+  margin-bottom: 1.1rem;
+}
+
+.field label {
+  font-weight: 600;
+}
+
+.field-checkbox {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-weight: 600;
+}
+
+.field-help {
+  display: block;
+  margin-top: 0.3rem;
+  color: var(--ink-muted);
+}
+
+#calc-form button[type="submit"] {
+  width: auto;
+  margin-bottom: 0;
+}
+
+/* --- Results ------------------------------------------------------------- */
+
+.htmx-indicator {
+  display: none;
+  margin-top: 1.25rem;
+  padding: 0.5rem 0.75rem;
+  max-width: 44rem;
+  background: var(--panel);
+  border-left: 3px solid var(--accent);
+  color: var(--ink-muted);
+}
+
+.htmx-request.htmx-indicator,
+.htmx-request .htmx-indicator {
+  display: block;
+}
+
+.result {
+  margin-top: 1.75rem;
+  padding: 1.25rem 1.35rem 1.35rem;
+  background: var(--panel);
+  border: 1px solid var(--rule);
+  border-radius: var(--sheet-radius);
+}
+
+.result-header h2 {
+  margin-bottom: 0.25rem;
+  font-size: 1.3rem;
+}
+
+.result-summary {
+  margin: 0;
+  color: var(--ink-muted);
+}
+
+.result-note {
+  margin: 0.75rem 0 0;
+  color: var(--ink-muted);
+  font-size: 0.9rem;
+}
+
+.plot {
+  min-height: 360px;
+  margin-top: 1rem;
+}
+
+.plot-controls {
+  display: flex;
+  gap: 1.25rem;
+  margin-top: 1rem;
+}
+
+.plot-controls label {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  margin: 0;
+  font-size: 0.9rem;
+}
+
+.plot-controls input {
+  margin: 0;
+}
+
+.table-scroll {
+  overflow-x: auto;
+  margin-top: 1.25rem;
+  border: 1px solid var(--rule);
+}
+
+.numbers {
+  margin: 0;
+  font-size: 0.92rem;
+}
+
+.numbers th {
+  position: sticky;
+  top: 0;
+  background: var(--paper);
+  text-align: right;
+  white-space: nowrap;
+}
+
+.numbers td {
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+  white-space: nowrap;
+}
+
+.downloads {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  margin-top: 1.25rem;
+}
+
+.downloads button {
+  width: auto;
+  margin: 0;
+  background: transparent;
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.downloads button:hover {
+  background: var(--accent);
+  color: #fff;
+}
+
+.result-error {
+  border-color: var(--fault);
+  border-left-width: 3px;
+  background: var(--fault-tint);
+}
+
+.result-error h2 {
+  margin-bottom: 0.35rem;
+  font-size: 1.15rem;
+  color: var(--fault);
+}
+
+.result-error p {
+  margin: 0;
+  max-width: 68ch;
+}
+
+/* --- Footer -------------------------------------------------------------- */
+
+.site-footer {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1.5rem;
+  padding: 1rem var(--gutter);
+  background: var(--panel);
+  border-top: 1px solid var(--rule);
+  font-size: 0.85rem;
+}
+
+.footer-version {
+  color: var(--ink-muted);
+}
+
+/* --- Quality floor ------------------------------------------------------- */
+
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+}

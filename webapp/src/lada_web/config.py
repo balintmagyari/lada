@@ -1,0 +1,30 @@
+"""Runtime settings, read once per application and injected into every route."""
+
+from pathlib import Path
+
+from fastapi import Request
+from pydantic_settings import BaseSettings, SettingsConfigDict
+
+
+class Settings(BaseSettings):
+    """Runtime limits. Every field can be overridden with a LADA_WEB_* environment variable."""
+
+    model_config = SettingsConfigDict(env_prefix="LADA_WEB_", extra="ignore")
+
+    max_upload_mb: float = 50
+    max_trajectory_mb: float = 500
+    max_trajectory_frames: int = 3000
+    max_table_rows: int = 500
+    temp_root: Path | None = None
+
+    @property
+    def max_upload_bytes(self) -> int:
+        return int(self.max_upload_mb * 1024 * 1024)
+
+    @property
+    def max_trajectory_bytes(self) -> int:
+        return int(self.max_trajectory_mb * 1024 * 1024)
+
+
+def get_settings(request: Request) -> Settings:
+    return request.app.state.settings

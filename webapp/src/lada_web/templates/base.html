@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="en" data-theme="light">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}{% endblock %} – LaDa</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@2.1.1/css/pico.min.css">
+  <link rel="stylesheet" href="/static/css/app.css">
+  <script src="https://cdn.jsdelivr.net/npm/htmx.org@2.0.4/dist/htmx.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/alpinejs@3.14.8/dist/cdn.min.js" defer></script>
+  <script src="https://cdn.plot.ly/plotly-basic-3.0.1.min.js" defer></script>
+  <script src="/static/js/app.js" defer></script>
+  {% block extra_head %}{% endblock %}
+</head>
+<body x-data="{ navOpen: false }">
+  <a class="skip-link" href="#main">Skip to content</a>
+
+  <header class="masthead">
+    <a class="wordmark" href="/">
+      <span class="wordmark-name">LaDa</span>
+      <span class="wordmark-role">LAMMPS post-processing</span>
+    </a>
+    <button type="button" class="nav-toggle" aria-controls="site-nav" aria-expanded="false"
+            x-on:click="navOpen = !navOpen"
+            x-bind:aria-expanded="navOpen ? 'true' : 'false'">Calculations</button>
+  </header>
+
+  <div class="layout">
+    <nav id="site-nav" class="site-nav" aria-label="Calculations"
+         x-bind:class="{ 'is-open': navOpen }">
+      {% for section, calcs in nav %}
+      <h2 class="nav-section">{{ section.title }}</h2>
+      <ul class="nav-list">
+        {% for item in calcs %}
+        <li>
+          <a class="nav-link" href="{{ item.path }}"
+             {% if calc is defined and calc.path == item.path %}aria-current="page"{% endif %}>{{ item.title }}</a>
+        </li>
+        {% endfor %}
+      </ul>
+      {% endfor %}
+    </nav>
+
+    <main id="main" class="content">{% block content %}{% endblock %}</main>
+  </div>
+
+  <footer class="site-footer">
+    <span class="footer-version">lada-web {{ app_version }}</span>
+    <a href="/api/docs">API reference</a>
+  </footer>
+
+  {% block scripts %}{% endblock %}
+</body>
+</html>

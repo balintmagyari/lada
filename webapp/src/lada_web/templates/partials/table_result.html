@@ -1,0 +1,36 @@
+<section class="result" id="result" data-result="{{ result_json }}">
+  <header class="result-header">
+    <h2>{{ result.title }}</h2>
+    <p class="result-summary">
+      {{ result.n_rows_total }} rows, {{ result.columns | length }} columns.
+      {%- for key, value in result.meta.items() %} {{ key | replace('_', ' ') | capitalize }}: {{ value }}.{% endfor %}
+    </p>
+  </header>
+  {% if result.plot %}
+  <div class="plot-controls">
+    <label><input type="checkbox" data-axis="xaxis" {% if result.plot.x_log %}checked{% endif %}> Log x</label>
+    <label><input type="checkbox" data-axis="yaxis" {% if result.plot.y_log %}checked{% endif %}> Log y</label>
+  </div>
+  <div class="plot" id="result-plot"></div>
+  {% endif %}
+  <div class="table-scroll">
+    <table class="numbers">
+      <thead><tr>{% for c in result.columns %}<th scope="col">{{ c }}</th>{% endfor %}</tr></thead>
+      <tbody>
+        {% for row in result.rows %}<tr>{% for v in row %}<td>{{ '' if v is none else v }}</td>{% endfor %}</tr>{% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% if result.truncated %}
+  <p class="result-note">Showing the first {{ result.rows | length }} of {{ result.n_rows_total }} rows. Downloads contain every row.</p>
+  {% endif %}
+  {% if download_url %}
+  <div class="downloads">
+    <button type="submit" form="calc-form" formaction="{{ download_url }}?fmt=csv"
+            formmethod="post" formenctype="multipart/form-data">Download CSV</button>
+    <button type="submit" form="calc-form" formaction="{{ download_url }}?fmt=pgfplots"
+            formmethod="post" formenctype="multipart/form-data">Download pgfplots table</button>
+  </div>
+  {% endif %}
+</section>
+<script>window.ladaMountResult(document.getElementById('result'));</script>

@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+{% block title %}LAMMPS post-processing{% endblock %}
+{% set input_kinds = {
+  'dump': 'Needs a LAMMPS dump file',
+  'log': 'Needs a LAMMPS log file',
+  'data': 'Needs a LAMMPS data file',
+  'acf': 'Needs a stress autocorrelation file',
+  'npz': 'Needs a NumPy .npz trajectory',
+} %}
+{% block content %}
+<article class="calc">
+  <header>
+    <h1>Read and analyse LAMMPS output in the browser</h1>
+    <p class="lede">Upload one simulation file, set the physical parameters the calculation needs,
+       and read the result as a table and a plot. Every table can be downloaded as CSV or as a
+       pgfplots data file you can drop straight into a LaTeX figure.</p>
+    <p>Files are processed in a temporary folder and deleted as soon as the response is sent.
+       Nothing you upload is stored on the server, so a download recomputes the result from the
+       file you send with it.</p>
+  </header>
+
+  {% for section, calcs in groups %}
+  <section class="section-group">
+    <h2>{{ section.title }}</h2>
+    <p class="section-blurb">{{ section.blurb }}</p>
+    <ul class="calc-list">
+      {% for item in calcs %}
+      <li class="calc-item">
+        <a class="calc-link" href="{{ item.path }}">{{ item.title }}</a>
+        <p class="calc-summary">{{ item.summary }}</p>
+        <p class="calc-input">{{ input_kinds[item.input_kind] }}</p>
+      </li>
+      {% endfor %}
+    </ul>
+  </section>
+  {% endfor %}
+</article>
+{% endblock %}

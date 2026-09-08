@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+{% import "_macros.html" as f %}
+{% block title %}{{ calc.title }}{% endblock %}
+{% block content %}
+<article class="calc">
+  <header>
+    <h1>{{ calc.title }}</h1>
+    <p>Upload a LAMMPS data file whose <code>Atoms</code> section uses a molecular-style layout
+       (<code>bond</code>, <code>molecular</code> or <code>full</code>). A chain end is the lowest
+       and the highest atom id within each molecule; every chain end is reassigned to the new atom
+       type below, and its mass and pair coefficients are cloned from the base type so LAMMPS has
+       valid parameters for it. Submitting the form starts the download immediately — there is no
+       preview.</p>
+  </header>
+  <form id="calc-form" method="post" enctype="multipart/form-data" hx-encoding="multipart/form-data">
+    {{ f.file_field('file', 'LAMMPS data file', '.data,.lmp,.txt',
+                    'A LAMMPS data file with a molecular-style Atoms section.') }}
+    {{ f.number_field('new_end_type', 'New end-bead atom type', none, step=1, min=1,
+                      help='Atom type id assigned to every chain end.') }}
+    {{ f.number_field('base_type', 'Base atom type', 1, step=1, min=1,
+                      help="Existing atom type whose mass and pair coefficients are cloned for the new type.") }}
+    <button type="submit" formaction="/api/modifiers/rewrite-end-beads">Rewrite and download</button>
+  </form>
+</article>
+{% endblock %}

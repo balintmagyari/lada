@@ -5,6 +5,9 @@
   <section class="result result-error">
     <h1>{{ title }}</h1>
     <p>{{ message }}</p>
+    {% if back_path %}
+    <p class="result-note"><a href="{{ back_path }}">Back to {{ back_title }}</a></p>
+    {% endif %}
     <p class="result-note"><a href="/">Back to the calculation list</a></p>
   </section>
 </article>

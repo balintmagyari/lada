@@ -4,9 +4,11 @@ from pathlib import Path
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, File, Query, Request, UploadFile
+from fastapi.responses import FileResponse
 
 from ..config import Settings, get_settings
 from ..rendering import table_response
+from ..schemas.common import FILE_RESPONSES, TableResult
 from ..schemas.parsers import DataSection
 from ..services import parsers_service
 from ..services.export_service import Format, media_type, table_result_from_df, write_table
@@ -21,7 +23,7 @@ FormatQuery = Annotated[Format, Query()]
 DataSectionDep = Annotated[DataSection, Depends()]
 
 
-@router.post("/log/table")
+@router.post("/log/table", response_model=TableResult)
 def log_table(request: Request, file: FileDep, settings: SettingsDep, ws: WorkspaceDep):
     path = save_upload(file, ws, settings.max_upload_bytes)
     df = parsers_service.log_table(path)
@@ -35,7 +37,7 @@ def log_table(request: Request, file: FileDep, settings: SettingsDep, ws: Worksp
     return table_response(request, result, download_url="/api/parsers/log/table/download")
 
 
-@router.post("/log/table/download")
+@router.post("/log/table/download", response_class=FileResponse, responses=FILE_RESPONSES)
 def log_table_download(file: FileDep, settings: SettingsDep, fmt: FormatQuery = "csv"):
     with download_workspace(settings) as ws:
         path = save_upload(file, ws, settings.max_upload_bytes)
@@ -44,7 +46,7 @@ def log_table_download(file: FileDep, settings: SettingsDep, fmt: FormatQuery = 
         return file_download(out, ws, media_type(fmt))
 
 
-@router.post("/dump/preview")
+@router.post("/dump/preview", response_model=TableResult)
 def dump_preview(request: Request, file: FileDep, settings: SettingsDep, ws: WorkspaceDep):
     path = save_upload(file, ws, settings.max_upload_bytes)
     df = parsers_service.dump_preview(path)
@@ -58,7 +60,7 @@ def dump_preview(request: Request, file: FileDep, settings: SettingsDep, ws: Wor
     return table_response(request, result, download_url=None)
 
 
-@router.post("/dump/table")
+@router.post("/dump/table", response_model=TableResult)
 def dump_table(request: Request, file: FileDep, settings: SettingsDep, ws: WorkspaceDep):
     path = save_upload(file, ws, settings.max_upload_bytes)
     df = parsers_service.dump_table(path)
@@ -72,7 +74,7 @@ def dump_table(request: Request, file: FileDep, settings: SettingsDep, ws: Works
     return table_response(request, result, download_url="/api/parsers/dump/table/download")
 
 
-@router.post("/dump/table/download")
+@router.post("/dump/table/download", response_class=FileResponse, responses=FILE_RESPONSES)
 def dump_table_download(file: FileDep, settings: SettingsDep, fmt: FormatQuery = "csv"):
     with download_workspace(settings) as ws:
         path = save_upload(file, ws, settings.max_upload_bytes)
@@ -81,7 +83,7 @@ def dump_table_download(file: FileDep, settings: SettingsDep, fmt: FormatQuery =
         return file_download(out, ws, media_type(fmt))
 
 
-@router.post("/data/table")
+@router.post("/data/table", response_model=TableResult)
 def data_table(
     request: Request,
     file: FileDep,
@@ -101,7 +103,7 @@ def data_table(
     return table_response(request, result, download_url="/api/parsers/data/table/download")
 
 
-@router.post("/data/table/download")
+@router.post("/data/table/download", response_class=FileResponse, responses=FILE_RESPONSES)
 def data_table_download(
     file: FileDep, section: DataSectionDep, settings: SettingsDep, fmt: FormatQuery = "csv"
 ):
@@ -112,7 +114,7 @@ def data_table_download(
         return file_download(out, ws, media_type(fmt))
 
 
-@router.post("/acf/table")
+@router.post("/acf/table", response_model=TableResult)
 def acf_table(request: Request, file: FileDep, settings: SettingsDep, ws: WorkspaceDep):
     path = save_upload(file, ws, settings.max_upload_bytes)
     df = parsers_service.acf_table(path)
@@ -126,7 +128,7 @@ def acf_table(request: Request, file: FileDep, settings: SettingsDep, ws: Worksp
     return table_response(request, result, download_url="/api/parsers/acf/table/download")
 
 
-@router.post("/acf/table/download")
+@router.post("/acf/table/download", response_class=FileResponse, responses=FILE_RESPONSES)
 def acf_table_download(file: FileDep, settings: SettingsDep, fmt: FormatQuery = "csv"):
     with download_workspace(settings) as ws:
         path = save_upload(file, ws, settings.max_upload_bytes)

@@ -140,7 +140,7 @@ def test_dynamic_moduli_pgfplots_download_matches_view(client, data_dir):
     assert r.headers["content-disposition"] == 'attachment; filename="sample_stress_acf_moduli.dat"'
     assert r.text.splitlines()[0] == " ".join(view["columns"])
     data = np.loadtxt(io.BytesIO(r.content), skiprows=1)
-    assert np.allclose(data[:, 0], view["plot"]["series"]["omega"])
+    assert np.array_equal(data[:, 0], view["plot"]["series"]["omega"])
 
 
 def test_stress_relaxation_csv_download_matches_view(client, data_dir):
@@ -156,9 +156,12 @@ def test_stress_relaxation_csv_download_matches_view(client, data_dir):
     )
     assert r.status_code == 200
     assert r.headers["content-disposition"] == 'attachment; filename="sample_stress_acf_G_t.csv"'
-    df = pd.read_csv(io.BytesIO(r.content))
+    df = pd.read_csv(io.BytesIO(r.content), float_precision="round_trip")
     assert list(df.columns) == view["columns"]
-    assert np.allclose(df["lag_time"].to_numpy(), view["plot"]["series"]["lag_time"])
+    # Exact, not allclose: a download must carry the same float64 the JSON view carries.
+    assert np.array_equal(df["lag_time"].to_numpy(), view["plot"]["series"]["lag_time"])
+    assert np.array_equal(df["G_GK"].to_numpy(), view["plot"]["series"]["G_GK"])
+    assert np.array_equal(df["G_FSR"].to_numpy(), view["plot"]["series"]["G_FSR"])
 
 
 def test_stress_relaxation_page_renders(client):

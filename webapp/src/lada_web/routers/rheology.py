@@ -5,10 +5,11 @@ from typing import Annotated
 
 import pandas as pd
 from fastapi import APIRouter, Depends, File, Query, Request, UploadFile
+from fastapi.responses import FileResponse
 
 from ..config import Settings, get_settings
 from ..rendering import table_response
-from ..schemas.common import PlotSpec
+from ..schemas.common import FILE_RESPONSES, PlotSpec, TableResult
 from ..schemas.rheology import PronyParams, ThermoState
 from ..services import rheology_service
 from ..services.export_service import Format, media_type, table_result_from_df, write_table
@@ -31,7 +32,7 @@ def _moduli_plot(df: pd.DataFrame) -> PlotSpec:
     return PlotSpec(x="omega", y=y, x_label="ω", y_label="G′, G″", x_log=True, y_log=True)
 
 
-@router.post("/stress-relaxation")
+@router.post("/stress-relaxation", response_model=TableResult)
 def stress_relaxation(
     request: Request,
     file: FileDep,
@@ -52,7 +53,7 @@ def stress_relaxation(
     return table_response(request, result, download_url="/api/rheology/stress-relaxation/download")
 
 
-@router.post("/stress-relaxation/download")
+@router.post("/stress-relaxation/download", response_class=FileResponse, responses=FILE_RESPONSES)
 def stress_relaxation_download(
     file: FileDep, state: ThermoStateDep, settings: SettingsDep, fmt: FormatQuery = "csv"
 ):
@@ -63,7 +64,7 @@ def stress_relaxation_download(
         return file_download(out, ws, media_type(fmt))
 
 
-@router.post("/dynamic-moduli")
+@router.post("/dynamic-moduli", response_model=TableResult)
 def dynamic_moduli(
     request: Request,
     file: FileDep,
@@ -96,7 +97,7 @@ def dynamic_moduli(
     return table_response(request, result, download_url="/api/rheology/dynamic-moduli/download")
 
 
-@router.post("/dynamic-moduli/download")
+@router.post("/dynamic-moduli/download", response_class=FileResponse, responses=FILE_RESPONSES)
 def dynamic_moduli_download(
     file: FileDep,
     state: ThermoStateDep,

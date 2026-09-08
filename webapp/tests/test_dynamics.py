@@ -26,6 +26,10 @@ ISF_URL = "/api/dynamics/isf"
 UNIFORM = {"mode": "uniform", "n_chains": "4", "beads_per_chain": "8", "first_index": "0"}
 FIXTURE_PAIRS = np.array([[0, 7], [8, 15], [16, 23], [24, 31]])
 
+# Decompressed-size budget for the direct inspect_trajectory calls; the cases that exercise
+# the budget itself live in test_resource_limits.py.
+MEMORY_BUDGET = 8 * 1024 * 1024
+
 
 def trajectory(data_dir: Path) -> Path:
     return data_dir / "sample_trajectory.npz"
@@ -42,14 +46,14 @@ def write_npz(path: Path, n_frames: int, n_atoms: int) -> Path:
 
 def test_uniform_chain_indices_are_consecutive_blocks():
     indices = resolve_chain_indices(
-        "uniform", n_chains=2, beads_per_chain=3, first_index=10, custom=""
+        "uniform", n_chains=2, beads_per_chain=3, first_index=10, custom="", n_atoms=32
     )
     assert indices.tolist() == [[10, 11, 12], [13, 14, 15]]
 
 
 def test_uniform_segment_pairs_are_the_block_ends():
     pairs = resolve_segment_pairs(
-        "uniform", n_chains=2, beads_per_chain=3, first_index=10, custom=""
+        "uniform", n_chains=2, beads_per_chain=3, first_index=10, custom="", n_atoms=32
     )
     assert pairs.tolist() == [[10, 12], [13, 15]]
 
@@ -61,6 +65,7 @@ def test_custom_pairs_ignore_blank_and_comment_lines():
         beads_per_chain=None,
         first_index=0,
         custom="0, 7\n8 15\n\n# comment\n",
+        n_atoms=32,
     )
     assert pairs.tolist() == [[0, 7], [8, 15]]
 
@@ -68,12 +73,12 @@ def test_custom_pairs_ignore_blank_and_comment_lines():
 def test_custom_full_bead_lists_give_indices_and_pairs():
     text = "0 1 2 3\n4 5 6 7"
     indices = resolve_chain_indices(
-        "custom", n_chains=None, beads_per_chain=None, first_index=0, custom=text
+        "custom", n_chains=None, beads_per_chain=None, first_index=0, custom=text, n_atoms=32
     )
     assert indices.shape == (2, 4)
     assert indices.tolist() == [[0, 1, 2, 3], [4, 5, 6, 7]]
     pairs = resolve_segment_pairs(
-        "custom", n_chains=None, beads_per_chain=None, first_index=0, custom=text
+        "custom", n_chains=None, beads_per_chain=None, first_index=0, custom=text, n_atoms=32
     )
     assert pairs.tolist() == [[0, 3], [4, 7]]
 
@@ -104,13 +109,20 @@ def test_custom_empty_text_is_rejected():
 def test_custom_chains_of_unequal_length_are_rejected_for_rouse_modes():
     with pytest.raises(ValueError, match="same number of beads"):
         resolve_chain_indices(
-            "custom", n_chains=None, beads_per_chain=None, first_index=0, custom="0 1 2\n3 4"
+            "custom",
+            n_chains=None,
+            beads_per_chain=None,
+            first_index=0,
+            custom="0 1 2\n3 4",
+            n_atoms=32,
         )
 
 
 def test_uniform_without_counts_asks_for_both():
     with pytest.raises(ValueError) as excinfo:
-        resolve_chain_indices("uniform", n_chains=None, beads_per_chain=8, first_index=0, custom="")
+        resolve_chain_indices(
+            "uniform", n_chains=None, beads_per_chain=8, first_index=0, custom="", n_atoms=32
+        )
     message = str(excinfo.value)
     assert "number of chains" in message and "beads per chain" in message
 
@@ -119,34 +131,34 @@ def test_uniform_without_counts_asks_for_both():
 
 
 def test_inspect_trajectory_reads_the_shape_of_the_fixture(data_dir):
-    assert inspect_trajectory(trajectory(data_dir), 100) == (32, 32)
+    assert inspect_trajectory(trajectory(data_dir), 100, MEMORY_BUDGET) == (32, 32)
 
 
 def test_inspect_trajectory_rejects_too_many_frames(tmp_path):
     path = write_npz(tmp_path / "long.npz", n_frames=101, n_atoms=4)
     with pytest.raises(TrajectoryTooLarge, match="at most 100"):
-        inspect_trajectory(path, 100)
+        inspect_trajectory(path, 100, MEMORY_BUDGET)
 
 
 def test_inspect_trajectory_needs_a_coords_array(tmp_path):
     path = tmp_path / "wrong_key.npz"
     np.savez(path, other=np.zeros((4, 4, 3)))
     with pytest.raises(ValueError, match="'coords'"):
-        inspect_trajectory(path, 100)
+        inspect_trajectory(path, 100, MEMORY_BUDGET)
 
 
 def test_inspect_trajectory_rejects_a_file_that_is_not_an_archive(tmp_path):
     path = tmp_path / "not_a_trajectory.npz"
     path.write_text("timestep 0\n")
     with pytest.raises(ValueError, match=r"\.npz"):
-        inspect_trajectory(path, 100)
+        inspect_trajectory(path, 100, MEMORY_BUDGET)
 
 
 def test_inspect_trajectory_rejects_the_wrong_shape(tmp_path):
     path = tmp_path / "flat.npz"
     np.savez(path, coords=np.zeros((4, 3)))
     with pytest.raises(ValueError, match=r"n_frames, n_atoms, 3"):
-        inspect_trajectory(path, 100)
+        inspect_trajectory(path, 100, MEMORY_BUDGET)
 
 
 # --- Segment ACF route -----------------------------------------------------
@@ -224,10 +236,11 @@ def test_segment_acf_csv_download_round_trips(client, data_dir):
         r.headers["content-disposition"]
         == 'attachment; filename="sample_trajectory_segment_acf.csv"'
     )
-    df = pd.read_csv(io.BytesIO(r.content))
+    df = pd.read_csv(io.BytesIO(r.content), float_precision="round_trip")
     assert list(df.columns) == view["columns"]
     assert len(df) == view["n_rows_total"] == 32
-    assert np.allclose(df.to_numpy()[: len(view["rows"])], np.array(view["rows"], dtype=float))
+    # Exact, not allclose: a download must carry the same float64 the JSON view carries.
+    assert np.array_equal(df.to_numpy()[: len(view["rows"])], np.array(view["rows"], dtype=float))
 
 
 def test_segment_acf_needs_a_positive_frame_time(client, data_dir):
@@ -306,7 +319,7 @@ def test_isf_csv_download(client, data_dir):
     r = client.post(ISF_URL + "/download?fmt=csv", files=upload(trajectory(data_dir)), data=form)
     assert r.status_code == 200
     assert r.headers["content-disposition"] == 'attachment; filename="sample_trajectory_isf.csv"'
-    df = pd.read_csv(io.BytesIO(r.content))
+    df = pd.read_csv(io.BytesIO(r.content), float_precision="round_trip")
     assert list(df.columns) == ["lag_time", "isf"] and len(df) == 32
 
 

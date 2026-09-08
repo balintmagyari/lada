@@ -4,10 +4,11 @@ from pathlib import Path
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, File, Query, Request, UploadFile
+from fastapi.responses import FileResponse
 
 from ..config import Settings, get_settings
 from ..rendering import table_response
-from ..schemas.common import PlotSpec
+from ..schemas.common import FILE_RESPONSES, PlotSpec, TableResult
 from ..schemas.conformations import ChainColumns
 from ..services import conformations_service
 from ..services.export_service import Format, media_type, table_result_from_df, write_table
@@ -22,7 +23,7 @@ FormatQuery = Annotated[Format, Query()]
 ColumnsDep = Annotated[ChainColumns, Depends()]
 
 
-@router.post("/rg")
+@router.post("/rg", response_model=TableResult)
 def rg(
     request: Request,
     file: FileDep,
@@ -48,7 +49,7 @@ def rg(
     return table_response(request, result, download_url="/api/conformations/rg/download")
 
 
-@router.post("/rg/download")
+@router.post("/rg/download", response_class=FileResponse, responses=FILE_RESPONSES)
 def rg_download(
     file: FileDep, columns: ColumnsDep, settings: SettingsDep, fmt: FormatQuery = "csv"
 ):
@@ -64,7 +65,7 @@ def rg_download(
         return file_download(out, ws, media_type(fmt))
 
 
-@router.post("/ree")
+@router.post("/ree", response_model=TableResult)
 def ree(
     request: Request,
     file: FileDep,
@@ -90,7 +91,7 @@ def ree(
     return table_response(request, result, download_url="/api/conformations/ree/download")
 
 
-@router.post("/ree/download")
+@router.post("/ree/download", response_class=FileResponse, responses=FILE_RESPONSES)
 def ree_download(
     file: FileDep, columns: ColumnsDep, settings: SettingsDep, fmt: FormatQuery = "csv"
 ):
@@ -106,7 +107,7 @@ def ree_download(
         return file_download(out, ws, media_type(fmt))
 
 
-@router.post("/ree-vectors")
+@router.post("/ree-vectors", response_model=TableResult)
 def ree_vectors(
     request: Request,
     file: FileDep,
@@ -131,7 +132,7 @@ def ree_vectors(
     return table_response(request, result, download_url="/api/conformations/ree-vectors/download")
 
 
-@router.post("/ree-vectors/download")
+@router.post("/ree-vectors/download", response_class=FileResponse, responses=FILE_RESPONSES)
 def ree_vectors_download(
     file: FileDep, columns: ColumnsDep, settings: SettingsDep, fmt: FormatQuery = "csv"
 ):

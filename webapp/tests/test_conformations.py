@@ -103,9 +103,10 @@ def test_rg_download_csv_matches_view(client, data_dir):
     r = client.post(RG_URL + "/download?fmt=csv", files=upload(data_dir / "sample_dump.dump"))
     assert r.status_code == 200
     assert r.headers["content-disposition"] == 'attachment; filename="sample_dump_rg_sq.csv"'
-    df = pd.read_csv(io.BytesIO(r.content))
+    df = pd.read_csv(io.BytesIO(r.content), float_precision="round_trip")
     assert list(df.columns) == view["columns"]
-    assert np.allclose(df.to_numpy(), np.array(view["rows"], dtype=float))
+    # Exact, not allclose: a download must carry the same float64 the JSON view carries.
+    assert np.array_equal(df.to_numpy(), np.array(view["rows"], dtype=float))
 
 
 def test_rg_download_pgfplots_matches_view(client, data_dir):
@@ -115,7 +116,7 @@ def test_rg_download_pgfplots_matches_view(client, data_dir):
     assert r.headers["content-disposition"] == 'attachment; filename="sample_dump_rg_sq.dat"'
     assert r.text.splitlines()[0] == " ".join(view["columns"])
     data = np.loadtxt(io.BytesIO(r.content), skiprows=1)
-    assert np.allclose(data, np.array(view["rows"], dtype=float))
+    assert np.array_equal(data, np.array(view["rows"], dtype=float))
 
 
 def test_conformation_pages_render_with_calc_form(client):

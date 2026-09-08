@@ -25,22 +25,26 @@ class TopologyForm:
         self.first_index = first_index
         self.custom = custom
 
-    def chain_indices(self) -> np.ndarray:
+    # n_atoms comes from the trajectory header, which is read before either of these runs:
+    # a uniform layout is range-checked arithmetically rather than after it is built.
+    def chain_indices(self, n_atoms: int) -> np.ndarray:
         return dynamics_service.resolve_chain_indices(
             self.mode,
             n_chains=self.n_chains,
             beads_per_chain=self.beads_per_chain,
             first_index=self.first_index,
             custom=self.custom,
+            n_atoms=n_atoms,
         )
 
-    def segment_pairs(self) -> np.ndarray:
+    def segment_pairs(self, n_atoms: int) -> np.ndarray:
         return dynamics_service.resolve_segment_pairs(
             self.mode,
             n_chains=self.n_chains,
             beads_per_chain=self.beads_per_chain,
             first_index=self.first_index,
             custom=self.custom,
+            n_atoms=n_atoms,
         )
 
 

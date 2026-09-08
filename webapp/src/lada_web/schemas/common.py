@@ -1,5 +1,7 @@
 """The result models every calculation returns."""
 
+from typing import Any
+
 from pydantic import BaseModel, Field
 
 Cell = float | int | str | None
@@ -28,3 +30,18 @@ class TableResult(BaseModel):
     meta: dict[str, str | int | float] = Field(default_factory=dict)
     plot: PlotSpec | None = None
     download_stem: str
+
+
+# `/api/docs` is linked from every page, so the routes that stream a file have to say so:
+# left to the default they would advertise a JSON body they never return. The view routes
+# carry `response_model=TableResult` instead, which FastAPI documents but does not enforce,
+# since those handlers hand back a Response themselves (JSON, or the htmx HTML partial).
+FILE_RESPONSES: dict[int | str, dict[str, Any]] = {
+    200: {
+        "description": "The result as a file attachment.",
+        "content": {
+            "text/csv": {"schema": {"type": "string", "format": "binary"}},
+            "text/plain": {"schema": {"type": "string", "format": "binary"}},
+        },
+    }
+}

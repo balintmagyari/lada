@@ -3,8 +3,10 @@
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, File, UploadFile
+from fastapi.responses import FileResponse
 
 from ..config import Settings, get_settings
+from ..schemas.common import FILE_RESPONSES
 from ..schemas.modifiers import EndBeadParams
 from ..services.modifiers_service import rewrite_end_beads_file
 from ..uploads import download_workspace, file_download, save_upload
@@ -16,7 +18,7 @@ FileDep = Annotated[UploadFile, File()]
 ParamsDep = Annotated[EndBeadParams, Depends()]
 
 
-@router.post("/rewrite-end-beads")
+@router.post("/rewrite-end-beads", response_class=FileResponse, responses=FILE_RESPONSES)
 def rewrite_end_beads_route(file: FileDep, params: ParamsDep, settings: SettingsDep):
     with download_workspace(settings) as ws:
         path = save_upload(file, ws, settings.max_upload_bytes)

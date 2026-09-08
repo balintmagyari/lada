@@ -14,6 +14,10 @@ class Settings(BaseSettings):
     max_upload_mb: float = 50
     max_trajectory_mb: float = 500
     max_trajectory_frames: int = 3000
+    # A compressed .npz says nothing about its decompressed size: a few megabytes on the wire
+    # can declare an array of hundreds of gigabytes. This caps what the shape is allowed to
+    # ask for once loaded, independently of the upload size and the frame count.
+    max_trajectory_memory_mb: float = 2048
     max_table_rows: int = 500
     temp_root: Path | None = None
 
@@ -24,6 +28,10 @@ class Settings(BaseSettings):
     @property
     def max_trajectory_bytes(self) -> int:
         return int(self.max_trajectory_mb * 1024 * 1024)
+
+    @property
+    def max_trajectory_memory_bytes(self) -> int:
+        return int(self.max_trajectory_memory_mb * 1024 * 1024)
 
 
 def get_settings(request: Request) -> Settings:

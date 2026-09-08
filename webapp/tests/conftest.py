@@ -27,6 +27,7 @@ def settings(temp_root: Path) -> Settings:
         max_upload_mb=1,
         max_trajectory_mb=1,
         max_trajectory_frames=100,
+        max_trajectory_memory_mb=8,
         max_table_rows=20,
         temp_root=temp_root,
     )

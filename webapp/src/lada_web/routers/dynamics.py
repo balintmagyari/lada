@@ -5,10 +5,11 @@ from typing import Annotated
 
 import pandas as pd
 from fastapi import APIRouter, Depends, File, Query, Request, UploadFile
+from fastapi.responses import FileResponse
 
 from ..config import Settings, get_settings
 from ..rendering import table_response
-from ..schemas.common import PlotSpec
+from ..schemas.common import FILE_RESPONSES, PlotSpec, TableResult
 from ..schemas.dynamics import FrameTime, IsfParams, RouseMode, TopologyForm
 from ..services import dynamics_service
 from ..services.export_service import Format, media_type, table_result_from_df, write_table
@@ -33,7 +34,9 @@ LAG_LABEL = "Lag time"
 def _load(file: UploadFile, ws: Path, settings: Settings) -> tuple[Path, int, int]:
     """Save the upload, then read the trajectory shape before any array is loaded."""
     path = save_upload(file, ws, settings.max_trajectory_bytes)
-    n_frames, n_atoms = dynamics_service.inspect_trajectory(path, settings.max_trajectory_frames)
+    n_frames, n_atoms = dynamics_service.inspect_trajectory(
+        path, settings.max_trajectory_frames, settings.max_trajectory_memory_bytes
+    )
     return path, n_frames, n_atoms
 
 
@@ -41,7 +44,7 @@ def _segment_acf(
     file: UploadFile, ws: Path, settings: Settings, topology: TopologyForm, timing: FrameTime
 ) -> tuple[Path, pd.DataFrame, Meta]:
     path, n_frames, n_atoms = _load(file, ws, settings)
-    pairs = topology.segment_pairs()
+    pairs = topology.segment_pairs(n_atoms)
     dynamics_service.check_indices(pairs, n_atoms)
     df = dynamics_service.segment_acf(path, pairs, timing.time_per_frame)
     meta: Meta = {
@@ -62,7 +65,7 @@ def _rouse_mode_acf(
     mode: RouseMode,
 ) -> tuple[Path, pd.DataFrame, Meta]:
     path, n_frames, n_atoms = _load(file, ws, settings)
-    chains = topology.chain_indices()
+    chains = topology.chain_indices(n_atoms)
     dynamics_service.check_indices(chains, n_atoms)
     df = dynamics_service.rouse_mode_acf(path, chains, mode.p, timing.time_per_frame)
     meta: Meta = {
@@ -87,7 +90,7 @@ def _isf(
     return path, df, meta
 
 
-@router.post("/segment-acf")
+@router.post("/segment-acf", response_model=TableResult)
 def segment_acf(
     request: Request,
     file: FileDep,
@@ -108,7 +111,7 @@ def segment_acf(
     return table_response(request, result, download_url="/api/dynamics/segment-acf/download")
 
 
-@router.post("/segment-acf/download")
+@router.post("/segment-acf/download", response_class=FileResponse, responses=FILE_RESPONSES)
 def segment_acf_download(
     file: FileDep,
     settings: SettingsDep,
@@ -122,7 +125,7 @@ def segment_acf_download(
         return file_download(out, ws, media_type(fmt))
 
 
-@router.post("/rouse-mode")
+@router.post("/rouse-mode", response_model=TableResult)
 def rouse_mode(
     request: Request,
     file: FileDep,
@@ -144,7 +147,7 @@ def rouse_mode(
     return table_response(request, result, download_url="/api/dynamics/rouse-mode/download")
 
 
-@router.post("/rouse-mode/download")
+@router.post("/rouse-mode/download", response_class=FileResponse, responses=FILE_RESPONSES)
 def rouse_mode_download(
     file: FileDep,
     settings: SettingsDep,
@@ -159,7 +162,7 @@ def rouse_mode_download(
         return file_download(out, ws, media_type(fmt))
 
 
-@router.post("/isf")
+@router.post("/isf", response_model=TableResult)
 def isf(
     request: Request,
     file: FileDep,
@@ -180,7 +183,7 @@ def isf(
     return table_response(request, result, download_url="/api/dynamics/isf/download")
 
 
-@router.post("/isf/download")
+@router.post("/isf/download", response_class=FileResponse, responses=FILE_RESPONSES)
 def isf_download(
     file: FileDep,
     settings: SettingsDep,

@@ -100,7 +100,8 @@ on-screen "view" step, since the result is a modified data file, not a table.
 
 Every calculation is also a plain HTTP endpoint under `/api/<section>/...`. Interactive docs
 (Swagger UI, generated from the same route definitions) are at `/api/docs`; the raw OpenAPI schema
-is at `/api/openapi.json`.
+is at `/api/openapi.json`. The thirteen view routes document a `TableResult` response body there;
+the download and modifier routes document a file attachment instead.
 
 A request without the `HX-Request: true` header (i.e. anything that isn't the app's own htmx
 frontend) gets JSON back — a plain `curl` call needs no special `Accept` header:
@@ -154,7 +155,8 @@ Every setting is a `LADA_WEB_`-prefixed environment variable (`lada_web/config.p
 |---|---|---|
 | `LADA_WEB_MAX_UPLOAD_MB` | `50` | Size cap for text uploads (dump/log/data/ACF files) |
 | `LADA_WEB_MAX_TRAJECTORY_MB` | `500` | Size cap for `.npz` trajectory uploads |
-| `LADA_WEB_MAX_TRAJECTORY_FRAMES` | `3000` | Rejects a trajectory with more frames than this, checked right after loading the array's shape, before any calculation runs |
+| `LADA_WEB_MAX_TRAJECTORY_FRAMES` | `3000` | Rejects a trajectory with more frames than this, checked from the array's header, before any of it is loaded |
+| `LADA_WEB_MAX_TRAJECTORY_MEMORY_MB` | `2048` | Rejects a trajectory whose `coords` array would need more than this once decompressed (`n_frames × n_atoms × 3 × itemsize`), checked from the same header |
 | `LADA_WEB_MAX_TABLE_ROWS` | `500` | Rows shown on screen / returned in JSON `rows`; downloads and plots are never truncated by this |
 | `LADA_WEB_TEMP_ROOT` | unset (system temp directory) | Where per-request upload workspaces are created; set this to point uploads at a specific volume |
 
@@ -164,9 +166,25 @@ The three dynamics calculations (segment ACF, Rouse mode ACF, ISF) are CPU-bound
 **O(n_frames²)** per chain (worse for the ISF, which additionally averages over `n_vectors`
 scattering directions) — a large trajectory can take minutes to process on one request.
 
-- `LADA_WEB_MAX_TRAJECTORY_FRAMES` (default 3000) is the guardrail: it rejects oversized
-  trajectories with HTTP 413 before the sliding-window loop starts, rather than running a job queue.
-  Lower it if you're running on modest hardware; raise it only if you also raise proxy timeouts.
+- `LADA_WEB_MAX_TRAJECTORY_FRAMES` (default 3000) and `LADA_WEB_MAX_TRAJECTORY_MEMORY_MB`
+  (default 2048) are the guardrails: both are read from the `.npz` array header and answer HTTP
+  413 before the sliding-window loop starts, rather than running a job queue. The size of the
+  uploaded file bounds neither — a compressed `.npz` of a few megabytes can declare an array of
+  hundreds of gigabytes — which is why the decompressed footprint is checked separately. Lower
+  them if you're running on modest hardware; raise them only if you also raise proxy timeouts,
+  and, under Docker, `mem_limit` in `docker-compose.yml`.
+
+### Request size limits
+
+A body larger than the addressed route accepts is refused with HTTP 413 by a middleware in
+`create_app`, on the request's declared `Content-Length` — the trajectory budget for
+`/api/dynamics/...`, the upload budget everywhere else, each plus 1 MiB for the multipart
+envelope. This is a cheap first filter, not a guarantee: it can only act on a length the client
+declares. A POST to `/api/` that declares none (a chunked upload, say) is refused outright for
+that reason, since its size could not be checked before the body was read; a body that
+understates its length is caught later by `uploads.save_upload`, after the bytes it already
+streamed in have been spooled to disk. Put a limit in your reverse proxy as well
+(`client_max_body_size` for nginx) if you need one enforced closer to the wire.
 - If you put this app behind a reverse proxy, raise its read timeout well past the default, or
   large dynamics requests will be cut off mid-calculation. For nginx:
 
@@ -184,9 +202,23 @@ cd webapp
 docker compose up
 ```
 
-serves the app on `http://localhost:8000` using the five `LADA_WEB_*` variables at their defaults
-(edit `docker-compose.yml` to change them). The image is built from `webapp/` only (`build: .` with
-`webapp/` as the build context) and runs as a non-root user.
+serves the app on `http://localhost:8000`. The image is built from `webapp/` only (`build: .` with
+`webapp/` as the build context) and runs as a non-root user. What the two files set beyond that:
+
+- **`HEALTHCHECK`** fetches `/` every 30 s — the cheapest route that proves the app is wired up.
+- **`--proxy-headers --forwarded-allow-ips '*'`**, because the README recommends nginx in front
+  and uvicorn otherwise logs the proxy's own address and scheme for every request. It trusts
+  `X-Forwarded-*` from any peer, so `ports:` publishes to `127.0.0.1` only: put the proxy in
+  front of that, and do not expose the container port to the internet.
+- **`--limit-concurrency 8`** per worker (16 across the two), so a burst of CPU-bound requests
+  is answered with 503 rather than queuing without bound.
+- **A 1200 MB `tmpfs` on `/tmp`**, with `LADA_WEB_TEMP_ROOT` pointing into it. Uploads land there
+  twice — Starlette spools the multipart file part while parsing, then `save_upload` writes the
+  request's own copy — so a 500 MB trajectory needs about 1 GB, and this keeps all of it out of
+  the container's writable layer.
+- **`mem_limit: 4g`**, which is that tmpfs plus two workers holding up to
+  `LADA_WEB_MAX_TRAJECTORY_MEMORY_MB` (lowered to 1024 in the compose file) each, plus the
+  interpreter and NumPy. Those numbers move together: raising any of them means raising this.
 
 **This will not build successfully today** — see the PyPI pin caveat at the top of this document:
 the Dockerfile installs `lada>=1.2.0,<2.0.0` from PyPI, and PyPI does not yet have a 1.2.0 release.

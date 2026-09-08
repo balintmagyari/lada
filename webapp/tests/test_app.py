@@ -72,6 +72,62 @@ def test_error_page_and_error_partial_are_siblings(client, htmx, data_dir):
     assert 'role="alert"' not in page.text
 
 
+ACF_DOWNLOAD = "/api/parsers/acf/table/download?fmt=csv"
+BACK_TO_ACF = '<a href="/parsers/acf">Back to Stress ACF file</a>'
+
+
+def failing_download(client, data_dir, referer: str | None):
+    """A download that 422s, sent the way a browser sends one: a native form submit."""
+    headers = {"Accept": "text/html"}
+    if referer is not None:
+        headers["Referer"] = referer
+    return client.post(ACF_DOWNLOAD, files=upload(data_dir / "sample_log.lammps"), headers=headers)
+
+
+def test_the_error_page_offers_a_way_back_to_the_page_you_came_from(client, data_dir):
+    """A download button is a native submit, so an error replaces the whole page."""
+    r = failing_download(client, data_dir, "http://testserver/parsers/acf")
+    assert r.status_code == 422
+    assert BACK_TO_ACF in r.text
+    assert "Back to the calculation list" in r.text
+
+
+@pytest.mark.parametrize(
+    "referer",
+    [
+        None,
+        "",
+        "http://evil.example/parsers/acf",
+        "https://testserver/parsers/acf",
+        "http://testserver/parsers/nope",
+        "http://testserver/",
+        "javascript:alert(1)//parsers/acf",
+    ],
+    ids=["absent", "empty", "other-host", "other-scheme", "unknown-page", "index", "javascript"],
+)
+def test_the_error_page_falls_back_when_the_referer_is_not_one_of_our_pages(
+    client, data_dir, referer
+):
+    r = failing_download(client, data_dir, referer)
+    assert r.status_code == 422
+    assert BACK_TO_ACF not in r.text
+    assert "Back to the calculation list" in r.text
+
+
+def test_the_error_partial_and_the_json_view_are_unchanged_by_the_back_link(client, data_dir, htmx):
+    referer = {"Referer": "http://testserver/parsers/acf"}
+    partial = client.post(
+        "/api/parsers/acf/table",
+        files=upload(data_dir / "sample_log.lammps"),
+        headers=htmx | referer,
+    )
+    assert partial.status_code == 422 and "Back to" not in partial.text
+    body = client.post(
+        "/api/parsers/acf/table", files=upload(data_dir / "sample_log.lammps"), headers=referer
+    )
+    assert body.status_code == 422 and set(body.json()) == {"detail"}
+
+
 def test_static_assets_served(client):
     assert client.get("/static/css/app.css").status_code == 200
     assert client.get("/static/js/app.js").status_code == 200
@@ -79,6 +135,50 @@ def test_static_assets_served(client):
 
 def test_api_docs_available(client):
     assert client.get("/api/docs").status_code == 200
+
+
+# The 13 view routes: every calculation except the download-only modifier, plus the dump
+# preview, which has no download sibling of its own.
+VIEW_ROUTES = [
+    "/api/parsers/log/table",
+    "/api/parsers/dump/preview",
+    "/api/parsers/dump/table",
+    "/api/parsers/data/table",
+    "/api/parsers/acf/table",
+    "/api/conformations/rg",
+    "/api/conformations/ree",
+    "/api/conformations/ree-vectors",
+    "/api/dynamics/segment-acf",
+    "/api/dynamics/rouse-mode",
+    "/api/dynamics/isf",
+    "/api/rheology/stress-relaxation",
+    "/api/rheology/dynamic-moduli",
+]
+
+
+def test_the_result_models_reach_the_openapi_schema(app):
+    """/api/docs is linked from every page, so the shape a route returns has to be in it."""
+    schemas = app.openapi()["components"]["schemas"]
+    assert "TableResult" in schemas
+    assert "PlotSpec" in schemas
+
+
+@pytest.mark.parametrize("path", VIEW_ROUTES)
+def test_every_view_route_documents_its_200_body(app, path):
+    ok = app.openapi()["paths"][path]["post"]["responses"]["200"]
+    schema = ok["content"]["application/json"]["schema"]
+    assert schema["$ref"].endswith("/TableResult"), path
+
+
+@pytest.mark.parametrize(
+    "path",
+    ["/api/parsers/log/table/download", "/api/modifiers/rewrite-end-beads"],
+    ids=["download", "modifier"],
+)
+def test_file_routes_document_a_file_body_not_a_table(app, path):
+    ok = app.openapi()["paths"][path]["post"]["responses"]["200"]
+    assert "application/json" not in ok["content"]
+    assert set(ok["content"]) >= {"text/csv", "text/plain"}
 
 
 def test_settings_are_injected(app):

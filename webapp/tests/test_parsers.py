@@ -72,9 +72,10 @@ def test_log_download_csv_matches_view(client, data_dir):
     r = client.post(LOG_URL + "/download?fmt=csv", files=upload(data_dir / "sample_log.lammps"))
     assert r.status_code == 200
     assert r.headers["content-disposition"] == 'attachment; filename="sample_log_thermo.csv"'
-    df = pd.read_csv(io.BytesIO(r.content))
+    df = pd.read_csv(io.BytesIO(r.content), float_precision="round_trip")
     assert list(df.columns) == view["columns"]
-    assert np.allclose(df.to_numpy(), np.array(view["rows"], dtype=float))
+    # Exact, not allclose: a download must carry the same float64 the JSON view carries.
+    assert np.array_equal(df.to_numpy(), np.array(view["rows"], dtype=float))
 
 
 def test_log_download_pgfplots_matches_view(client, data_dir):
@@ -85,7 +86,26 @@ def test_log_download_pgfplots_matches_view(client, data_dir):
     assert r.headers["content-disposition"] == 'attachment; filename="sample_log_thermo.dat"'
     assert r.text.splitlines()[0] == " ".join(view["columns"])
     data = np.loadtxt(io.BytesIO(r.content), skiprows=1)
-    assert np.allclose(data, np.array(view["rows"], dtype=float))
+    assert np.array_equal(data, np.array(view["rows"], dtype=float))
+
+
+PRECISE_LOG = (
+    "Per MPI rank memory allocation = 2.5 Mbytes\n"
+    "Step Temp\n"
+    "10000000 1.0000001\n"
+    "20000000 1.0000002\n"
+    "Loop time of 0.1 on 1 procs for 0 steps\n"
+)
+
+
+def test_log_download_keeps_every_digit(client, tmp_path):
+    """Six significant figures would write the steps as '1e+07' and both temps as '1'."""
+    path = tmp_path / "precise.lammps"
+    path.write_text(PRECISE_LOG)
+    view = client.post(LOG_URL, files=upload(path)).json()
+    r = client.post(LOG_URL + "/download?fmt=csv", files=upload(path))
+    df = pd.read_csv(io.BytesIO(r.content), float_precision="round_trip")
+    assert np.array_equal(df.to_numpy(), np.array(view["rows"], dtype=float))
 
 
 def test_log_download_rejects_unknown_format(client, data_dir):
@@ -138,9 +158,9 @@ def test_dump_table_is_capped_on_screen_but_full_on_download(client, data_dir):
     assert view["columns"] == ["timestep", "id", "mol", "type", "xu", "yu", "zu"]
     assert view["n_rows_total"] == 150 and len(view["rows"]) == 20 and view["truncated"]
     r = client.post("/api/parsers/dump/table/download?fmt=csv", files=upload(data_dir / DUMP))
-    df = pd.read_csv(io.BytesIO(r.content))
+    df = pd.read_csv(io.BytesIO(r.content), float_precision="round_trip")
     assert len(df) == 150 and list(df.columns) == view["columns"]
-    assert np.allclose(df.to_numpy()[:20], np.array(view["rows"], dtype=float))
+    assert np.array_equal(df.to_numpy()[:20], np.array(view["rows"], dtype=float))
 
 
 @pytest.mark.parametrize(
@@ -177,7 +197,7 @@ def test_data_table_download_roundtrip(client, data_dir):
         data={"section": "Bonds"},
     )
     assert r.headers["content-disposition"] == 'attachment; filename="sample_Bonds.dat"'
-    assert np.allclose(
+    assert np.array_equal(
         np.loadtxt(io.BytesIO(r.content), skiprows=1)[:20], np.array(view["rows"], dtype=float)
     )
 

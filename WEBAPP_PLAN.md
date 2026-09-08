@@ -232,4 +232,9 @@ xyz/hdf5 exporters, restart-file parsing).
 - [x] Phase 1 — Backend skeleton + parsers + conformations + rheology
 - [x] Phase 2 — Dynamics / `.npz` endpoints
 - [x] Phase 3 — Modifiers
-- [x] Phase 4 — Polish & deploy readiness
+- [x] Phase 4 — Polish & deploy readiness, **except verification step 4, which was never run**.
+  Docker is not installed on the machine this was built on, so the image has never been built
+  and `docker compose up` has never been executed: `webapp/Dockerfile` and
+  `webapp/docker-compose.yml` are written and reviewed but entirely unexercised. The `lada`
+  PyPI pin (see `webapp/README.md`) would fail the build today in any case. Treat "the
+  container serves the same behavior as local dev" as unverified, not as done.

@@ -18,6 +18,13 @@ _FORMATS: dict[str, tuple[str, str, str]] = {
     "pgfplots": (" ", ".dat", "text/plain"),
 }
 
+# `write_pgfplots_table` defaults to '%.6g', which silently rounds a download to six
+# significant figures: five Rg² values differing in the 8th digit all become '10', and a
+# timestep of 10000000 becomes '1e+07'. 17 significant digits is the shortest format that
+# round-trips every float64 exactly, so a downloaded file carries the same numbers as the
+# table and the JSON. A researcher can round the file later; lost digits cannot be recovered.
+FLOAT_FORMAT = "%.17g"
+
 
 def media_type(fmt: Format) -> str:
     return _FORMATS[fmt][2]
@@ -30,7 +37,7 @@ def output_filename(stem: str, fmt: Format) -> str:
 def write_table(df: pd.DataFrame, directory: Path, stem: str, fmt: Format) -> Path:
     """One code path for both formats: write_pgfplots_table with ',' (csv) or ' ' (pgfplots)."""
     path = directory / output_filename(stem, fmt)
-    write_pgfplots_table(df, str(path), delimiter=_FORMATS[fmt][0])
+    write_pgfplots_table(df, str(path), delimiter=_FORMATS[fmt][0], fmt=FLOAT_FORMAT)
     return path
 
 

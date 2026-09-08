@@ -90,3 +90,29 @@ def test_boolean_columns_become_ints_not_true_false():
     with_plot = table_result_from_df(df, title="T", download_stem="t", max_rows=10, plot=plot)
     assert with_plot.plot is not None
     assert with_plot.plot.series["flag"] == [1.0, 0.0]
+
+
+def precise_frame() -> pd.DataFrame:
+    """Values chosen so that a 6-significant-figure format destroys them.
+
+    The five Rg² values differ only in the 8th significant digit, and the timesteps are
+    large enough that '%.6g' writes them as '1e+07'.
+    """
+    return pd.DataFrame(
+        {
+            "timestep": [10_000_000, 20_000_000, 30_000_000, 40_000_000, 50_000_000],
+            "rg_sq": [10.0000001, 10.0000002, 10.0000003, 10.0000004, 10.0000005],
+        }
+    )
+
+
+def test_write_table_csv_is_bit_exact(tmp_path: Path):
+    df = precise_frame()
+    back = pd.read_csv(write_table(df, tmp_path, "p", "csv"), float_precision="round_trip")
+    assert np.array_equal(back.to_numpy(), df.to_numpy())
+
+
+def test_write_table_pgfplots_is_bit_exact(tmp_path: Path):
+    df = precise_frame()
+    back = np.loadtxt(write_table(df, tmp_path, "p", "pgfplots"), skiprows=1)
+    assert np.array_equal(back, df.to_numpy())

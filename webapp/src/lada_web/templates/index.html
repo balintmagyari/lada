@@ -9,7 +9,7 @@
 } %}
 {% block content %}
 <article class="calc">
-  <header>
+  <header class="calc-head">
     <h1>Read and analyse LAMMPS output in the browser</h1>
     <p class="lede">Every calculation below works the same way, and each one says which file it
        needs before you open it.</p>
@@ -24,21 +24,25 @@
        file you send with it.</p>
   </header>
 
-  {% for section, calcs in groups %}
-  <section class="section-group">
-    <h2>{{ section.title }}</h2>
-    <p class="section-blurb">{{ section.blurb }}</p>
-    <ul class="calc-list">
-      {% for item in calcs %}
-      <li class="calc-item">
-        <a class="calc-link" href="{{ item.path }}">{{ item.title }}</a>
-        <p class="calc-summary">{{ item.summary }}</p>
-        {% set needs = input_kinds.get(item.input_kind, '') -%}
-        {% if needs %}<p class="calc-input">{{ needs }}</p>{% endif %}
-      </li>
-      {% endfor %}
-    </ul>
-  </section>
-  {% endfor %}
+  <div class="section-grid">
+    {% for section, calcs in groups %}
+    <section class="section-group" id="{{ section.key }}">
+      <h2>{{ section.title }}</h2>
+      <p class="section-blurb">{{ section.blurb }}</p>
+      <ul class="calc-list">
+        {% for item in calcs %}
+        <li class="calc-item">
+          <div class="calc-item-head">
+            <a class="calc-link" href="{{ item.path }}">{{ item.title }}</a>
+            {% set needs = input_kinds.get(item.input_kind, '') -%}
+            {% if needs %}<p class="calc-input">{{ needs }}</p>{% endif %}
+          </div>
+          <p class="calc-summary">{{ item.summary }}</p>
+        </li>
+        {% endfor %}
+      </ul>
+    </section>
+    {% endfor %}
+  </div>
 </article>
 {% endblock %}

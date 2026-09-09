@@ -3,16 +3,24 @@
 {% block title %}{{ calc.title }}{% endblock %}
 {% block content %}
 <article class="calc">
-  <header>
+  <header class="calc-head">
     <h1>{{ calc.title }}</h1>
     <p>Upload a LAMMPS log file and get the thermodynamic output (the columns printed by
        <code>thermo_style</code>) as a table. Multiple runs in one log are concatenated.</p>
   </header>
-  <form id="calc-form" method="post" enctype="multipart/form-data" hx-encoding="multipart/form-data">
-    {{ f.file_field('file', 'LAMMPS log file', '.lammps,.log,.txt',
-                    'The log.lammps file LAMMPS writes while it runs.') }}
-    {{ f.calculate_button('Read thermo table', '/api/parsers/log/table') }}
-  </form>
-  {{ f.results_area() }}
+  <div class="workbench">
+    <div class="workbench-inputs">
+      <form id="calc-form" method="post" enctype="multipart/form-data" hx-encoding="multipart/form-data">
+        {{ f.file_field('file', 'LAMMPS log file', '.lammps,.log,.txt',
+                        'The log.lammps file LAMMPS writes while it runs.') }}
+        <div class="form-actions">
+          {{ f.calculate_button('Read thermo table', '/api/parsers/log/table') }}
+        </div>
+      </form>
+    </div>
+    <div class="workbench-output">
+      {{ f.results_area() }}
+    </div>
+  </div>
 </article>
 {% endblock %}

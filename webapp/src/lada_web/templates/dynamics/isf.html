@@ -3,7 +3,7 @@
 {% block title %}{{ calc.title }}{% endblock %}
 {% block content %}
 <article class="calc">
-  <header>
+  <header class="calc-head">
     <h1>{{ calc.title }}</h1>
     <p>Upload a NumPy <code>.npz</code> trajectory and get the coherent intermediate scattering
        function F(q,t) / F(q,0) at one scattering vector magnitude, averaged over directions drawn
@@ -12,20 +12,28 @@
     <p>A magnitude q probes a length scale d = 2&#960; / q. Statistical noise grows with lag time;
        ignore roughly the last 10–20 % of points when fitting relaxation times.</p>
   </header>
-  <form id="calc-form" method="post" enctype="multipart/form-data" hx-encoding="multipart/form-data">
-    {{ f.file_field('file', 'NumPy .npz trajectory', '.npz',
-                    'A NumPy archive holding an array named coords of shape (frames, atoms, 3).') }}
-    {{ f.number_field('time_per_frame', 'Time per frame', 1.0, step='any', min=f.POSITIVE,
-                      help='Simulation time between two saved frames, greater than zero.') }}
-    {{ f.number_field('q_magnitude', 'Scattering vector magnitude q', 7.0, step='any',
-                      min=f.POSITIVE,
-                      help='Greater than zero. The first structure factor peak is a common choice.')
-    }}
-    {{ f.number_field('n_vectors', 'Number of q directions', 50, step=1, min=2, max=1000,
-                      help='Directions to average over, 2 to 1000. More directions smooth the curve and cost more time.')
-    }}
-    {{ f.calculate_button('Calculate F(q,t)', '/api/dynamics/isf') }}
-  </form>
-  {{ f.results_area() }}
+  <div class="workbench">
+    <div class="workbench-inputs">
+      <form id="calc-form" method="post" enctype="multipart/form-data" hx-encoding="multipart/form-data">
+        {{ f.file_field('file', 'NumPy .npz trajectory', '.npz',
+                        'A NumPy archive holding an array named coords of shape (frames, atoms, 3).') }}
+        {{ f.number_field('time_per_frame', 'Time per frame', 1.0, step='any', min=f.POSITIVE,
+                          help='Simulation time between two saved frames, greater than zero.') }}
+        {{ f.number_field('q_magnitude', 'Scattering vector magnitude q', 7.0, step='any',
+                          min=f.POSITIVE,
+                          help='Greater than zero. The first structure factor peak is a common choice.')
+        }}
+        {{ f.number_field('n_vectors', 'Number of q directions', 50, step=1, min=2, max=1000,
+                          help='Directions to average over, 2 to 1000. More directions smooth the curve and cost more time.')
+        }}
+        <div class="form-actions">
+          {{ f.calculate_button('Calculate F(q,t)', '/api/dynamics/isf') }}
+        </div>
+      </form>
+    </div>
+    <div class="workbench-output">
+      {{ f.results_area() }}
+    </div>
+  </div>
 </article>
 {% endblock %}

@@ -3,7 +3,7 @@ import re
 import pytest
 from starlette.testclient import TestClient
 
-from lada_web.catalog import CALCULATIONS
+from lada_web.catalog import CALCULATIONS, SECTIONS
 from lada_web.config import Settings
 from lada_web.main import create_app
 from lada_web.rendering import templates
@@ -295,3 +295,100 @@ def test_a_wide_table_can_be_scrolled_from_the_keyboard(client, data_dir, htmx):
     scroller = re.search(r'<div class="table-scroll"[^>]*>', r.text).group(0)
     assert 'tabindex="0"' in scroller
     assert "aria-label=" in scroller
+
+
+# --- Navigation and page layout --------------------------------------------
+
+
+def test_the_top_bar_discloses_every_section(client):
+    """Each section is a real button that owns a menu, so it works from the keyboard."""
+    r = client.get("/parsers/log")
+    for section in SECTIONS:
+        button = re.search(
+            rf'<button[^>]*aria-controls="nav-menu-{section.key}"[^>]*>', r.text, re.S
+        )
+        assert button is not None, f"no disclosure button for {section.key}"
+        assert 'aria-expanded="false"' in button.group(0), section.key
+        assert f'id="nav-menu-{section.key}"' in r.text, section.key
+        assert section.title in r.text
+
+
+def test_every_calculation_link_lives_in_its_section_menu(client):
+    r = client.get("/")
+    for calc in CALCULATIONS:
+        menu = re.search(
+            rf'id="nav-menu-{calc.section}".*?</ul>',
+            r.text,
+            re.S,
+        )
+        assert menu is not None, calc.section
+        assert f'href="{calc.path}"' in menu.group(0), calc.path
+
+
+@pytest.mark.parametrize("calc", CALCULATIONS, ids=lambda c: f"{c.section}-{c.slug}")
+def test_the_navigation_names_the_section_the_page_and_the_way_back(client, calc):
+    """Three statements of place: the section on the bar, the page in its menu, a breadcrumb."""
+    r = client.get(calc.path)
+    section_title = next(s.title for s in SECTIONS if s.key == calc.section)
+
+    current_item = re.search(r'<li class="nav-item is-current"[^>]*>.*?</li>', r.text, re.S)
+    assert current_item is not None, f"{calc.path} marks no current section"
+    assert section_title in current_item.group(0)
+
+    here = re.search(rf'href="{re.escape(calc.path)}"\s+aria-current="page"', r.text)
+    assert here is not None, f"{calc.path} is not marked current in its menu"
+
+    crumbs = re.search(r'<nav class="breadcrumb".*?</nav>', r.text, re.S).group(0)
+    assert '<a href="/">Overview</a>' in crumbs
+    assert section_title in crumbs
+    assert f'<span class="breadcrumb-current">{calc.title}</span>' in crumbs
+
+
+@pytest.mark.parametrize("calc", CALCULATIONS, ids=lambda c: f"{c.section}-{c.slug}")
+def test_the_form_sits_left_of_the_results(client, calc):
+    """Inputs and what came back share one screen, so a changed parameter shows its effect."""
+    r = client.get(calc.path)
+    assert 'class="workbench' in r.text
+    assert r.text.index("workbench-inputs") < r.text.index('id="calc-form"')
+    if calc.section == "modifiers":
+        # This page answers with a file, so it has no results column to sit beside.
+        assert "workbench-single" in r.text
+        assert 'id="results"' not in r.text
+    else:
+        assert r.text.index('id="calc-form"') < r.text.index("workbench-output")
+        assert r.text.index("workbench-output") < r.text.index('id="results"')
+
+
+def test_the_results_column_says_what_will_appear_in_it(client):
+    r = client.get("/rheology/dynamic-moduli")
+    results = re.search(r'<div id="results"[^>]*>(.*?)</div>', r.text, re.S).group(1)
+    assert "results-empty" in results
+    assert "calculate" in results.lower()
+
+
+def test_one_web_font_is_loaded_with_a_system_fallback(client):
+    """A single family, two weights, swap — and a stack that survives an offline machine."""
+    page = client.get("/").text
+    link = re.search(r'href="https://fonts\.googleapis\.com/css2\?[^"]*"', page).group(0)
+    assert "family=IBM+Plex+Sans:wght@400;600" in link
+    assert "display=swap" in link
+    assert page.count("fonts.googleapis.com/css2") == 1
+
+    css = client.get("/static/css/app.css").text
+    stack = re.search(r"--font-sans:(.*?);", css, re.S).group(1)
+    assert "IBM Plex Sans" in stack
+    assert "system-ui" in stack and "sans-serif" in stack
+    # The numeric tables have to keep their columns lined up under the new face.
+    assert "font-variant-numeric: tabular-nums" in css
+    # Monospace stays a system stack rather than a second download.
+    assert "fonts.googleapis.com" not in css
+
+
+def test_no_grid_is_ruled_behind_the_text(client):
+    """The pad's ruling survives only as an edge; the working surface is plain white."""
+    css = client.get("/static/css/app.css").text
+    body_rule = re.search(r"\nbody \{(.*?)\n\}", css, re.S).group(1)
+    assert "background-image" not in body_rule
+    assert "background-color: var(--paper)" in body_rule
+    edge = re.search(r"\.pad-edge \{(.*?)\n\}", css, re.S).group(1)
+    assert "linear-gradient" in edge

@@ -7,7 +7,7 @@ from fastapi.responses import JSONResponse, Response
 from fastapi.templating import Jinja2Templates
 
 from . import __version__
-from .catalog import calculations_by_section
+from .catalog import SECTIONS, calculations_by_section
 from .schemas.common import TableResult
 
 PACKAGE_DIR = Path(__file__).resolve().parent
@@ -15,7 +15,13 @@ TEMPLATES_DIR = PACKAGE_DIR / "templates"
 STATIC_DIR = PACKAGE_DIR / "static"
 
 templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
-templates.env.globals.update(nav=calculations_by_section(), app_version=__version__)
+# `sections` lets a template name the section a calculation belongs to (the breadcrumb
+# needs the title, and a Calculation carries only the key).
+templates.env.globals.update(
+    nav=calculations_by_section(),
+    sections={section.key: section for section in SECTIONS},
+    app_version=__version__,
+)
 
 
 def is_htmx(request: Request) -> bool:

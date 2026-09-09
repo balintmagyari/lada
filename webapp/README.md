@@ -263,3 +263,17 @@ the fixtures in the root `tests/data/` rather than duplicating any under `webapp
   5xx bodies is one way to close that off without touching the app.
 - **No 3D viewer.** This app produces tables, downloads, and 2D plots (Plotly.js) of scalar/vector
   results. Trajectory/molecule visualization is out of scope by design — OVITO/VMD already cover it.
+- **One web font, and what happens without it.** `base.html` pulls a single UI typeface — IBM Plex
+  Sans, weights 400 and 600, `display=swap` — from Google Fonts, so the app looks the same on every
+  machine instead of rendering in whatever the OS calls a UI face. `--font-sans` in `app.css` keeps
+  the full fallback stack (`"Source Sans 3", "Segoe UI", system-ui, -apple-system, …`) behind it, so
+  a machine with no network paints immediately in a system face with the layout unchanged; nothing
+  is hidden while the font loads, and no text shifts position, only its shape. Monospace is a system
+  stack only (`ui-monospace, "SF Mono", Menlo, …`) — the `<code>` spans in the page copy are not
+  worth a second download. The numeric tables rely on `font-variant-numeric: tabular-nums`, which
+  both IBM Plex Sans and every face in the fallback stack support, so columns stay aligned either
+  way. The same page also loads Pico, htmx, Alpine and Plotly from CDNs; offline, those are the
+  things that actually stop working (no plot, no htmx results swap), not the typeface. The section
+  menus in the top bar are deliberately plain DOM in `static/js/app.js` rather than Alpine, so
+  navigation survives a blocked CDN, and with scripting off entirely every menu renders open in the
+  normal flow and all the links stay reachable.

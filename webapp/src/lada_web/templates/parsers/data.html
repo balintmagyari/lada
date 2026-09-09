@@ -17,18 +17,26 @@
   ('Improper Coeffs', 'Improper Coeffs'),
 ] %}
 <article class="calc">
-  <header>
+  <header class="calc-head">
     <h1>{{ calc.title }}</h1>
     <p>Upload a LAMMPS data file and get one of its sections as a table. Column names
        follow the section's known schema, or generic names when the section has none.</p>
   </header>
-  <form id="calc-form" method="post" enctype="multipart/form-data" hx-encoding="multipart/form-data">
-    {{ f.file_field('file', 'LAMMPS data file', '.data,.lmp,.txt',
-                    'A topology file read by read_data in a LAMMPS input script.') }}
-    {{ f.select_field('section', 'Section', options, value='Atoms',
-                      help='Which section of the data file to read.') }}
-    {{ f.calculate_button('Read section table', '/api/parsers/data/table') }}
-  </form>
-  {{ f.results_area() }}
+  <div class="workbench">
+    <div class="workbench-inputs">
+      <form id="calc-form" method="post" enctype="multipart/form-data" hx-encoding="multipart/form-data">
+        {{ f.file_field('file', 'LAMMPS data file', '.data,.lmp,.txt',
+                        'A topology file read by read_data in a LAMMPS input script.') }}
+        {{ f.select_field('section', 'Section', options, value='Atoms',
+                          help='Which section of the data file to read.') }}
+        <div class="form-actions">
+          {{ f.calculate_button('Read section table', '/api/parsers/data/table') }}
+        </div>
+      </form>
+    </div>
+    <div class="workbench-output">
+      {{ f.results_area() }}
+    </div>
+  </div>
 </article>
 {% endblock %}

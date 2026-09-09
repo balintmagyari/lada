@@ -79,7 +79,12 @@
         hx-indicator="#results-indicator" hx-disabled-elt="this">{{ label }}</button>
 {%- endmacro %}
 
+{# The placeholder is the first thing htmx replaces, so it costs nothing and tells someone
+   arriving on a wide screen what the empty right-hand column is for. #}
 {% macro results_area() -%}
 <div id="results-indicator" class="htmx-indicator" role="status">Calculating…</div>
-<div id="results" aria-live="polite"></div>
+<div id="results" aria-live="polite">
+  <p class="results-empty">Fill in the form and calculate. The table, the plot and the
+     download buttons appear here, beside the settings that produced them.</p>
+</div>
 {%- endmacro %}

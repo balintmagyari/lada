@@ -1,6 +1,9 @@
 /* LaDa web — an instrument, not a marketing site.
-   Sheets of work laid on a plotting pad: pale enamel ground ruled like graph paper,
-   opaque white panels, cobalt for anything you can act on, rust for anything that failed. */
+
+   A plotting pad with the ruling kept to its edges: white sheets of work on a pale enamel
+   ground, the millimetre rule surviving only as the torn edge under the masthead and above
+   the footer, so nothing is ever printed on top of a grid. Navy ink, cobalt for anything you
+   can act on, rust for anything that failed. */
 
 :root {
   --paper: #edf0ec;
@@ -8,20 +11,23 @@
   --ink: #14232e;
   --ink-muted: #55655f;
   --rule: #c6d0c9;
+  --rule-soft: #dfe4de;
   --accent: #1b4fd8;
   --accent-dark: #143da8;
+  --accent-tint: #eef2fd;
   --fault: #9e2b25;
   --fault-tint: #fbf0ef;
 
   --grid-minor: #e4e8e3;
-  --grid-major: #dbe1da;
+  --grid-major: #d3dbd3;
 
+  /* One web font, two weights. The stack after it is what an offline machine gets. */
   --font-sans: "IBM Plex Sans", "Source Sans 3", "Segoe UI", system-ui, -apple-system,
     "Helvetica Neue", Arial, sans-serif;
-  --font-mono: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  --font-mono: ui-monospace, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
 
   --sheet-radius: 2px;
-  --gutter: 1.5rem;
+  --measure: 68ch;
 }
 
 /* Pico overrides: the identity lives here, not in the templates. */
@@ -48,40 +54,52 @@
   --pico-primary-inverse: #ffffff;
   --pico-card-background-color: var(--panel);
   --pico-card-border-color: var(--rule);
+  --pico-card-box-shadow: none;
   --pico-card-sectioning-background-color: var(--panel);
   --pico-form-element-background-color: var(--panel);
   --pico-form-element-border-color: #a9b7af;
   --pico-form-element-color: var(--ink);
   --pico-form-element-focus-color: var(--accent);
-  --pico-code-background-color: #e7ebe6;
+  --pico-code-background-color: #eef1ed;
   --pico-code-color: var(--ink);
   --pico-table-border-color: var(--rule);
 }
 
-/* --- The plotting pad ---------------------------------------------------- */
+/* --- Ground --------------------------------------------------------------- */
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
 
 body {
-  margin: 0;
+  display: flex;
+  flex-direction: column;
   min-height: 100vh;
+  margin: 0;
   color: var(--ink);
   background-color: var(--paper);
-  background-image:
-    linear-gradient(var(--grid-minor) 1px, transparent 1px),
-    linear-gradient(90deg, var(--grid-minor) 1px, transparent 1px),
-    linear-gradient(var(--grid-major) 1px, transparent 1px),
-    linear-gradient(90deg, var(--grid-major) 1px, transparent 1px);
-  background-size: 8px 8px, 8px 8px, 40px 40px, 40px 40px;
-  background-position: -1px -1px;
+}
+
+/* One measure for every full-width band, so the masthead, the content and the footer
+   line up down the left edge. */
+.shell {
+  width: 100%;
+  max-width: 90rem;
+  margin-inline: auto;
+  padding-inline: clamp(1rem, 3vw, 2.25rem);
 }
 
 .skip-link {
   position: absolute;
   left: -9999px;
   top: 0;
-  z-index: 10;
-  padding: 0.5rem 0.75rem;
+  z-index: 100;
+  padding: 0.5rem 0.9rem;
   background: var(--accent);
   color: #fff;
+  text-decoration: none;
 }
 
 .skip-link:focus {
@@ -93,31 +111,54 @@ body {
   display: none !important;
 }
 
-/* --- Masthead ------------------------------------------------------------ */
+/* The one place the graph ruling survives: the edge of the pad. It carries no text. */
+.pad-edge {
+  height: 12px;
+  background-color: var(--panel);
+  background-image:
+    linear-gradient(90deg, var(--grid-minor) 1px, transparent 1px),
+    linear-gradient(90deg, var(--grid-major) 1px, transparent 1px);
+  background-size: 8px 100%, 40px 100%;
+  border-bottom: 1px solid var(--rule);
+}
+
+.pad-edge-foot {
+  border-bottom: 0;
+  border-top: 1px solid var(--rule);
+}
+
+/* --- Masthead ------------------------------------------------------------- */
 
 .masthead {
+  position: relative;
+  z-index: 30;
+  /* Pico pads body > header; the bar and the pad edge do their own spacing. */
+  padding-block: 0;
+  background: var(--panel);
+}
+
+.masthead-bar {
   display: flex;
   align-items: baseline;
-  gap: 1rem;
+  justify-content: space-between;
+  gap: 0.75rem 1.5rem;
   flex-wrap: wrap;
-  padding: 1rem var(--gutter) 0.75rem;
-  background: var(--panel);
-  border-bottom: 1px solid var(--rule);
+  padding-block: 0.95rem 0.7rem;
 }
 
 .wordmark {
   display: flex;
   align-items: baseline;
-  gap: 0.6rem;
+  gap: 0.55rem;
   flex-wrap: wrap;
-  text-decoration: none;
   color: var(--ink);
+  text-decoration: none;
 }
 
 .wordmark-name {
-  font-size: 1.4rem;
-  font-weight: 700;
-  letter-spacing: -0.015em;
+  font-size: 1.35rem;
+  font-weight: 600;
+  letter-spacing: -0.02em;
 }
 
 .wordmark-role {
@@ -125,39 +166,333 @@ body {
   color: var(--ink-muted);
 }
 
+.wordmark:hover .wordmark-name,
+.wordmark:focus-visible .wordmark-name {
+  color: var(--accent);
+}
+
 .nav-toggle {
-  display: none;
   width: auto;
-  margin: 0 0 0 auto;
-  padding: 0.35rem 0.8rem;
+  margin: 0;
+  padding: 0.35rem 0.85rem;
+  background: transparent;
+  border: 1px solid var(--rule);
+  color: var(--ink);
   font-size: 0.9rem;
 }
 
-/* --- Layout -------------------------------------------------------------- */
-
-.layout {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr);
-  align-items: start;
-  gap: 0;
+.nav-toggle:hover {
+  background: var(--paper);
+  border-color: var(--accent);
+  color: var(--accent);
 }
+
+/* --- Section navigation --------------------------------------------------- */
+
+/* Pico turns every <nav> and the lists inside one into flex rows with negative
+   outer margins. The rules below are deliberately two classes deep so they outrank it. */
+.site-nav {
+  display: block;
+  padding-bottom: 0.4rem;
+}
+
+.site-nav .nav-bar {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  justify-content: flex-start;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.nav-item {
+  position: relative;
+  margin: 0;
+  padding: 0;
+}
+
+.nav-overview,
+.nav-section-button {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  width: 100%;
+  margin: 0;
+  padding: 0.55rem 0.15rem;
+  background: transparent;
+  border: 0;
+  border-bottom: 1px solid var(--rule-soft);
+  border-radius: 0;
+  color: var(--ink);
+  font-family: inherit;
+  font-size: 0.98rem;
+  font-weight: 400;
+  line-height: 1.35;
+  text-align: left;
+  text-decoration: none;
+}
+
+.nav-overview:hover,
+.nav-section-button:hover,
+.nav-section-button[aria-expanded="true"] {
+  background: var(--paper);
+  color: var(--accent);
+}
+
+/* Which section you are in, stated on the bar itself. */
+.nav-overview[aria-current="page"],
+.nav-item.is-current > .nav-section-button {
+  font-weight: 600;
+  box-shadow: inset 0 -2px 0 var(--accent);
+}
+
+.nav-caret {
+  width: 0;
+  height: 0;
+  margin-left: auto;
+  border-left: 4px solid transparent;
+  border-right: 4px solid transparent;
+  border-top: 5px solid currentColor;
+  opacity: 0.55;
+  transition: transform 150ms ease;
+}
+
+.nav-section-button[aria-expanded="true"] .nav-caret {
+  transform: rotate(180deg);
+  opacity: 1;
+}
+
+.nav-menu {
+  padding: 0.5rem 0 0.9rem 0.9rem;
+  background: var(--panel);
+}
+
+.js .nav-menu {
+  display: none;
+}
+
+.js .nav-menu.is-open {
+  display: block;
+}
+
+.nav-menu-blurb {
+  max-width: 36ch;
+  margin: 0 0 0.5rem;
+  color: var(--ink-muted);
+  font-size: 0.85rem;
+  line-height: 1.4;
+}
+
+.site-nav .nav-menu-list {
+  display: block;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.site-nav .nav-menu-list li {
+  display: block;
+  margin: 0;
+  padding: 0;
+}
+
+.nav-link {
+  display: block;
+  margin: 0;
+  padding: 0.35rem 0.55rem;
+  border-left: 2px solid transparent;
+  color: var(--ink);
+  font-size: 0.95rem;
+  text-decoration: none;
+}
+
+.nav-link:hover {
+  background: var(--paper);
+  border-left-color: var(--rule);
+  color: var(--accent);
+}
+
+/* Which page you are on, stated inside the section's menu. */
+.nav-link[aria-current="page"] {
+  background: var(--accent-tint);
+  border-left-color: var(--accent);
+  font-weight: 600;
+}
+
+@media (max-width: 59.99rem) {
+  .js .site-nav {
+    display: none;
+  }
+
+  .js .site-nav.is-open {
+    display: block;
+    padding-bottom: 1rem;
+  }
+}
+
+@media (min-width: 60rem) {
+  .nav-toggle {
+    display: none;
+  }
+
+  /* Identity and navigation share one line where there is room, and the bar wraps to two
+     when there is not — either way the masthead stays shallow, so the form and its result
+     start high on the page. */
+  .js .masthead > .shell {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0 2rem;
+  }
+
+  .js .masthead-bar {
+    flex: 0 1 auto;
+    padding-block: 0.7rem;
+  }
+
+  .js .site-nav {
+    flex: 1 1 auto;
+    padding-bottom: 0.3rem;
+  }
+
+  .js .site-nav .nav-bar {
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-items: stretch;
+    gap: 0 0.1rem;
+  }
+
+  .js .site-nav .nav-item {
+    width: auto;
+  }
+
+  .js .nav-overview,
+  .js .nav-section-button {
+    width: auto;
+    padding: 0.45rem 0.7rem 0.55rem;
+    border-bottom: 0;
+  }
+
+  .js .nav-caret {
+    margin-left: 0;
+  }
+
+  /* Opened by a click, never at rest, so it cannot sit over text unbidden. */
+  .js .nav-menu {
+    position: absolute;
+    top: 100%;
+    left: 0;
+    z-index: 40;
+    min-width: 17rem;
+    max-width: min(24rem, calc(100vw - 2rem));
+    padding: 0.8rem 0.9rem 0.85rem;
+    border: 1px solid var(--rule);
+    border-top: 2px solid var(--accent);
+    box-shadow: 0 12px 26px rgba(20, 35, 46, 0.14);
+  }
+
+  /* The rightmost menus hang from the right edge so they cannot run off screen. */
+  .js .nav-item:nth-last-child(-n + 2) .nav-menu {
+    left: auto;
+    right: 0;
+  }
+}
+
+/* --- Content -------------------------------------------------------------- */
 
 .content {
+  flex: 1 0 auto;
   min-width: 0;
-  padding: 1.75rem var(--gutter) 3rem;
+  padding-block: 1.5rem 2.5rem;
 }
 
-.content p,
-.content li,
-.content h1,
-.content h2 {
-  max-width: 68ch;
+@media (min-width: 60rem) {
+  .content {
+    padding-block: 2rem 3.25rem;
+  }
 }
 
-.calc > header h1 {
-  margin-bottom: 0.5rem;
-  font-size: 1.85rem;
-  letter-spacing: -0.012em;
+.breadcrumb {
+  display: block;
+  margin-bottom: 1rem;
+}
+
+.breadcrumb .breadcrumb-list {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: flex-start;
+  gap: 0.2rem 0.5rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: 0.88rem;
+}
+
+.breadcrumb .breadcrumb-list li {
+  display: block;
+  margin: 0;
+  padding: 0;
+}
+
+.breadcrumb-list li + li::before {
+  content: "/";
+  margin-right: 0.5rem;
+  color: var(--rule);
+}
+
+.breadcrumb a {
+  margin: 0;
+  padding: 0;
+  color: var(--ink-muted);
+  text-decoration: none;
+  border-bottom: 1px solid var(--rule);
+}
+
+.breadcrumb a:hover {
+  color: var(--accent);
+  border-bottom-color: var(--accent);
+}
+
+.breadcrumb-current {
+  color: var(--ink);
+  font-weight: 600;
+}
+
+/* The sheet. Everything on a page is written on one, and it is plain white. */
+.calc {
+  margin: 0;
+  padding: 1.5rem clamp(1rem, 2.5vw, 2rem) 1.75rem;
+  background: var(--panel);
+  border: 1px solid var(--rule);
+  border-radius: var(--sheet-radius);
+  box-shadow: none;
+}
+
+.calc > .calc-head {
+  margin: 0 0 1.25rem;
+  padding: 0;
+  background: transparent;
+  border-bottom: 0;
+  border-radius: 0;
+}
+
+.calc-head h1 {
+  margin: 0 0 0.65rem;
+  font-size: clamp(1.5rem, 1.2rem + 1.1vw, 1.95rem);
+  font-weight: 600;
+  letter-spacing: -0.015em;
+  line-height: 1.2;
+}
+
+.calc-head p {
+  max-width: var(--measure);
+  margin: 0 0 0.65rem;
+}
+
+.calc-head p:last-child {
+  margin-bottom: 0;
 }
 
 .lede {
@@ -165,8 +500,8 @@ body {
 }
 
 .flow {
-  max-width: 68ch;
-  margin: 1rem 0 1.25rem;
+  max-width: var(--measure);
+  margin: 0.9rem 0 1.1rem;
   padding-left: 1.35rem;
 }
 
@@ -174,148 +509,59 @@ body {
   margin-bottom: 0.3rem;
 }
 
-/* --- Navigation ---------------------------------------------------------- */
+/* --- The workbench: inputs on the left, what came back on the right -------- */
 
-.site-nav {
-  display: none;
-  padding: 1.25rem var(--gutter);
-  background: var(--panel);
-  border-bottom: 1px solid var(--rule);
+.workbench {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 1.5rem;
+  padding-top: 1.25rem;
+  border-top: 1px solid var(--rule);
 }
 
-.site-nav.is-open {
-  display: block;
+.workbench-inputs,
+.workbench-output {
+  min-width: 0;
 }
 
-.nav-section {
-  margin: 1.25rem 0 0.4rem;
-  font-size: 0.82rem;
-  font-weight: 600;
-  color: var(--ink-muted);
-}
-
-.nav-section:first-child {
-  margin-top: 0;
-}
-
-.nav-list {
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-
-.nav-list li {
-  margin: 0;
-}
-
-.nav-link {
-  display: block;
-  padding: 0.3rem 0.6rem;
-  border-left: 3px solid transparent;
-  font-size: 0.95rem;
-  color: var(--ink);
-  text-decoration: none;
-}
-
-.nav-link:hover {
-  border-left-color: var(--rule);
-  background: var(--paper);
-}
-
-.nav-link[aria-current="page"] {
-  border-left-color: var(--accent);
-  background: var(--paper);
-  font-weight: 600;
-}
-
-@media (min-width: 60rem) {
-  .layout {
-    grid-template-columns: 16rem minmax(0, 1fr);
+@media (min-width: 68rem) {
+  .workbench {
+    grid-template-columns: 23rem minmax(0, 1fr);
+    gap: 0;
   }
 
-  .site-nav {
-    display: block;
-    position: sticky;
-    top: 0;
-    align-self: start;
-    max-height: 100vh;
-    overflow-y: auto;
-    border-bottom: 0;
+  .workbench-inputs {
+    padding-right: 1.75rem;
     border-right: 1px solid var(--rule);
   }
 
-  .content {
-    padding: 2.25rem 2.5rem 4rem;
+  .workbench-output {
+    padding-left: 1.75rem;
+  }
+
+  /* A page whose only outcome is a download keeps one comfortable column. */
+  .workbench-single {
+    grid-template-columns: minmax(0, 40rem);
+  }
+
+  .workbench-single .workbench-inputs {
+    padding-right: 0;
+    border-right: 0;
   }
 }
 
-@media (max-width: 59.99rem) {
-  .nav-toggle {
-    display: inline-block;
-  }
-}
-
-/* --- Index listing ------------------------------------------------------- */
-
-.section-group {
-  margin-top: 2.5rem;
-}
-
-.section-group h2 {
-  margin-bottom: 0.25rem;
-  font-size: 1.25rem;
-}
-
-.section-blurb {
-  margin-top: 0;
-  color: var(--ink-muted);
-}
-
-.calc-list {
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-
-.calc-item {
-  max-width: 68ch;
-  margin-bottom: 0.75rem;
-  padding: 0.85rem 1rem;
-  background: var(--panel);
-  border: 1px solid var(--rule);
-  border-radius: var(--sheet-radius);
-}
-
-.calc-link {
-  font-weight: 600;
-}
-
-.calc-summary {
-  margin: 0.25rem 0 0;
-}
-
-.calc-input {
-  margin: 0.35rem 0 0;
-  font-size: 0.85rem;
-  color: var(--ink-muted);
-}
-
-/* --- Form ---------------------------------------------------------------- */
+/* --- Form ----------------------------------------------------------------- */
 
 #calc-form {
-  max-width: 44rem;
-  margin: 1.5rem 0 0;
-  padding: 1.25rem 1.35rem 1.35rem;
-  background: var(--panel);
-  border: 1px solid var(--rule);
-  border-radius: var(--sheet-radius);
+  margin: 0;
 }
 
 .field {
-  margin-bottom: 1.1rem;
+  margin-bottom: 1rem;
 }
 
 .field label {
+  margin-bottom: 0.25rem;
   font-weight: 600;
 }
 
@@ -330,23 +576,58 @@ body {
   display: block;
   margin-top: 0.3rem;
   color: var(--ink-muted);
+  line-height: 1.45;
+}
+
+#calc-form fieldset {
+  margin-bottom: 1.1rem;
+  padding: 0.85rem 1rem 0.15rem;
+  border: 1px solid var(--rule-soft);
+  border-radius: var(--sheet-radius);
+}
+
+#calc-form legend {
+  padding: 0 0.35rem;
+  font-size: 0.95rem;
+  font-weight: 600;
+}
+
+.form-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  margin-top: 1.25rem;
+  padding-top: 1.1rem;
+  border-top: 1px solid var(--rule-soft);
 }
 
 #calc-form button[type="submit"] {
-  width: auto;
-  margin-bottom: 0;
+  width: 100%;
+  margin: 0;
 }
 
-/* --- Results ------------------------------------------------------------- */
+/* A page that offers two runs makes the second one visibly the alternative. */
+#calc-form button[type="submit"]:not(:first-of-type) {
+  background: transparent;
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+#calc-form button[type="submit"]:not(:first-of-type):hover {
+  background: var(--accent);
+  color: #fff;
+}
+
+/* --- Results -------------------------------------------------------------- */
 
 .htmx-indicator {
   display: none;
-  margin-top: 1.25rem;
-  padding: 0.5rem 0.75rem;
-  max-width: 44rem;
-  background: var(--panel);
+  margin: 0 0 1rem;
+  padding: 0.5rem 0.8rem;
+  background: var(--accent-tint);
   border-left: 3px solid var(--accent);
-  color: var(--ink-muted);
+  color: var(--ink);
+  font-size: 0.92rem;
 }
 
 .htmx-request.htmx-indicator,
@@ -354,38 +635,49 @@ body {
   display: block;
 }
 
-.result {
-  margin-top: 1.75rem;
-  padding: 1.25rem 1.35rem 1.35rem;
-  background: var(--panel);
-  border: 1px solid var(--rule);
+.results-empty {
+  max-width: var(--measure);
+  margin: 0;
+  padding: 1.1rem 1.25rem;
+  border: 1px dashed var(--rule);
   border-radius: var(--sheet-radius);
+  color: var(--ink-muted);
+  font-size: 0.95rem;
+}
+
+.result {
+  margin: 0;
 }
 
 .result-header h2 {
-  margin-bottom: 0.25rem;
-  font-size: 1.3rem;
+  margin: 0 0 0.3rem;
+  font-size: 1.15rem;
+  font-weight: 600;
 }
 
 .result-summary {
+  max-width: var(--measure);
   margin: 0;
   color: var(--ink-muted);
+  font-size: 0.92rem;
 }
 
 .result-note {
+  max-width: var(--measure);
   margin: 0.75rem 0 0;
   color: var(--ink-muted);
   font-size: 0.9rem;
 }
 
 .plot {
-  min-height: 360px;
-  margin-top: 1rem;
+  min-height: 340px;
+  margin-top: 1.1rem;
 }
 
 .plot-controls {
   display: flex;
-  gap: 1.25rem;
+  flex-wrap: wrap;
+  gap: 0.5rem 1.25rem;
   margin-top: 1rem;
 }
 
@@ -450,36 +742,120 @@ body {
 }
 
 .result-error {
-  border-color: var(--fault);
-  border-left-width: 3px;
+  padding: 1.1rem 1.25rem;
   background: var(--fault-tint);
+  border: 1px solid var(--fault);
+  border-left-width: 3px;
+  border-radius: var(--sheet-radius);
 }
 
 .result-error h1,
 .result-error h2 {
-  margin-bottom: 0.35rem;
+  margin: 0 0 0.35rem;
   font-size: 1.15rem;
   color: var(--fault);
 }
 
 .result-error p {
+  max-width: var(--measure);
   margin: 0;
-  max-width: 68ch;
 }
 
 .result-error .result-note {
   margin-top: 0.9rem;
 }
 
-/* --- Footer -------------------------------------------------------------- */
+/* --- Overview listing ----------------------------------------------------- */
 
-.site-footer {
+.section-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 1.75rem 3rem;
+  margin-top: 1.5rem;
+  padding-top: 1.25rem;
+  border-top: 1px solid var(--rule);
+}
+
+@media (min-width: 68rem) {
+  .section-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+.section-group {
+  min-width: 0;
+  margin: 0;
+}
+
+.section-group h2 {
+  margin: 0 0 0.2rem;
+  font-size: 1.1rem;
+  font-weight: 600;
+}
+
+.section-blurb {
+  max-width: 52ch;
+  margin: 0 0 0.65rem;
+  color: var(--ink-muted);
+  font-size: 0.92rem;
+}
+
+.calc-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  border-top: 1px solid var(--rule);
+}
+
+.calc-item {
+  margin: 0;
+  padding: 0.7rem 0 0.75rem;
+  border-bottom: 1px solid var(--rule-soft);
+}
+
+.calc-item-head {
   display: flex;
   flex-wrap: wrap;
-  gap: 1.5rem;
-  padding: 1rem var(--gutter);
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.15rem 1rem;
+}
+
+.calc-link {
+  font-weight: 600;
+  color: var(--accent);
+  text-decoration: none;
+}
+
+.calc-link:hover {
+  text-decoration: underline;
+}
+
+.calc-input {
+  margin: 0;
+  color: var(--ink-muted);
+  font-size: 0.82rem;
+}
+
+.calc-summary {
+  max-width: 58ch;
+  margin: 0.15rem 0 0;
+  font-size: 0.92rem;
+}
+
+/* --- Footer --------------------------------------------------------------- */
+
+.site-footer {
+  margin-top: 2.5rem;
+  padding-block: 0;
   background: var(--panel);
-  border-top: 1px solid var(--rule);
+}
+
+.footer-inner {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem 1.5rem;
+  padding-block: 0.9rem 1rem;
   font-size: 0.85rem;
 }
 
@@ -487,7 +863,7 @@ body {
   color: var(--ink-muted);
 }
 
-/* --- Quality floor ------------------------------------------------------- */
+/* --- Quality floor -------------------------------------------------------- */
 
 :focus-visible {
   outline: 2px solid var(--accent);

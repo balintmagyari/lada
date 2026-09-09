@@ -4,6 +4,14 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{% block title %}{% endblock %} – LaDa</title>
+  {# Set before the stylesheet paints so the section menus are never shown open for the
+     moment before app.js wires them up. Without scripting the class is never added, every
+     menu stays in the normal flow, and all the links remain reachable. #}
+  <script>document.documentElement.classList.add("js");</script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet"
+        href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;600&display=swap">
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@2.1.1/css/pico.min.css">
   <link rel="stylesheet" href="/static/css/app.css">
   <script src="https://cdn.jsdelivr.net/npm/htmx.org@2.0.4/dist/htmx.min.js"></script>
@@ -12,41 +20,77 @@
   <script src="/static/js/app.js" defer></script>
   {% block extra_head %}{% endblock %}
 </head>
-<body x-data="{ navOpen: false }">
+<body>
   <a class="skip-link" href="#main">Skip to content</a>
 
   <header class="masthead">
-    <a class="wordmark" href="/">
-      <span class="wordmark-name">LaDa</span>
-      <span class="wordmark-role">LAMMPS post-processing</span>
-    </a>
-    <button type="button" class="nav-toggle" aria-controls="site-nav" aria-expanded="false"
-            x-on:click="navOpen = !navOpen"
-            x-bind:aria-expanded="navOpen ? 'true' : 'false'">Calculations</button>
+    <div class="shell">
+      <div class="masthead-bar">
+        <a class="wordmark" href="/">
+          <span class="wordmark-name">LaDa</span>
+          <span class="wordmark-role">LAMMPS post-processing</span>
+        </a>
+        <button type="button" class="nav-toggle" data-nav-toggle
+                aria-controls="site-nav" aria-expanded="false">Menu</button>
+      </div>
+
+      <nav id="site-nav" class="site-nav" aria-label="Calculations">
+        <ul class="nav-bar">
+          <li class="nav-item">
+            <a class="nav-overview" href="/"
+               {% if request.url.path == '/' %}aria-current="page"{% endif %}>Overview</a>
+          </li>
+          {% for section, calcs in nav %}
+          {% set on_section = calc is defined and calc.section == section.key %}
+          <li class="nav-item{% if on_section %} is-current{% endif %}" data-nav-item>
+            <button type="button" class="nav-section-button"
+                    aria-expanded="false" aria-controls="nav-menu-{{ section.key }}">
+              <span>{{ section.title }}</span>
+              <span class="nav-caret" aria-hidden="true"></span>
+            </button>
+            <div class="nav-menu" id="nav-menu-{{ section.key }}">
+              <p class="nav-menu-blurb">{{ section.blurb }}</p>
+              <ul class="nav-menu-list">
+                {% for item in calcs %}
+                <li>
+                  <a class="nav-link" href="{{ item.path }}"
+                     {% if calc is defined and calc.path == item.path %}aria-current="page"{% endif %}>{{ item.title }}</a>
+                </li>
+                {% endfor %}
+              </ul>
+            </div>
+          </li>
+          {% endfor %}
+        </ul>
+      </nav>
+    </div>
+    <div class="pad-edge" aria-hidden="true"></div>
   </header>
 
-  <div class="layout">
-    <nav id="site-nav" class="site-nav" aria-label="Calculations"
-         x-bind:class="{ 'is-open': navOpen }">
-      {% for section, calcs in nav %}
-      <h2 class="nav-section">{{ section.title }}</h2>
-      <ul class="nav-list">
-        {% for item in calcs %}
-        <li>
-          <a class="nav-link" href="{{ item.path }}"
-             {% if calc is defined and calc.path == item.path %}aria-current="page"{% endif %}>{{ item.title }}</a>
-        </li>
-        {% endfor %}
-      </ul>
-      {% endfor %}
-    </nav>
-
-    <main id="main" class="content" tabindex="-1">{% block content %}{% endblock %}</main>
-  </div>
+  <main id="main" class="content" tabindex="-1">
+    <div class="shell">
+      {% if calc is defined %}
+      <nav class="breadcrumb" aria-label="Breadcrumb">
+        <ol class="breadcrumb-list">
+          <li><a href="/">Overview</a></li>
+          <li><a href="/#{{ calc.section }}">{{ sections[calc.section].title }}</a></li>
+          <li><span class="breadcrumb-current">{{ calc.title }}</span></li>
+        </ol>
+      </nav>
+      {% endif %}
+      {% block content %}{% endblock %}
+    </div>
+  </main>
 
   <footer class="site-footer">
-    <span class="footer-version">lada-web {{ app_version }}</span>
-    <a href="/api/docs">API reference</a>
+    <div class="pad-edge pad-edge-foot" aria-hidden="true"></div>
+    <div class="shell">
+      <div class="footer-inner">
+        <span class="footer-version">lada-web {{ app_version }}</span>
+        <a href="/">All calculations</a>
+        <a href="/api/docs">API reference</a>
+      </div>
+    </div>
   </footer>
 
   {% block scripts %}{% endblock %}

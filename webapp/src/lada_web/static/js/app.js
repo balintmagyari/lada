@@ -1,15 +1,124 @@
-/* Three behaviours: render error responses into #results, report a dead server,
-   and draw the plot that comes with a result. */
+/* Four behaviours: open and close the section menus in the top bar, render error responses
+   into #results, report a dead server, and draw the plot that comes with a result. */
 
 (function () {
   "use strict";
+
+  // --- Section navigation ---------------------------------------------------
+  // Plain DOM rather than Alpine: the bar is the only way around the app, so it must not
+  // depend on a CDN that a locked-down network might drop. app.js is served from this app.
+
+  function setupNavigation() {
+    var nav = document.getElementById("site-nav");
+    if (!nav) {
+      return;
+    }
+
+    var buttons = Array.prototype.slice.call(nav.querySelectorAll(".nav-section-button"));
+
+    function panelOf(button) {
+      return document.getElementById(button.getAttribute("aria-controls"));
+    }
+
+    function setOpen(button, open) {
+      var panel = panelOf(button);
+      button.setAttribute("aria-expanded", open ? "true" : "false");
+      if (panel) {
+        panel.classList.toggle("is-open", open);
+      }
+    }
+
+    function closeAll(except) {
+      buttons.forEach(function (button) {
+        if (button !== except) {
+          setOpen(button, false);
+        }
+      });
+    }
+
+    buttons.forEach(function (button) {
+      setOpen(button, false);
+
+      button.addEventListener("click", function () {
+        var open = button.getAttribute("aria-expanded") === "true";
+        closeAll(button);
+        setOpen(button, !open);
+      });
+
+      // Down arrow on the button walks into the menu, the way a menu bar is expected to.
+      button.addEventListener("keydown", function (event) {
+        if (event.key !== "ArrowDown") {
+          return;
+        }
+        event.preventDefault();
+        closeAll(button);
+        setOpen(button, true);
+        var first = panelOf(button) && panelOf(button).querySelector(".nav-link");
+        if (first) {
+          first.focus();
+        }
+      });
+    });
+
+    // Escape closes the open menu and hands focus back to the button that owns it.
+    nav.addEventListener("keydown", function (event) {
+      if (event.key !== "Escape") {
+        return;
+      }
+      var open = buttons.filter(function (button) {
+        return button.getAttribute("aria-expanded") === "true";
+      });
+      if (!open.length) {
+        return;
+      }
+      open.forEach(function (button) {
+        setOpen(button, false);
+      });
+      open[0].focus();
+    });
+
+    // Tabbing or clicking away closes what you left behind.
+    document.addEventListener("focusin", function (event) {
+      buttons.forEach(function (button) {
+        var item = button.closest("[data-nav-item]");
+        if (item && !item.contains(event.target)) {
+          setOpen(button, false);
+        }
+      });
+    });
+
+    document.addEventListener("click", function (event) {
+      if (!nav.contains(event.target)) {
+        closeAll(null);
+      }
+    });
+
+    var toggle = document.querySelector("[data-nav-toggle]");
+    if (toggle) {
+      toggle.addEventListener("click", function () {
+        var open = nav.classList.toggle("is-open");
+        toggle.setAttribute("aria-expanded", open ? "true" : "false");
+        if (!open) {
+          closeAll(null);
+        }
+      });
+    }
+  }
+
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", setupNavigation);
+  } else {
+    setupNavigation();
+  }
+
+  // --- Results --------------------------------------------------------------
 
   // The identity lives in app.css. Read the shared tokens from there so a palette edit
   // reaches the plot too; the literals are only a fallback if the stylesheet is missing.
   var FALLBACK = {
     "--accent": "#1b4fd8",
     "--ink": "#14232e",
-    "--grid-major": "#dbe1da",
+    "--grid-major": "#d3dbd3",
     "--rule": "#c6d0c9"
   };
 

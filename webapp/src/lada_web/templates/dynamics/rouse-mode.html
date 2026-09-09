@@ -3,7 +3,7 @@
 {% block title %}{{ calc.title }}{% endblock %}
 {% block content %}
 <article class="calc">
-  <header>
+  <header class="calc-head">
     <h1>{{ calc.title }}</h1>
     <p>Upload a NumPy <code>.npz</code> trajectory and get the normalized autocorrelation of one
        Rouse mode amplitude, C(t) = &lt;X<sub>p</sub>(t)&#183;X<sub>p</sub>(0)&gt; /
@@ -12,15 +12,23 @@
     <p>Statistical noise grows with lag time; ignore roughly the last 10–20 % of points when
        fitting relaxation times.</p>
   </header>
-  <form id="calc-form" method="post" enctype="multipart/form-data" hx-encoding="multipart/form-data">
-    {{ f.file_field('file', 'NumPy .npz trajectory', '.npz',
-                    'A NumPy archive holding an array named coords of shape (frames, atoms, 3).') }}
-    {{ f.number_field('time_per_frame', 'Time per frame', 1.0, step='any', min=f.POSITIVE,
-                      help='Simulation time between two saved frames, greater than zero.') }}
-    {% set rouse_mode_field = true %}
-    {% include "dynamics/_topology.html" %}
-    {{ f.calculate_button('Calculate Rouse mode ACF', '/api/dynamics/rouse-mode') }}
-  </form>
-  {{ f.results_area() }}
+  <div class="workbench">
+    <div class="workbench-inputs">
+      <form id="calc-form" method="post" enctype="multipart/form-data" hx-encoding="multipart/form-data">
+        {{ f.file_field('file', 'NumPy .npz trajectory', '.npz',
+                        'A NumPy archive holding an array named coords of shape (frames, atoms, 3).') }}
+        {{ f.number_field('time_per_frame', 'Time per frame', 1.0, step='any', min=f.POSITIVE,
+                          help='Simulation time between two saved frames, greater than zero.') }}
+        {% set rouse_mode_field = true %}
+        {% include "dynamics/_topology.html" %}
+        <div class="form-actions">
+          {{ f.calculate_button('Calculate Rouse mode ACF', '/api/dynamics/rouse-mode') }}
+        </div>
+      </form>
+    </div>
+    <div class="workbench-output">
+      {{ f.results_area() }}
+    </div>
+  </div>
 </article>
 {% endblock %}

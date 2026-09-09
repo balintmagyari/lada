@@ -185,9 +185,12 @@
       };
     });
 
+    // The series keep full precision; only the hover readout is rounded, so that a point
+    // reads the same on the plot as it does in the table.
     var axis = {
       gridcolor: token("--grid-major"),
-      zerolinecolor: token("--rule")
+      zerolinecolor: token("--rule"),
+      hoverformat: ".6g"
     };
 
     var layout = {
@@ -200,13 +203,15 @@
         title: { text: plot.x_label || plot.x },
         type: axisType(plot.x_log),
         gridcolor: axis.gridcolor,
-        zerolinecolor: axis.zerolinecolor
+        zerolinecolor: axis.zerolinecolor,
+        hoverformat: axis.hoverformat
       },
       yaxis: {
         title: { text: plot.y_label || plot.y.join(", ") },
         type: axisType(plot.y_log),
         gridcolor: axis.gridcolor,
-        zerolinecolor: axis.zerolinecolor
+        zerolinecolor: axis.zerolinecolor,
+        hoverformat: axis.hoverformat
       }
     };
 

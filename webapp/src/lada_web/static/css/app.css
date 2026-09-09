@@ -767,10 +767,10 @@ body {
 
 /* --- Overview listing ----------------------------------------------------- */
 
+/* Columns rather than a grid: the sections have very different heights, and a grid would
+   line them up row by row and leave tall gaps. Columns let each section start where the
+   one above it ended, while source order and focus order stay as written. */
 .section-grid {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr);
-  gap: 1.75rem 3rem;
   margin-top: 1.5rem;
   padding-top: 1.25rem;
   border-top: 1px solid var(--rule);
@@ -778,13 +778,20 @@ body {
 
 @media (min-width: 68rem) {
   .section-grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+    column-count: 2;
+    column-gap: 3rem;
   }
 }
 
 .section-group {
   min-width: 0;
-  margin: 0;
+  margin: 0 0 1.75rem;
+  /* A section must not be split across the column break. */
+  break-inside: avoid;
+}
+
+.section-group:last-child {
+  margin-bottom: 0;
 }
 
 .section-group h2 {

@@ -18,13 +18,15 @@
     <table class="numbers">
       <thead><tr>{% for c in result.columns %}<th scope="col">{{ c }}</th>{% endfor %}</tr></thead>
       <tbody>
-        {% for row in result.rows %}<tr>{% for v in row %}<td>{{ '' if v is none else v }}</td>{% endfor %}</tr>{% endfor %}
+        {% for row in result.rows %}<tr>{% for v in row %}<td>{{ v | sigfig }}</td>{% endfor %}</tr>{% endfor %}
       </tbody>
     </table>
   </div>
-  {% if result.truncated %}
-  <p class="result-note">Showing the first {{ result.rows | length }} of {{ result.n_rows_total }} rows. Downloads contain every row.</p>
-  {% endif %}
+  <p class="result-note">
+    {%- if result.truncated %}Showing the first {{ result.rows | length }} of {{ result.n_rows_total }} rows.
+    Values are shown to {{ significant_figures }} significant figures; downloads carry every row at full precision.
+    {%- else %}Values are shown to {{ significant_figures }} significant figures; downloads carry full precision.{% endif -%}
+  </p>
   {% if download_url %}
   <div class="downloads">
     <button type="submit" form="calc-form" formaction="{{ download_url }}?fmt=csv"

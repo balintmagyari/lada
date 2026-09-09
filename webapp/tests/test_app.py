@@ -246,16 +246,17 @@ def test_truncated_result_says_how_many_rows_are_shown(temp_root, data_dir, htmx
         "/api/parsers/log/table", files=upload(data_dir / "sample_log.lammps"), headers=htmx
     )
     assert r.status_code == 200
-    assert "Showing the first 2 of 5 rows" in r.text
-    assert "Downloads contain every row." in r.text
+    assert "Showing the first 2 of 5 rows." in r.text
+    assert "downloads carry every row at full precision." in r.text
 
 
-def test_an_untruncated_result_has_no_note(client, data_dir, htmx):
+def test_an_untruncated_result_does_not_claim_rows_were_hidden(client, data_dir, htmx):
     r = client.post(
         "/api/parsers/log/table", files=upload(data_dir / "sample_log.lammps"), headers=htmx
     )
     assert r.status_code == 200
     assert "Showing the first" not in r.text
+    assert "downloads carry full precision." in r.text
 
 
 # --- Quality floor ---------------------------------------------------------

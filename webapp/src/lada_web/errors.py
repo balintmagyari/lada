@@ -49,7 +49,12 @@ def _page_came_from(request: Request) -> Calculation | None:
     Only a same-origin path that matches a real catalog entry is used — the referer itself is
     never reflected into the page.
     """
-    referer = urlsplit(request.headers.get("referer", ""))
+    try:
+        referer = urlsplit(request.headers.get("referer", ""))
+    except ValueError:
+        # e.g. an unclosed IPv6 bracket ("Invalid IPv6 URL") — no real browser sends this,
+        # but the error page must not itself 500 while rendering a 4xx.
+        return None
     if referer.scheme and referer.scheme not in ("http", "https"):
         return None
     origin = urlsplit(str(request.base_url))

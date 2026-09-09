@@ -102,12 +102,23 @@ def test_the_error_page_offers_a_way_back_to_the_page_you_came_from(client, data
         "http://testserver/parsers/nope",
         "http://testserver/",
         "javascript:alert(1)//parsers/acf",
+        "http://[abc/parsers/acf",
     ],
-    ids=["absent", "empty", "other-host", "other-scheme", "unknown-page", "index", "javascript"],
+    ids=[
+        "absent",
+        "empty",
+        "other-host",
+        "other-scheme",
+        "unknown-page",
+        "index",
+        "javascript",
+        "malformed",
+    ],
 )
 def test_the_error_page_falls_back_when_the_referer_is_not_one_of_our_pages(
     client, data_dir, referer
 ):
+    """A malformed referer (e.g. an unclosed IPv6 bracket) must not turn the 422 into a 500."""
     r = failing_download(client, data_dir, referer)
     assert r.status_code == 422
     assert BACK_TO_ACF not in r.text

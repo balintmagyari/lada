@@ -173,6 +173,15 @@ scattering directions) — a large trajectory can take minutes to process on one
   hundreds of gigabytes — which is why the decompressed footprint is checked separately. Lower
   them if you're running on modest hardware; raise them only if you also raise proxy timeouts,
   and, under Docker, `mem_limit` in `docker-compose.yml`.
+- If you put this app behind a reverse proxy, raise its read timeout well past the default, or
+  large dynamics requests will be cut off mid-calculation. For nginx:
+
+  ```nginx
+  proxy_read_timeout 600s;
+  ```
+
+  Uvicorn itself has no request timeout by default, so the proxy is almost always the first thing
+  that gives up.
 
 ### Request size limits
 
@@ -185,15 +194,6 @@ that reason, since its size could not be checked before the body was read; a bod
 understates its length is caught later by `uploads.save_upload`, after the bytes it already
 streamed in have been spooled to disk. Put a limit in your reverse proxy as well
 (`client_max_body_size` for nginx) if you need one enforced closer to the wire.
-- If you put this app behind a reverse proxy, raise its read timeout well past the default, or
-  large dynamics requests will be cut off mid-calculation. For nginx:
-
-  ```nginx
-  proxy_read_timeout 600s;
-  ```
-
-  Uvicorn itself has no request timeout by default, so the proxy is almost always the first thing
-  that gives up.
 
 ## Docker
 

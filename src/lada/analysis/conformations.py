@@ -1,3 +1,5 @@
+from collections.abc import Callable
+
 import numpy as np
 import pandas as pd
 from tqdm import tqdm
@@ -10,6 +12,7 @@ def calculate_avg_rg_sq(
     molecule_col: str = "mol",
     timestep_col: str = "timestep",
     mass_col: str | None = None,
+    progress_callback: Callable[[int, int], None] | None = None,
 ) -> float | dict[float, float]:
     """
     Compute the ensemble-average squared radius of gyration using fast vectorization.
@@ -36,6 +39,10 @@ def calculate_avg_rg_sq(
         Column header specifying atom masses. When given, the mass of each atom is
         accounted for when calculating Rg^2. If None, the mass of all atoms is
         considered equal.
+    progress_callback: Callable[[int, int], None] | None, default=None
+        If given, called as ``progress_callback(current, total)`` once per
+        timestep processed, with ``current`` 1-based, so the final call is
+        always ``(total, total)``. Default is None (no progress reporting).
 
     Returns
     -------
@@ -87,10 +94,13 @@ def calculate_avg_rg_sq(
         timesteps = np.zeros(len(arr))
 
     unique_timesteps = np.unique(timesteps)
+    total_timesteps = len(unique_timesteps)
     rg_sq_by_timestep = {}
 
     # 3. Compute Rg^2 per frame using tqdm
-    for ts in tqdm(unique_timesteps, disable=len(unique_timesteps) <= 1, desc="Calculating Rg^2"):
+    for i, ts in enumerate(
+        tqdm(unique_timesteps, disable=total_timesteps <= 1, desc="Calculating Rg^2")
+    ):
         # Isolate the frame
         ts_mask = timesteps == ts
         ts_mols = mols[ts_mask]
@@ -118,6 +128,8 @@ def calculate_avg_rg_sq(
 
         rg_sq_per_mol = np.bincount(mol_indices, weights=ts_masses * sq_distances) / mol_masses
         rg_sq_by_timestep[ts] = float(np.mean(rg_sq_per_mol))
+        if progress_callback is not None:
+            progress_callback(i + 1, total_timesteps)
 
     # 4. Dynamic Return
     if not has_timesteps or len(unique_timesteps) == 1:
@@ -133,6 +145,7 @@ def calculate_avg_ree_sq(
     molecule_col: str = "mol",
     timestep_col: str = "timestep",
     atom_id_col: str = "id",
+    progress_callback: Callable[[int, int], None] | None = None,
 ) -> float | dict[float, float]:
     """
     Compute the ensemble-average squared end-to-end distance using fast vectorization.
@@ -159,6 +172,10 @@ def calculate_avg_ree_sq(
     atom_id_col : str, default='id'
         Column header specifying atom IDs. Used to identify the first and last
         atom in each chain (by minimum and maximum ID within a molecule).
+    progress_callback : Callable[[int, int], None] | None, default=None
+        If given, called as ``progress_callback(current, total)`` once per
+        timestep processed, with ``current`` 1-based, so the final call is
+        always ``(total, total)``. Default is None (no progress reporting).
 
     Returns
     -------
@@ -203,10 +220,13 @@ def calculate_avg_ree_sq(
         timesteps = np.zeros(len(arr))
 
     unique_timesteps = np.unique(timesteps)
+    total_timesteps = len(unique_timesteps)
     ree_sq_by_timestep = {}
 
     # 3. Compute Ree^2 per frame using tqdm
-    for ts in tqdm(unique_timesteps, disable=len(unique_timesteps) <= 1, desc="Calculating Ree^2"):
+    for i, ts in enumerate(
+        tqdm(unique_timesteps, disable=total_timesteps <= 1, desc="Calculating Ree^2")
+    ):
         # Isolate the frame
         ts_mask = timesteps == ts
         ts_mols = mols[ts_mask]
@@ -235,6 +255,8 @@ def calculate_avg_ree_sq(
 
         # Store the ensemble average for this timestep
         ree_sq_by_timestep[ts] = float(np.mean(sq_distances))
+        if progress_callback is not None:
+            progress_callback(i + 1, total_timesteps)
 
     # 4. Dynamic Return
     if not has_timesteps or len(unique_timesteps) == 1:
@@ -250,6 +272,7 @@ def calculate_ree_vectors(
     molecule_col: str = "mol",
     timestep_col: str = "timestep",
     atom_id_col: str = "id",
+    progress_callback: Callable[[int, int], None] | None = None,
 ) -> pd.DataFrame:
     """
     Compute the end-to-end vector for each molecule at each timestep.
@@ -271,6 +294,10 @@ def calculate_ree_vectors(
     atom_id_col : str, default='id'
         Column header specifying atom IDs. Used to identify the first and last
         atom in each chain (by minimum and maximum ID within a molecule).
+    progress_callback : Callable[[int, int], None] | None, default=None
+        If given, called as ``progress_callback(current, total)`` once per
+        timestep processed, with ``current`` 1-based, so the final call is
+        always ``(total, total)``. Default is None (no progress reporting).
 
     Returns
     -------
@@ -316,11 +343,12 @@ def calculate_ree_vectors(
         timesteps = np.zeros(len(arr))
 
     unique_timesteps = np.unique(timesteps)
+    total_timesteps = len(unique_timesteps)
     all_frames_data = []
 
     # 3. Compute Ree vectors per frame using tqdm
-    for ts in tqdm(
-        unique_timesteps, disable=len(unique_timesteps) <= 1, desc="Calculating Ree vectors"
+    for i, ts in enumerate(
+        tqdm(unique_timesteps, disable=total_timesteps <= 1, desc="Calculating Ree vectors")
     ):
         # Isolate the frame
         ts_mask = timesteps == ts
@@ -353,6 +381,8 @@ def calculate_ree_vectors(
         # Stack everything together into a 2D array for this frame
         frame_data = np.column_stack((ts_array, unique_mol_ids, ree_vectors))
         all_frames_data.append(frame_data)
+        if progress_callback is not None:
+            progress_callback(i + 1, total_timesteps)
 
     # 4. Compile and Return Data
     # Vertically stack all the frame data blocks

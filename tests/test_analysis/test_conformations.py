@@ -253,3 +253,54 @@ class TestEdgeCases:
             df, coord_cols=["xu", "yu", "zu"], molecule_col="mol", timestep_col="timestep"
         )
         assert isinstance(rg_sq_large, float)
+
+
+class TestProgressCallback:
+    """progress_callback: omitted still works, called (current, total) once per timestep with
+    current 1-based and strictly increasing, final call always (total, total)."""
+
+    def assert_well_formed(self, calls, total):
+        assert calls, "progress_callback was never called"
+        assert all(t == total for _, t in calls)
+        currents = [c for c, _ in calls]
+        assert all(b > a for a, b in zip(currents, currents[1:], strict=False))
+        assert currents[0] >= 1
+        assert calls[-1] == (total, total)
+
+    def test_omitting_the_callback_still_works(self):
+        df = create_synthetic_trajectory_df(num_atoms=20, num_timesteps=3)
+        result = calculate_avg_rg_sq(df, coord_cols=["xu", "yu", "zu"], molecule_col="mol")
+        assert isinstance(result, dict) and len(result) == 3
+
+    def test_rg_sq_reports_one_call_per_timestep(self):
+        df = create_synthetic_trajectory_df(num_atoms=20, num_timesteps=4)
+        calls = []
+        calculate_avg_rg_sq(
+            df,
+            coord_cols=["xu", "yu", "zu"],
+            molecule_col="mol",
+            progress_callback=lambda c, t: calls.append((c, t)),
+        )
+        self.assert_well_formed(calls, total=4)
+
+    def test_ree_sq_reports_one_call_per_timestep(self):
+        df = create_synthetic_trajectory_df(num_atoms=40, num_timesteps=3, num_molecules=2)
+        calls = []
+        calculate_avg_ree_sq(
+            df,
+            coord_cols=["xu", "yu", "zu"],
+            molecule_col="mol",
+            progress_callback=lambda c, t: calls.append((c, t)),
+        )
+        self.assert_well_formed(calls, total=3)
+
+    def test_ree_vectors_reports_one_call_per_timestep(self):
+        df = create_synthetic_trajectory_df(num_atoms=30, num_timesteps=5, num_molecules=1)
+        calls = []
+        calculate_ree_vectors(
+            df,
+            coord_cols=["xu", "yu", "zu"],
+            molecule_col="mol",
+            progress_callback=lambda c, t: calls.append((c, t)),
+        )
+        self.assert_well_formed(calls, total=5)

@@ -21,6 +21,17 @@ from lada.analysis import (
 )
 
 
+def assert_well_formed_progress(calls, total):
+    """Shared shape checks for a recorded (current, total) call list."""
+    assert calls, "progress_callback was never called"
+    assert all(t == total for _, t in calls)
+    currents = [c for c, _ in calls]
+    increasing = all(b > a for a, b in zip(currents, currents[1:], strict=False))
+    assert increasing, "not strictly increasing"
+    assert currents[0] >= 1
+    assert calls[-1] == (total, total)
+
+
 @pytest.fixture
 def trajectory_file(tmp_path):
     """A tiny synthetic trajectory: 6 frames, 4 atoms, drifting coordinates."""
@@ -87,3 +98,50 @@ class TestCalculateIsfDeprecation:
             trajectory_file, time_per_frame=0.5, q_magnitude=7.0, n_vectors=8
         )
         np.testing.assert_array_equal(old_result, new_result)
+
+
+class TestProgressCallback:
+    """progress_callback: omitted still works, called (current, total) with current strictly
+    increasing and 1-based, final call always (total, total)."""
+
+    def test_omitting_the_callback_still_works(self, trajectory_file):
+        segment_pairs = np.array([[0, 3], [1, 2]])
+        result = calculate_segment_acf_from_trajectory(trajectory_file, segment_pairs, 0.5)
+        assert result.shape == (6, 2)
+
+    def test_segment_acf_reports_one_call_per_frame(self, trajectory_file):
+        segment_pairs = np.array([[0, 3], [1, 2]])
+        calls = []
+        calculate_segment_acf_from_trajectory(
+            trajectory_file, segment_pairs, 0.5, progress_callback=lambda c, t: calls.append((c, t))
+        )
+        assert_well_formed_progress(calls, total=6)  # n_frames from the fixture
+
+    def test_rouse_mode_reports_one_call_per_frame(self, trajectory_file):
+        chain_indices = np.array([[0, 1, 2, 3]])
+        calls = []
+        calculate_rouse_mode_acf_from_trajectory(
+            trajectory_file,
+            chain_indices,
+            p=1,
+            time_per_frame=0.5,
+            progress_callback=lambda c, t: calls.append((c, t)),
+        )
+        assert_well_formed_progress(calls, total=6)
+
+    def test_isf_reports_one_call_per_q_vector_and_lag_not_just_per_q_vector(self, trajectory_file):
+        """The inner (n_frames) loop must be instrumented, not just the outer n_vectors loop —
+        otherwise progress would jump in 3 coarse steps instead of reflecting ISF's real cost."""
+        n_vectors = 3
+        n_frames = 6  # from the fixture
+        calls = []
+        calculate_isf_from_trajectory(
+            trajectory_file,
+            time_per_frame=0.5,
+            q_magnitude=1.0,
+            n_vectors=n_vectors,
+            progress_callback=lambda c, t: calls.append((c, t)),
+        )
+        total = n_vectors * n_frames
+        assert_well_formed_progress(calls, total=total)
+        assert len(calls) == total

@@ -36,10 +36,14 @@ def build_coords(rng: np.random.Generator) -> np.ndarray:
     return coords
 
 
-def main(out: Path = OUT) -> None:
-    rng = np.random.default_rng(SEED)
+def main(out: Path = OUT, seed: int = SEED) -> None:
+    rng = np.random.default_rng(seed)
     np.savez_compressed(out, coords=build_coords(rng))
 
 
 if __name__ == "__main__":
     main()
+    # A second seed-repeat of the same system (same chain layout, independent noise), for
+    # multi-file averaging tests: same n_atoms so it's a valid repeat, different values so an
+    # averaged result is distinguishable from either file alone.
+    main(out=Path(__file__).with_name("sample_trajectory_repeat2.npz"), seed=SEED + 1)

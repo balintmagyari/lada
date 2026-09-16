@@ -26,7 +26,7 @@ from lada_web.services.dynamics_service import (
     resolve_segment_pairs,
 )
 
-from .conftest import upload
+from .conftest import files_upload
 
 SEGMENT_URL = "/api/dynamics/segment-acf"
 MB = 1024 * 1024
@@ -126,7 +126,7 @@ def test_a_huge_uniform_topology_is_refused_without_allocating(
         "first_index": "0",
         "time_per_frame": "1.0",
     }
-    r = client.post(SEGMENT_URL, files=upload(data_dir / "sample_trajectory.npz"), data=form)
+    r = client.post(SEGMENT_URL, files=files_upload(data_dir / "sample_trajectory.npz"), data=form)
     assert r.status_code == 422, r.text
     assert "32 atoms" in r.json()["detail"]
 
@@ -161,7 +161,7 @@ def test_a_tiny_archive_declaring_a_huge_array_is_413(client, tmp_path, temp_roo
         "first_index": "0",
         "time_per_frame": "1.0",
     }
-    r = client.post(SEGMENT_URL, files=upload(path), data=form)
+    r = client.post(SEGMENT_URL, files=files_upload(path), data=form)
     assert r.status_code == 413, r.text
     assert "MB" in r.json()["detail"]
     assert not temp_root.exists() or list(temp_root.iterdir()) == []
@@ -186,5 +186,5 @@ def test_a_trajectory_within_the_budget_still_runs(client, data_dir):
         "first_index": "0",
         "time_per_frame": "1.0",
     }
-    r = client.post(SEGMENT_URL, files=upload(data_dir / "sample_trajectory.npz"), data=form)
+    r = client.post(SEGMENT_URL, files=files_upload(data_dir / "sample_trajectory.npz"), data=form)
     assert r.status_code == 200, r.text

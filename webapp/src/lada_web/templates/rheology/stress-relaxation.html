@@ -14,14 +14,22 @@
   <div class="workbench">
     <div class="workbench-inputs">
       <form id="calc-form" method="post" enctype="multipart/form-data" hx-encoding="multipart/form-data">
-        {{ f.file_field('file', 'Stress ACF file', '.txt,.dat',
-                        'A fix ave/correlate output file with ACF_Sxy/Sxz/Syz and ACF_Nxy/Nxz/Nyz columns.') }}
+        {{ f.files_field('files', 'Stress ACF file(s)', '.txt,.dat',
+                        'One or more fix ave/correlate output files with ACF_Sxy/Sxz/Syz and ACF_Nxy/Nxz/Nyz columns. Select several repeat-seed files (same lag-time grid) to average their G(t) together.') }}
         {{ f.number_field('volume', 'Volume', none, step='any', min=f.POSITIVE,
                           help='System volume in LJ units (length cubed). Must be positive.') }}
         {{ f.number_field('temperature', 'Temperature', none, step='any', min=f.POSITIVE,
                           help='System temperature in LJ units. Must be positive.') }}
+        {% set regime_fields = "files" %}
+        {% set regime_shared_fields = "volume,temperature" %}
+        {% set regime_view_url = "/api/rheology/stress-relaxation" %}
+        {% set regime_merge_url = "/api/rheology/merge-regimes" %}
+        {% set regime_merge_kind = "rheology-gt" %}
+        {% set regime_download_stem = "G_t_regimes" %}
+        {% set regime_accept = ".txt,.dat" %}
+        {% include "partials/_regimes.html" %}
         <div class="form-actions">
-          {{ f.calculate_button('Calculate G(t)', '/api/rheology/stress-relaxation') }}
+          {{ f.job_calculate_button('Calculate G(t)', '/api/rheology/stress-relaxation/start') }}
         </div>
       </form>
     </div>

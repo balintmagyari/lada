@@ -14,13 +14,24 @@
   <div class="workbench">
     <div class="workbench-inputs">
       <form id="calc-form" method="post" enctype="multipart/form-data" hx-encoding="multipart/form-data">
-        {{ f.file_field('file', 'NumPy .npz trajectory', '.npz',
-                        'A NumPy archive holding an array named coords of shape (frames, atoms, 3).') }}
+        {{ f.files_field('files', 'NumPy .npz trajectory file(s)', '.npz',
+                        'One or more NumPy archives, each holding an array named coords of shape (frames, atoms, 3). Select several repeat-seed files (same time_per_frame, same system) to average their ACF together.') }}
         {{ f.number_field('time_per_frame', 'Time per frame', 1.0, step='any', min=f.POSITIVE,
                           help='Simulation time between two saved frames, greater than zero.') }}
         {% include "dynamics/_topology.html" %}
+        {% set regime_fields = "files,time_per_frame" %}
+        {% set regime_shared_fields = "mode,n_chains,beads_per_chain,first_index,custom" %}
+        {% set regime_view_url = "/api/dynamics/segment-acf" %}
+        {% set regime_merge_url = "/api/dynamics/merge-regimes" %}
+        {% set regime_merge_kind = "dynamics" %}
+        {% set regime_value_column = "acf" %}
+        {% set regime_y_label = "C(t)" %}
+        {% set regime_title = calc.title %}
+        {% set regime_download_stem = "segment_acf_regimes" %}
+        {% set regime_accept = ".npz" %}
+        {% include "partials/_regimes.html" %}
         <div class="form-actions">
-          {{ f.calculate_button('Calculate end-to-end ACF', '/api/dynamics/segment-acf') }}
+          {{ f.job_calculate_button('Calculate end-to-end ACF', '/api/dynamics/segment-acf/start') }}
         </div>
       </form>
     </div>

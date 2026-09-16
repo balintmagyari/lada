@@ -5,7 +5,7 @@ import pandas as pd
 from lada.analysis import calculate_avg_ree_sq, calculate_avg_rg_sq
 from lada.parsers import read_dump
 
-from .conftest import upload
+from .conftest import files_upload
 
 RG_URL = "/api/conformations/rg"
 REE_URL = "/api/conformations/ree"
@@ -22,7 +22,7 @@ def _expected_per_timestep(path, func, **kwargs):
 
 def test_rg_json_matches_lada(client, data_dir):
     path = data_dir / "sample_dump.dump"
-    r = client.post(RG_URL, files=upload(path))
+    r = client.post(RG_URL, files=files_upload(path))
     assert r.status_code == 200, r.text
     body = r.json()
     assert body["columns"] == ["timestep", "rg_sq"]
@@ -39,7 +39,7 @@ def test_rg_json_matches_lada(client, data_dir):
 
 
 def test_rg_htmx_partial_has_plot_and_downloads(client, data_dir, htmx):
-    r = client.post(RG_URL, files=upload(data_dir / "sample_dump.dump"), headers=htmx)
+    r = client.post(RG_URL, files=files_upload(data_dir / "sample_dump.dump"), headers=htmx)
     assert r.status_code == 200 and r.headers["content-type"].startswith("text/html")
     assert 'id="result-plot"' in r.text
     assert 'formaction="/api/conformations/rg/download?fmt=csv"' in r.text
@@ -48,14 +48,16 @@ def test_rg_htmx_partial_has_plot_and_downloads(client, data_dir, htmx):
 
 
 def test_rg_missing_mass_column_is_422_with_library_message(client, data_dir):
-    r = client.post(RG_URL, files=upload(data_dir / "sample_dump.dump"), data={"mass_col": "mass"})
+    r = client.post(
+        RG_URL, files=files_upload(data_dir / "sample_dump.dump"), data={"mass_col": "mass"}
+    )
     assert r.status_code == 422
     assert r.json()["detail"] == "Mass column 'mass' not found in data."
 
 
 def test_rg_invalid_coord_cols_is_422(client, data_dir):
     r = client.post(
-        RG_URL, files=upload(data_dir / "sample_dump.dump"), data={"coord_cols": "xu,yu"}
+        RG_URL, files=files_upload(data_dir / "sample_dump.dump"), data={"coord_cols": "xu,yu"}
     )
     assert r.status_code == 422
     assert r.json()["detail"] == (
@@ -65,7 +67,7 @@ def test_rg_invalid_coord_cols_is_422(client, data_dir):
 
 def test_ree_json_matches_lada(client, data_dir):
     path = data_dir / "sample_dump.dump"
-    r = client.post(REE_URL, files=upload(path))
+    r = client.post(REE_URL, files=files_upload(path))
     assert r.status_code == 200, r.text
     body = r.json()
     assert body["columns"] == ["timestep", "ree_sq"]
@@ -87,7 +89,7 @@ def test_ree_json_matches_lada(client, data_dir):
 
 def test_ree_vectors_json_shape(client, data_dir):
     path = data_dir / "sample_dump.dump"
-    r = client.post(REE_VECTORS_URL, files=upload(path))
+    r = client.post(REE_VECTORS_URL, files=files_upload(path))
     assert r.status_code == 200, r.text
     body = r.json()
     assert body["columns"] == ["timestep", "mol", "dx", "dy", "dz"]
@@ -99,8 +101,8 @@ def test_ree_vectors_json_shape(client, data_dir):
 
 
 def test_rg_download_csv_matches_view(client, data_dir):
-    view = client.post(RG_URL, files=upload(data_dir / "sample_dump.dump")).json()
-    r = client.post(RG_URL + "/download?fmt=csv", files=upload(data_dir / "sample_dump.dump"))
+    view = client.post(RG_URL, files=files_upload(data_dir / "sample_dump.dump")).json()
+    r = client.post(RG_URL + "/download?fmt=csv", files=files_upload(data_dir / "sample_dump.dump"))
     assert r.status_code == 200
     assert r.headers["content-disposition"] == 'attachment; filename="sample_dump_rg_sq.csv"'
     df = pd.read_csv(io.BytesIO(r.content), float_precision="round_trip")
@@ -110,13 +112,38 @@ def test_rg_download_csv_matches_view(client, data_dir):
 
 
 def test_rg_download_pgfplots_matches_view(client, data_dir):
-    view = client.post(RG_URL, files=upload(data_dir / "sample_dump.dump")).json()
-    r = client.post(RG_URL + "/download?fmt=pgfplots", files=upload(data_dir / "sample_dump.dump"))
+    view = client.post(RG_URL, files=files_upload(data_dir / "sample_dump.dump")).json()
+    r = client.post(
+        RG_URL + "/download?fmt=pgfplots", files=files_upload(data_dir / "sample_dump.dump")
+    )
     assert r.status_code == 200
     assert r.headers["content-disposition"] == 'attachment; filename="sample_dump_rg_sq.dat"'
     assert r.text.splitlines()[0] == " ".join(view["columns"])
     data = np.loadtxt(io.BytesIO(r.content), skiprows=1)
     assert np.array_equal(data, np.array(view["rows"], dtype=float))
+
+
+def test_rg_multiple_files_averages_them(client, data_dir):
+    dump = data_dir / "sample_dump.dump"
+    single = client.post(RG_URL, files=files_upload(dump)).json()
+    # Two copies of the same file: the average of a value with itself is itself.
+    doubled = client.post(RG_URL, files=files_upload(dump, dump)).json()
+    assert doubled["columns"] == single["columns"]
+    assert np.allclose(
+        np.array(doubled["rows"], dtype=float), np.array(single["rows"], dtype=float)
+    )
+    assert doubled["meta"]["n_files"] == 2
+    assert doubled["download_stem"] == "sample_dump_avg2_rg_sq"
+
+
+def test_ree_vectors_multiple_files_concatenate_with_a_repeat_column(client, data_dir):
+    dump = data_dir / "sample_dump.dump"
+    r = client.post(REE_VECTORS_URL, files=files_upload(dump, dump))
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["columns"] == ["timestep", "mol", "dx", "dy", "dz", "repeat"]
+    single = client.post(REE_VECTORS_URL, files=files_upload(dump)).json()
+    assert body["n_rows_total"] == 2 * single["n_rows_total"]
 
 
 def test_conformation_pages_render_with_calc_form(client):

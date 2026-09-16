@@ -39,8 +39,8 @@ def acf_values(t: np.ndarray, amplitude: float, rng: np.random.Generator) -> np.
     return np.maximum(base + noise, 1e-6)
 
 
-def main(out: Path = OUT) -> None:
-    rng = np.random.default_rng(SEED)
+def main(out: Path = OUT, seed: int = SEED) -> None:
+    rng = np.random.default_rng(seed)
     t = np.arange(N_LAGS) * DT
     lines = [",".join(COLUMNS)]
     for timestep, scale in ((0, 1.0), (1000, 0.98)):
@@ -54,3 +54,6 @@ def main(out: Path = OUT) -> None:
 
 if __name__ == "__main__":
     main()
+    # A second seed-repeat (same lag-time grid and amplitudes, independent noise), for
+    # multi-file averaging tests.
+    main(out=Path(__file__).with_name("sample_stress_acf_repeat2.txt"), seed=SEED + 1)

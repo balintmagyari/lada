@@ -60,6 +60,30 @@ def save_upload(upload: UploadFile, directory: Path, max_bytes: int) -> Path:
     return dest
 
 
+def save_uploads(
+    uploads: list[UploadFile], directory: Path, max_bytes: int, max_files: int
+) -> list[Path]:
+    """Save each upload into its own numbered subdirectory, preserving every original filename.
+
+    A shared directory would let two uploads with the same sanitized basename (two seed-repeat
+    files both literally named "trajectory.npz") silently collide; a subdirectory per file avoids
+    that without renaming anything, so `path.name`/`path.stem` still read exactly as a single
+    upload's would.
+    """
+    if not uploads:
+        raise ValueError("At least one file is required.")
+    if len(uploads) > max_files:
+        raise ValueError(
+            f"At most {max_files} files are accepted in one request; got {len(uploads)}."
+        )
+    paths = []
+    for i, upload in enumerate(uploads):
+        dest_dir = directory / f"{i:03d}"
+        dest_dir.mkdir(parents=True, exist_ok=True)
+        paths.append(save_upload(upload, dest_dir, max_bytes))
+    return paths
+
+
 def get_workspace(settings: Annotated[Settings, Depends(get_settings)]) -> Iterator[Path]:
     """Per-request temp directory for view routes; removed when the request finishes."""
     ws = new_workspace(settings)

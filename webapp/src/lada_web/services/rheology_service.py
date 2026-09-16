@@ -13,6 +13,30 @@ def stress_relaxation(path: Path, volume: float, temperature: float) -> pd.DataF
     return calc_stress_relaxation(df, volume, temperature)
 
 
+def dynamic_moduli_from_gt(
+    g_t: pd.DataFrame,
+    *,
+    method: Literal["GK", "FSR", "both"],
+    t_min: float,
+    t_cutoff: float | None,
+    n_modes: int,
+    n_omega: int,
+    omega_min: float | None,
+    omega_max: float | None,
+) -> pd.DataFrame:
+    """Fit and transform an already-computed G(t) (e.g. averaged/merged across files/regimes)."""
+    return calc_dynamic_moduli_prony(
+        g_t,
+        method=method,
+        t_min=t_min,
+        t_cutoff=t_cutoff,
+        n_modes=n_modes,
+        n_omega=n_omega,
+        omega_min=omega_min,
+        omega_max=omega_max,
+    )
+
+
 def dynamic_moduli(
     path: Path,
     volume: float,
@@ -27,7 +51,7 @@ def dynamic_moduli(
     omega_max: float | None,
 ) -> pd.DataFrame:
     g_t = stress_relaxation(path, volume, temperature)
-    return calc_dynamic_moduli_prony(
+    return dynamic_moduli_from_gt(
         g_t,
         method=method,
         t_min=t_min,

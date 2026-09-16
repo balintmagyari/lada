@@ -143,17 +143,28 @@ def _frame(result: np.ndarray, name: str) -> pd.DataFrame:
     return pd.DataFrame({"lag_time": result[:, 0], name: result[:, 1]})
 
 
-def segment_acf(path, pairs, time_per_frame) -> pd.DataFrame:
-    return _frame(calculate_segment_acf_from_trajectory(str(path), pairs, time_per_frame), "acf")
-
-
-def rouse_mode_acf(path, chains, p, time_per_frame) -> pd.DataFrame:
+def segment_acf(path, pairs, time_per_frame, progress_callback=None) -> pd.DataFrame:
     return _frame(
-        calculate_rouse_mode_acf_from_trajectory(str(path), chains, p, time_per_frame), "acf"
+        calculate_segment_acf_from_trajectory(
+            str(path), pairs, time_per_frame, progress_callback=progress_callback
+        ),
+        "acf",
     )
 
 
-def isf(path, time_per_frame, q_magnitude, n_vectors) -> pd.DataFrame:
+def rouse_mode_acf(path, chains, p, time_per_frame, progress_callback=None) -> pd.DataFrame:
     return _frame(
-        calculate_isf_from_trajectory(str(path), time_per_frame, q_magnitude, n_vectors), "isf"
+        calculate_rouse_mode_acf_from_trajectory(
+            str(path), chains, p, time_per_frame, progress_callback=progress_callback
+        ),
+        "acf",
+    )
+
+
+def isf(path, time_per_frame, q_magnitude, n_vectors, progress_callback=None) -> pd.DataFrame:
+    return _frame(
+        calculate_isf_from_trajectory(
+            str(path), time_per_frame, q_magnitude, n_vectors, progress_callback=progress_callback
+        ),
+        "isf",
     )

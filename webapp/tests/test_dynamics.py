@@ -16,7 +16,7 @@ from lada_web.services.dynamics_service import (
     resolve_segment_pairs,
 )
 
-from .conftest import upload
+from .conftest import files_upload
 
 SEGMENT_URL = "/api/dynamics/segment-acf"
 ROUSE_URL = "/api/dynamics/rouse-mode"
@@ -166,7 +166,7 @@ def test_inspect_trajectory_rejects_the_wrong_shape(tmp_path):
 
 def test_segment_acf_uniform_matches_the_library(client, data_dir):
     path = trajectory(data_dir)
-    r = client.post(SEGMENT_URL, files=upload(path), data=UNIFORM | {"time_per_frame": "2.0"})
+    r = client.post(SEGMENT_URL, files=files_upload(path), data=UNIFORM | {"time_per_frame": "2.0"})
     assert r.status_code == 200, r.text
     body = r.json()
     assert body["columns"] == ["lag_time", "acf"]
@@ -189,7 +189,7 @@ def test_segment_acf_uniform_matches_the_library(client, data_dir):
 def test_segment_acf_custom_matches_the_library(client, data_dir):
     path = trajectory(data_dir)
     form = {"mode": "custom", "custom": "0,7\n8,15", "time_per_frame": "1.0"}
-    r = client.post(SEGMENT_URL, files=upload(path), data=form)
+    r = client.post(SEGMENT_URL, files=files_upload(path), data=form)
     assert r.status_code == 200, r.text
     body = r.json()
     assert body["meta"]["chains"] == 2
@@ -209,7 +209,7 @@ def test_segment_acf_custom_matches_the_library(client, data_dir):
     ids=["custom", "uniform"],
 )
 def test_segment_acf_rejects_an_index_beyond_the_last_atom(client, data_dir, form):
-    r = client.post(SEGMENT_URL, files=upload(trajectory(data_dir)), data=form)
+    r = client.post(SEGMENT_URL, files=files_upload(trajectory(data_dir)), data=form)
     assert r.status_code == 422
     assert "32 atoms" in r.json()["detail"]
 
@@ -217,7 +217,7 @@ def test_segment_acf_rejects_an_index_beyond_the_last_atom(client, data_dir, for
 def test_segment_acf_htmx_partial_carries_the_plot(client, data_dir, htmx):
     r = client.post(
         SEGMENT_URL,
-        files=upload(trajectory(data_dir)),
+        files=files_upload(trajectory(data_dir)),
         data=UNIFORM | {"time_per_frame": "2.0"},
         headers=htmx,
     )
@@ -229,8 +229,8 @@ def test_segment_acf_htmx_partial_carries_the_plot(client, data_dir, htmx):
 def test_segment_acf_csv_download_round_trips(client, data_dir):
     path = trajectory(data_dir)
     form = UNIFORM | {"time_per_frame": "2.0"}
-    view = client.post(SEGMENT_URL, files=upload(path), data=form).json()
-    r = client.post(SEGMENT_URL + "/download?fmt=csv", files=upload(path), data=form)
+    view = client.post(SEGMENT_URL, files=files_upload(path), data=form).json()
+    r = client.post(SEGMENT_URL + "/download?fmt=csv", files=files_upload(path), data=form)
     assert r.status_code == 200
     assert (
         r.headers["content-disposition"]
@@ -243,9 +243,32 @@ def test_segment_acf_csv_download_round_trips(client, data_dir):
     assert np.array_equal(df.to_numpy()[: len(view["rows"])], np.array(view["rows"], dtype=float))
 
 
+def test_segment_acf_multiple_files_averages_across_repeats(client, data_dir):
+    path = trajectory(data_dir)
+    repeat2 = data_dir / "sample_trajectory_repeat2.npz"
+    form = UNIFORM | {"time_per_frame": "2.0"}
+    single = client.post(SEGMENT_URL, files=files_upload(path), data=form).json()
+    combined = client.post(SEGMENT_URL, files=files_upload(path, repeat2), data=form).json()
+    assert combined["meta"]["n_files"] == 2
+    assert combined["download_stem"] == "sample_trajectory_avg2_segment_acf"
+    # C(0) is normalized to 1.0 by every input, so the average is still exactly 1.0 at lag 0.
+    assert combined["rows"][0] == [0.0, 1.0]
+    # A different, independently-seeded second file changes the averaged curve from the
+    # single-file curve past lag 0 (statistically certain not to coincide by chance).
+    assert combined["rows"][1] != single["rows"][1]
+
+
+def test_segment_acf_rejects_files_with_different_atom_counts(client, data_dir, tmp_path):
+    mismatched = write_npz(tmp_path / "mismatched.npz", n_frames=32, n_atoms=16)
+    form = UNIFORM | {"time_per_frame": "1.0"}
+    r = client.post(SEGMENT_URL, files=files_upload(trajectory(data_dir), mismatched), data=form)
+    assert r.status_code == 422
+    assert "same number of atoms" in r.json()["detail"]
+
+
 def test_segment_acf_needs_a_positive_frame_time(client, data_dir):
     form = UNIFORM | {"time_per_frame": "0"}
-    r = client.post(SEGMENT_URL, files=upload(trajectory(data_dir)), data=form)
+    r = client.post(SEGMENT_URL, files=files_upload(trajectory(data_dir)), data=form)
     assert r.status_code == 422
 
 
@@ -254,7 +277,7 @@ def test_segment_acf_needs_a_positive_frame_time(client, data_dir):
 
 def test_rouse_mode_acf_starts_at_one(client, data_dir):
     form = UNIFORM | {"time_per_frame": "1.0", "p": "1"}
-    r = client.post(ROUSE_URL, files=upload(trajectory(data_dir)), data=form)
+    r = client.post(ROUSE_URL, files=files_upload(trajectory(data_dir)), data=form)
     assert r.status_code == 200, r.text
     body = r.json()
     assert body["columns"] == ["lag_time", "acf"]
@@ -265,7 +288,7 @@ def test_rouse_mode_acf_starts_at_one(client, data_dir):
 
 def test_rouse_mode_forwards_the_library_message_for_a_mode_that_is_too_high(client, data_dir):
     form = UNIFORM | {"time_per_frame": "1.0", "p": "8"}
-    r = client.post(ROUSE_URL, files=upload(trajectory(data_dir)), data=form)
+    r = client.post(ROUSE_URL, files=files_upload(trajectory(data_dir)), data=form)
     assert r.status_code == 422
     detail = r.json()["detail"]
     assert "p=8" in detail and "N=8" in detail
@@ -274,7 +297,7 @@ def test_rouse_mode_forwards_the_library_message_for_a_mode_that_is_too_high(cli
 def test_rouse_mode_pgfplots_download_names_the_mode(client, data_dir):
     form = UNIFORM | {"time_per_frame": "1.0", "p": "2"}
     r = client.post(
-        ROUSE_URL + "/download?fmt=pgfplots", files=upload(trajectory(data_dir)), data=form
+        ROUSE_URL + "/download?fmt=pgfplots", files=files_upload(trajectory(data_dir)), data=form
     )
     assert r.status_code == 200
     assert (
@@ -289,7 +312,7 @@ def test_rouse_mode_pgfplots_download_names_the_mode(client, data_dir):
 
 def test_isf_starts_at_one(client, data_dir):
     form = {"time_per_frame": "1.0", "q_magnitude": "1.0", "n_vectors": "5"}
-    r = client.post(ISF_URL, files=upload(trajectory(data_dir)), data=form)
+    r = client.post(ISF_URL, files=files_upload(trajectory(data_dir)), data=form)
     assert r.status_code == 200, r.text
     body = r.json()
     assert body["columns"] == ["lag_time", "isf"]
@@ -301,14 +324,14 @@ def test_isf_starts_at_one(client, data_dir):
 
 def test_isf_needs_a_positive_q(client, data_dir):
     form = {"time_per_frame": "1.0", "q_magnitude": "0", "n_vectors": "5"}
-    r = client.post(ISF_URL, files=upload(trajectory(data_dir)), data=form)
+    r = client.post(ISF_URL, files=files_upload(trajectory(data_dir)), data=form)
     assert r.status_code == 422
 
 
 def test_isf_rejects_a_single_q_direction(client, data_dir):
     # lada spreads the directions over n_vectors - 1 steps, so a single one has no meaning.
     form = {"time_per_frame": "1.0", "q_magnitude": "1.0", "n_vectors": "1"}
-    r = client.post(ISF_URL, files=upload(trajectory(data_dir)), data=form)
+    r = client.post(ISF_URL, files=files_upload(trajectory(data_dir)), data=form)
     assert r.status_code == 422
     detail = r.json()["detail"]
     assert any("n_vectors" in error["loc"] for error in detail)
@@ -316,7 +339,9 @@ def test_isf_rejects_a_single_q_direction(client, data_dir):
 
 def test_isf_csv_download(client, data_dir):
     form = {"time_per_frame": "1.0", "q_magnitude": "1.0", "n_vectors": "5"}
-    r = client.post(ISF_URL + "/download?fmt=csv", files=upload(trajectory(data_dir)), data=form)
+    r = client.post(
+        ISF_URL + "/download?fmt=csv", files=files_upload(trajectory(data_dir)), data=form
+    )
     assert r.status_code == 200
     assert r.headers["content-disposition"] == 'attachment; filename="sample_trajectory_isf.csv"'
     df = pd.read_csv(io.BytesIO(r.content), float_precision="round_trip")
@@ -329,7 +354,7 @@ def test_isf_csv_download(client, data_dir):
 def test_too_many_frames_is_413(client, tmp_path):
     path = write_npz(tmp_path / "long.npz", n_frames=101, n_atoms=32)
     form = UNIFORM | {"time_per_frame": "1.0"}
-    r = client.post(SEGMENT_URL, files=upload(path), data=form)
+    r = client.post(SEGMENT_URL, files=files_upload(path), data=form)
     assert r.status_code == 413
     assert "at most 100" in r.json()["detail"]
 
@@ -338,7 +363,7 @@ def test_oversized_trajectory_is_413(client, tmp_path, temp_root):
     path = write_npz(tmp_path / "big.npz", n_frames=50, n_atoms=1050)
     assert path.stat().st_size > 1024 * 1024
     form = UNIFORM | {"time_per_frame": "1.0"}
-    r = client.post(SEGMENT_URL, files=upload(path), data=form)
+    r = client.post(SEGMENT_URL, files=files_upload(path), data=form)
     assert r.status_code == 413
     assert "upload limit" in r.json()["detail"]
     assert not temp_root.exists() or list(temp_root.iterdir()) == []

@@ -12,7 +12,7 @@ import numpy as np
 
 from lada_web.services import parsers_service
 
-from .conftest import upload
+from .conftest import files_upload, upload
 
 LOG_URL = "/api/parsers/log/table"
 DUMP_DOWNLOAD_URL = "/api/parsers/dump/table/download"
@@ -71,11 +71,11 @@ def test_no_request_leaves_a_temporary_workspace_behind(
             200,
             lambda: client.post(f"{DUMP_DOWNLOAD_URL}?fmt=csv", files=upload(dump)),
         ),
-        ("rg view", 200, lambda: client.post(RG_URL, files=upload(dump))),
+        ("rg view", 200, lambda: client.post(RG_URL, files=files_upload(dump))),
         (
             "rg with a column the dump does not have",
             422,
-            lambda: client.post(RG_URL, files=upload(dump), data={"mass_col": "mass"}),
+            lambda: client.post(RG_URL, files=files_upload(dump), data={"mass_col": "mass"}),
         ),
         (
             "upload over the size limit",
@@ -86,7 +86,7 @@ def test_no_request_leaves_a_temporary_workspace_behind(
             "segment acf view",
             200,
             lambda: client.post(
-                SEGMENT_URL, files=upload(npz), data=UNIFORM | {"time_per_frame": "1.0"}
+                SEGMENT_URL, files=files_upload(npz), data=UNIFORM | {"time_per_frame": "1.0"}
             ),
         ),
         (
@@ -94,20 +94,22 @@ def test_no_request_leaves_a_temporary_workspace_behind(
             413,
             lambda: client.post(
                 SEGMENT_URL,
-                files=upload(too_many_frames),
+                files=files_upload(too_many_frames),
                 data=UNIFORM | {"time_per_frame": "1.0"},
             ),
         ),
         (
             "stress relaxation with the wrong acf schema",
             422,
-            lambda: client.post(STRESS_URL, files=upload(acf), data=THERMO_STATE),
+            lambda: client.post(STRESS_URL, files=files_upload(acf), data=THERMO_STATE),
         ),
         (
             "dynamic moduli pgfplots download",
             200,
             lambda: client.post(
-                f"{MODULI_DOWNLOAD_URL}?fmt=pgfplots", files=upload(stress_acf), data=THERMO_STATE
+                f"{MODULI_DOWNLOAD_URL}?fmt=pgfplots",
+                files=files_upload(stress_acf),
+                data=THERMO_STATE,
             ),
         ),
         (

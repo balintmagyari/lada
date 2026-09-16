@@ -25,6 +25,15 @@ class TrajectoryTooLarge(Exception):
         )
 
 
+class TooManyJobs(Exception):
+    """Raised when the background-job concurrency cap is already exhausted."""
+
+    def __init__(self, limit: int) -> None:
+        super().__init__(
+            f"Too many calculations are running at once (limit {limit}). Try again shortly."
+        )
+
+
 class TrajectoryTooLargeInMemory(Exception):
     """A small compressed archive can still declare an array too big to load."""
 
@@ -97,6 +106,10 @@ def register_error_handlers(app: FastAPI) -> None:
     @app.exception_handler(TrajectoryTooLargeInMemory)
     async def too_large(request: Request, exc: Exception) -> Response:
         return error_response(request, 413, _message(exc), title="Too large")
+
+    @app.exception_handler(TooManyJobs)
+    async def too_many_jobs(request: Request, exc: Exception) -> Response:
+        return error_response(request, 429, _message(exc), title="Server busy")
 
     @app.exception_handler(RequestValidationError)
     async def validation_error(request: Request, exc: RequestValidationError) -> Response:

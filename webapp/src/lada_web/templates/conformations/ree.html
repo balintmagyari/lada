@@ -14,8 +14,8 @@
   <div class="workbench">
     <div class="workbench-inputs">
       <form id="calc-form" method="post" enctype="multipart/form-data" hx-encoding="multipart/form-data">
-        {{ f.file_field('file', 'LAMMPS dump file', '.dump,.lammpstrj,.txt',
-                        'A LAMMPS dump file with unwrapped coordinate columns.') }}
+        {{ f.files_field('files', 'LAMMPS dump file(s)', '.dump,.lammpstrj,.txt',
+                        'One or more LAMMPS dump files with unwrapped coordinate columns. Select several repeat-seed files to average their Ree² together.') }}
         {{ f.text_field('coord_cols', 'Coordinate columns', 'xu,yu,zu',
                         'Three comma-separated column names for the unwrapped x, y, z coordinates.') }}
         {{ f.text_field('molecule_col', 'Molecule column', 'mol',
@@ -23,7 +23,7 @@
         {{ f.text_field('atom_id_col', 'Atom ID column', 'id',
                         'Column name for the per-atom ID, used to find each chain\'s two ends.') }}
         <div class="form-actions">
-          {{ f.calculate_button('Calculate Ree²', '/api/conformations/ree') }}
+          {{ f.job_calculate_button('Calculate Ree²', '/api/conformations/ree/start') }}
         </div>
       </form>
     </div>

@@ -5,7 +5,7 @@ import pandas as pd
 from lada.analysis import calc_dynamic_moduli_prony, calc_stress_relaxation
 from lada.parsers import read_lammps_acf
 
-from .conftest import upload
+from .conftest import files_upload
 
 G_URL = "/api/rheology/stress-relaxation"
 MODULI_URL = "/api/rheology/dynamic-moduli"
@@ -18,7 +18,7 @@ def _acf_df(data_dir):
 def test_stress_relaxation_json_matches_direct_call(client, data_dir):
     r = client.post(
         G_URL,
-        files=upload(data_dir / "sample_stress_acf.txt"),
+        files=files_upload(data_dir / "sample_stress_acf.txt"),
         data={"volume": "1000", "temperature": "1"},
     )
     assert r.status_code == 200, r.text
@@ -41,7 +41,7 @@ def test_stress_relaxation_json_matches_direct_call(client, data_dir):
 def test_stress_relaxation_non_positive_volume_is_422_validation_list(client, data_dir):
     r = client.post(
         G_URL,
-        files=upload(data_dir / "sample_stress_acf.txt"),
+        files=files_upload(data_dir / "sample_stress_acf.txt"),
         data={"volume": "0", "temperature": "1"},
     )
     assert r.status_code == 422
@@ -51,9 +51,37 @@ def test_stress_relaxation_non_positive_volume_is_422_validation_list(client, da
 def test_stress_relaxation_wrong_acf_schema_is_422_naming_missing_column(client, data_dir):
     r = client.post(
         G_URL,
-        files=upload(data_dir / "sample_acf.txt"),
+        files=files_upload(data_dir / "sample_acf.txt"),
         data={"volume": "1000", "temperature": "1"},
     )
+    assert r.status_code == 422
+    assert "ACF_Sxy" in r.json()["detail"]
+
+
+def test_stress_relaxation_multiple_files_averages_across_repeats(client, data_dir):
+    a = data_dir / "sample_stress_acf.txt"
+    b = data_dir / "sample_stress_acf_repeat2.txt"
+    form = {"volume": "1000", "temperature": "1"}
+    single_a = client.post(G_URL, files=files_upload(a), data=form).json()
+    single_b = client.post(G_URL, files=files_upload(b), data=form).json()
+    combined = client.post(G_URL, files=files_upload(a, b), data=form).json()
+    assert combined["meta"]["n_files"] == 2
+    assert combined["download_stem"] == "sample_stress_acf_avg2_G_t"
+    expected_g_gk = (
+        np.array(single_a["rows"])[: combined["n_rows_total"], 1]
+        + np.array(single_b["rows"])[: combined["n_rows_total"], 1]
+    ) / 2
+    # rows are capped by max_table_rows; the plot series carry every averaged row.
+    assert np.allclose(combined["plot"]["series"]["G_GK"][:20], expected_g_gk[:20])
+
+
+def test_stress_relaxation_rejects_mismatched_lag_time_grids(client, data_dir):
+    a = data_dir / "sample_stress_acf.txt"
+    b = data_dir / "sample_acf.txt"
+    form = {"volume": "1000", "temperature": "1"}
+    r = client.post(G_URL, files=files_upload(a, b), data=form)
+    # sample_acf.txt lacks the ACF_Sxy-style columns entirely, so this fails on schema first —
+    # confirms per-file validation runs before any cross-file averaging is attempted.
     assert r.status_code == 422
     assert "ACF_Sxy" in r.json()["detail"]
 
@@ -61,7 +89,7 @@ def test_stress_relaxation_wrong_acf_schema_is_422_naming_missing_column(client,
 def test_dynamic_moduli_defaults(client, data_dir):
     r = client.post(
         MODULI_URL,
-        files=upload(data_dir / "sample_stress_acf.txt"),
+        files=files_upload(data_dir / "sample_stress_acf.txt"),
         data={"volume": "1000", "temperature": "1"},
     )
     assert r.status_code == 200, r.text
@@ -79,7 +107,7 @@ def test_dynamic_moduli_defaults(client, data_dir):
 def test_dynamic_moduli_matches_direct_call(client, data_dir):
     r = client.post(
         MODULI_URL,
-        files=upload(data_dir / "sample_stress_acf.txt"),
+        files=files_upload(data_dir / "sample_stress_acf.txt"),
         data={"volume": "1000", "temperature": "1"},
     )
     body = r.json()
@@ -93,7 +121,7 @@ def test_dynamic_moduli_matches_direct_call(client, data_dir):
 def test_dynamic_moduli_method_both_yields_five_suffixed_columns(client, data_dir):
     r = client.post(
         MODULI_URL,
-        files=upload(data_dir / "sample_stress_acf.txt"),
+        files=files_upload(data_dir / "sample_stress_acf.txt"),
         data={"volume": "1000", "temperature": "1", "method": "both"},
     )
     assert r.status_code == 200, r.text
@@ -109,7 +137,7 @@ def test_dynamic_moduli_method_both_yields_five_suffixed_columns(client, data_di
 def test_dynamic_moduli_n_modes_too_large_is_422_with_library_message(client, data_dir):
     r = client.post(
         MODULI_URL,
-        files=upload(data_dir / "sample_stress_acf.txt"),
+        files=files_upload(data_dir / "sample_stress_acf.txt"),
         data={"volume": "1000", "temperature": "1", "n_modes": "500"},
     )
     assert r.status_code == 422
@@ -119,7 +147,7 @@ def test_dynamic_moduli_n_modes_too_large_is_422_with_library_message(client, da
 def test_dynamic_moduli_empty_t_cutoff_is_accepted(client, data_dir):
     r = client.post(
         MODULI_URL,
-        files=upload(data_dir / "sample_stress_acf.txt"),
+        files=files_upload(data_dir / "sample_stress_acf.txt"),
         data={"volume": "1000", "temperature": "1", "t_cutoff": ""},
     )
     assert r.status_code == 200, r.text
@@ -128,12 +156,12 @@ def test_dynamic_moduli_empty_t_cutoff_is_accepted(client, data_dir):
 def test_dynamic_moduli_pgfplots_download_matches_view(client, data_dir):
     view = client.post(
         MODULI_URL,
-        files=upload(data_dir / "sample_stress_acf.txt"),
+        files=files_upload(data_dir / "sample_stress_acf.txt"),
         data={"volume": "1000", "temperature": "1"},
     ).json()
     r = client.post(
         MODULI_URL + "/download?fmt=pgfplots",
-        files=upload(data_dir / "sample_stress_acf.txt"),
+        files=files_upload(data_dir / "sample_stress_acf.txt"),
         data={"volume": "1000", "temperature": "1"},
     )
     assert r.status_code == 200, r.text
@@ -146,12 +174,12 @@ def test_dynamic_moduli_pgfplots_download_matches_view(client, data_dir):
 def test_stress_relaxation_csv_download_matches_view(client, data_dir):
     view = client.post(
         G_URL,
-        files=upload(data_dir / "sample_stress_acf.txt"),
+        files=files_upload(data_dir / "sample_stress_acf.txt"),
         data={"volume": "1000", "temperature": "1"},
     ).json()
     r = client.post(
         G_URL + "/download?fmt=csv",
-        files=upload(data_dir / "sample_stress_acf.txt"),
+        files=files_upload(data_dir / "sample_stress_acf.txt"),
         data={"volume": "1000", "temperature": "1"},
     )
     assert r.status_code == 200
@@ -168,11 +196,11 @@ def test_stress_relaxation_page_renders(client):
     r = client.get("/rheology/stress-relaxation")
     assert r.status_code == 200
     assert 'id="calc-form"' in r.text
-    assert 'hx-post="/api/rheology/stress-relaxation"' in r.text
+    assert 'data-start-url="/api/rheology/stress-relaxation/start"' in r.text
 
 
 def test_dynamic_moduli_page_renders(client):
     r = client.get("/rheology/dynamic-moduli")
     assert r.status_code == 200
     assert 'id="calc-form"' in r.text
-    assert 'hx-post="/api/rheology/dynamic-moduli"' in r.text
+    assert 'data-start-url="/api/rheology/dynamic-moduli/start"' in r.text

@@ -1,5 +1,7 @@
 """Application factory."""
 
+import threading
+import time
 from collections.abc import Awaitable, Callable
 
 from fastapi import FastAPI, Request
@@ -9,8 +11,12 @@ from fastapi.staticfiles import StaticFiles
 from . import __version__
 from .config import Settings
 from .errors import error_response, register_error_handlers
+from .jobs import JobStore
 from .rendering import STATIC_DIR
-from .routers import conformations, dynamics, modifiers, pages, parsers, rheology
+from .routers import conformations, dynamics, jobs, modifiers, pages, parsers, rheology
+
+# How often the background sweep thread prunes jobs older than settings.job_ttl_seconds.
+JOB_SWEEP_INTERVAL_SECONDS = 60
 
 # Headroom over the largest accepted upload for the multipart envelope and the other fields.
 BODY_OVERHEAD_BYTES = 1024 * 1024
@@ -18,6 +24,10 @@ BODY_OVERHEAD_BYTES = 1024 * 1024
 # Only these routes take an .npz trajectory; everything else takes a text upload, and must be
 # held to the much smaller text budget rather than to the trajectory one.
 TRAJECTORY_PREFIX = "/api/dynamics/"
+
+# These routes accept several files (repeat seeds, or regime files) to average into one
+# calculation; parsers/modifiers stay single-file, so they keep the tighter one-file ceiling.
+MULTI_FILE_TEXT_PREFIXES = ("/api/conformations/", "/api/rheology/")
 
 TOO_LARGE_MESSAGE = "The request body is larger than this server accepts."
 NO_LENGTH_MESSAGE = (
@@ -36,11 +46,33 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     )
     resolved = settings or Settings()
     app.state.settings = resolved
+
+    app.state.job_store = JobStore()
+    app.state.job_semaphore = threading.Semaphore(resolved.max_concurrent_jobs)
+
+    def sweep_loop() -> None:
+        while True:
+            time.sleep(JOB_SWEEP_INTERVAL_SECONDS)
+            app.state.job_store.sweep(resolved.job_ttl_seconds)
+
+    threading.Thread(target=sweep_loop, daemon=True).start()
+
+    # Dynamics and the multi-file text routes may carry up to max_files_per_request uploads in
+    # one body; parsers/modifiers stay single-file, so they keep the tighter one-file ceiling.
     upload_ceiling = resolved.max_upload_bytes + BODY_OVERHEAD_BYTES
-    trajectory_ceiling = resolved.max_trajectory_bytes + BODY_OVERHEAD_BYTES
+    multi_upload_ceiling = (
+        resolved.max_upload_bytes * resolved.max_files_per_request + BODY_OVERHEAD_BYTES
+    )
+    trajectory_ceiling = (
+        resolved.max_trajectory_bytes * resolved.max_files_per_request + BODY_OVERHEAD_BYTES
+    )
 
     def body_ceiling(path: str) -> int:
-        return trajectory_ceiling if path.startswith(TRAJECTORY_PREFIX) else upload_ceiling
+        if path.startswith(TRAJECTORY_PREFIX):
+            return trajectory_ceiling
+        if path.startswith(MULTI_FILE_TEXT_PREFIXES):
+            return multi_upload_ceiling
+        return upload_ceiling
 
     @app.middleware("http")
     async def limit_body_size(
@@ -76,6 +108,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         dynamics.router,
         rheology.router,
         modifiers.router,
+        jobs.router,
         pages.router,  # last: it owns the catch-all /{section}/{slug}
     ):
         app.include_router(router)

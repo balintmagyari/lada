@@ -1,0 +1,64 @@
+{# Optional additional regimes, for calculations whose sampling is split into several
+   non-overlapping time windows (e.g. fast / mid / slow), each possibly with its own files to
+   average. Regime 1 is the page's own fields above this partial; this only adds regime 2+.
+   Once at least one extra regime exists, the Calculate button here switches to a JS-driven
+   multi-regime run (still one ordinary synchronous request per regime, then one merge request
+   — see static/js/app.js's ladaRunRegimes).
+
+   Set before including:
+   - regime_fields: comma-separated per-regime field names (e.g. "files,time_per_frame" or
+     "files" for the ACF-file-only rheology pages, whose spacing comes from the file itself).
+   - regime_shared_fields: comma-separated field names sent unchanged with every regime.
+   - regime_view_url: the per-regime endpoint to call (for dynamic-moduli this is
+     /api/rheology/stress-relaxation, not the page's own endpoint — see regime_merge_kind).
+   - regime_merge_url, regime_merge_kind ("dynamics" | "rheology-gt" | "rheology-moduli").
+   - regime_value_column, regime_y_label, regime_title: dynamics merge-request fields.
+   - regime_download_stem. #}
+<fieldset x-data="{ extra: [], nextKey: 1 }" class="regimes">
+  <legend>Additional regimes</legend>
+  <p class="field-help">Add a regime for each non-overlapping time window your data was
+    collected in (for example fast / mid / slow). Each regime can itself hold several files to
+    average, the same way the field above does. Every other field on this page (chain topology,
+    volume, temperature, fit settings) is shared across every regime.</p>
+
+  <template x-for="regime in extra" :key="regime">
+    <div class="regime-block">
+      <div class="field">
+        <label :for="'regime_' + regime + '_files'">
+          Files, regime <span x-text="extra.indexOf(regime) + 2"></span>
+        </label>
+        <input type="file" :id="'regime_' + regime + '_files'" :name="'regime_' + regime + '_files'"
+               multiple required accept="{{ regime_accept | default('') }}">
+      </div>
+      {% if 'time_per_frame' in regime_fields %}
+      <div class="field">
+        <label :for="'regime_' + regime + '_time_per_frame'">Time per frame</label>
+        <input type="number" step="any" min="1e-12" required
+               :id="'regime_' + regime + '_time_per_frame'"
+               :name="'regime_' + regime + '_time_per_frame'">
+      </div>
+      {% endif %}
+      <button type="button" @click="extra = extra.filter(r => r !== regime)">
+        Remove this regime
+      </button>
+    </div>
+  </template>
+
+  <button type="button" @click="extra.push(nextKey++)">Add another regime</button>
+
+  <button type="button" x-show="extra.length"
+          data-regime-count="1"
+          :data-regime-count="extra.length + 1"
+          data-regime-fields="{{ regime_fields }}"
+          data-shared-fields="{{ regime_shared_fields }}"
+          data-view-url="{{ regime_view_url }}"
+          data-merge-url="{{ regime_merge_url }}"
+          data-merge-kind="{{ regime_merge_kind }}"
+          data-value-column="{{ regime_value_column | default('') }}"
+          data-y-label="{{ regime_y_label | default('') }}"
+          data-title="{{ regime_title | default('') }}"
+          data-download-stem="{{ regime_download_stem }}"
+          onclick="window.ladaRunRegimes(this)">
+    Calculate all regimes
+  </button>
+</fieldset>

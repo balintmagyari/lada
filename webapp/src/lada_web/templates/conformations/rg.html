@@ -13,8 +13,8 @@
   <div class="workbench">
     <div class="workbench-inputs">
       <form id="calc-form" method="post" enctype="multipart/form-data" hx-encoding="multipart/form-data">
-        {{ f.file_field('file', 'LAMMPS dump file', '.dump,.lammpstrj,.txt',
-                        'A LAMMPS dump file with unwrapped coordinate columns.') }}
+        {{ f.files_field('files', 'LAMMPS dump file(s)', '.dump,.lammpstrj,.txt',
+                        'One or more LAMMPS dump files with unwrapped coordinate columns. Select several repeat-seed files to average their Rg² together.') }}
         {{ f.text_field('coord_cols', 'Coordinate columns', 'xu,yu,zu',
                         'Three comma-separated column names for the unwrapped x, y, z coordinates.') }}
         {{ f.text_field('molecule_col', 'Molecule column', 'mol',
@@ -22,7 +22,7 @@
         {{ f.text_field('mass_col', 'Mass column', '',
                         'Column name for per-atom mass. Leave blank to weight every atom equally.') }}
         <div class="form-actions">
-          {{ f.calculate_button('Calculate Rg²', '/api/conformations/rg') }}
+          {{ f.job_calculate_button('Calculate Rg²', '/api/conformations/rg/start') }}
         </div>
       </form>
     </div>

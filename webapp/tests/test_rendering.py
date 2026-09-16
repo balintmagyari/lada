@@ -6,7 +6,7 @@ import pytest
 
 from lada_web.rendering import sigfig, templates
 
-from .conftest import upload
+from .conftest import files_upload
 
 RG_URL = "/api/conformations/rg"
 
@@ -52,11 +52,11 @@ def test_table_shows_rounded_values_while_the_csv_download_stays_exact(client, d
     """One calculation rendered three ways: the screen rounds, JSON and the file do not."""
     path = data_dir / "sample_dump.dump"
 
-    exact = client.post(RG_URL, files=upload(path))
+    exact = client.post(RG_URL, files=files_upload(path))
     assert exact.status_code == 200, exact.text
     assert exact.json()["rows"][0] == [0.0, 20.567500000000003]
 
-    partial = client.post(RG_URL, files=upload(path), headers=htmx)
+    partial = client.post(RG_URL, files=files_upload(path), headers=htmx)
     assert partial.status_code == 200, partial.text
     assert re.findall(r"<td>([^<]*)</td>", partial.text) == [
         "0",
@@ -69,13 +69,13 @@ def test_table_shows_rounded_values_while_the_csv_download_stays_exact(client, d
     # The plot reads its numbers from data-result, which keeps every digit.
     assert "20.567500000000003" in re.search(r'data-result="([^"]*)"', partial.text).group(1)
 
-    download = client.post(f"{RG_URL}/download?fmt=csv", files=upload(path))
+    download = client.post(f"{RG_URL}/download?fmt=csv", files=files_upload(path))
     assert download.status_code == 200, download.text
     assert download.text.splitlines()[1] == "0,20.567500000000003"
 
 
 def test_an_untruncated_result_still_explains_the_rounding(client, data_dir, htmx):
-    r = client.post(RG_URL, files=upload(data_dir / "sample_dump.dump"), headers=htmx)
+    r = client.post(RG_URL, files=files_upload(data_dir / "sample_dump.dump"), headers=htmx)
     note = re.search(r'<p class="result-note">(.*?)</p>', r.text, re.S).group(1)
     assert "Values are shown to 6 significant figures; downloads carry full precision." in note
     assert "Showing the first" not in note

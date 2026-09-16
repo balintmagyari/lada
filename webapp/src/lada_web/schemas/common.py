@@ -19,6 +19,12 @@ class PlotSpec(BaseModel):
     series: dict[str, list[float | None]] = Field(default_factory=dict)
 
 
+class StartResponse(BaseModel):
+    """Returned by every `/start` route: the job to poll at `GET /api/jobs/{job_id}`."""
+
+    job_id: str
+
+
 class TableResult(BaseModel):
     """A computed table: the rows shown on screen (capped) plus metadata and an optional plot."""
 

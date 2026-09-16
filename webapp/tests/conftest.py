@@ -49,5 +49,18 @@ def htmx() -> dict[str, str]:
 
 
 def upload(path: Path) -> dict:
-    """files= argument for TestClient.post."""
+    """files= argument for TestClient.post: a single file under the legacy 'file' key.
+
+    Still used by the parsers/modifiers routes, which take exactly one file.
+    """
     return {"file": (path.name, path.read_bytes())}
+
+
+def files_upload(*paths: Path) -> list:
+    """files= argument for TestClient.post: one or more files under the 'files' key.
+
+    Used by the conformations/dynamics/rheology routes, which accept multiple files to
+    average. httpx/TestClient's `files=` parameter accepts a list of (name, file-tuple) pairs
+    to represent several values for the same form field.
+    """
+    return [("files", (p.name, p.read_bytes())) for p in paths]

@@ -226,4 +226,434 @@
       });
     });
   };
+
+  // --- Multi-regime orchestration --------------------------------------------
+  //
+  // A page opts in by including partials/_regimes.html, whose "Calculate all regimes" button
+  // carries the endpoints and field names to use as data-* attributes (see that file's header
+  // comment). Regime 0 is the page's own fields; extra regimes are indexed 1, 2, ... with
+  // `regime_<i>_<field>` names. Each regime is still one ordinary synchronous request to the
+  // page's per-regime endpoint — no background job/polling is involved here — followed by one
+  // request to a merge endpoint that combines the resulting series.
+
+  function copyNamedValue(form, name, target) {
+    var inputs = form.querySelectorAll('[name="' + name + '"]');
+    Array.prototype.forEach.call(inputs, function (input) {
+      if (input.type === "file") {
+        Array.prototype.forEach.call(input.files, function (file) {
+          target.append(name, file);
+        });
+      } else if (input.type === "checkbox" || input.type === "radio") {
+        if (input.checked) {
+          target.append(name, input.value);
+        }
+      } else {
+        target.append(name, input.value);
+      }
+    });
+  }
+
+  function regimeFormData(form, regimeIndex, regimeFields, sharedFields) {
+    var data = new FormData();
+    regimeFields.forEach(function (field) {
+      var sourceName = regimeIndex === 0 ? field : "regime_" + regimeIndex + "_" + field;
+      var temp = new FormData();
+      copyNamedValue(form, sourceName, temp);
+      temp.getAll(sourceName).forEach(function (value) {
+        data.append(field, value);
+      });
+    });
+    sharedFields.forEach(function (field) {
+      copyNamedValue(form, field, data);
+    });
+    return data;
+  }
+
+  // --- Client-side result rendering (job results arrive as JSON, not a pre-rendered partial) --
+  //
+  // A regime-merge result is rendered by asking the server for the htmx partial directly (see
+  // ladaRunRegimes below): the merge endpoint is a real Jinja-templated route. A job's result
+  // has no equivalent "ask again as HTML" step — /api/jobs/{id} is deliberately one generic,
+  // JSON-only endpoint shared by every domain (see routers/jobs.py) — so this mirrors
+  // templates/partials/table_result.html closely enough to look and behave the same.
+
+  var SIGNIFICANT_FIGURES = 6;
+  var EXACT_INTEGER_LIMIT = Math.pow(2, 53);
+
+  function sigfig(value) {
+    if (value === null || value === undefined) {
+      return "";
+    }
+    if (typeof value === "number") {
+      if (!isFinite(value)) {
+        return String(value);
+      }
+      if (Number.isInteger(value) && Math.abs(value) < EXACT_INTEGER_LIMIT) {
+        return String(value);
+      }
+      var rounded = Number(value.toPrecision(SIGNIFICANT_FIGURES));
+      return String(rounded);
+    }
+    return String(value);
+  }
+
+  function escapeHtml(text) {
+    var div = document.createElement("div");
+    div.textContent = text;
+    return div.innerHTML;
+  }
+
+  function renderTableResultHtml(result, downloadUrl) {
+    var summaryParts = [
+      result.n_rows_total + " " + (result.n_rows_total === 1 ? "row" : "rows") + ", ",
+      result.columns.length + " " + (result.columns.length === 1 ? "column" : "columns") + "."
+    ];
+    Object.keys(result.meta || {}).forEach(function (key) {
+      var label = key.replace(/_/g, " ");
+      label = label.charAt(0).toUpperCase() + label.slice(1);
+      summaryParts.push(" " + label + ": " + result.meta[key] + ".");
+    });
+
+    var plotHtml = "";
+    if (result.plot) {
+      plotHtml =
+        '<div class="plot-controls">' +
+        '<label><input type="checkbox" data-axis="xaxis"' +
+        (result.plot.x_log ? " checked" : "") +
+        "> Log x</label>" +
+        '<label><input type="checkbox" data-axis="yaxis"' +
+        (result.plot.y_log ? " checked" : "") +
+        "> Log y</label>" +
+        "</div>" +
+        '<div class="plot" id="result-plot"></div>';
+    }
+
+    var headerCells = result.columns
+      .map(function (c) {
+        return '<th scope="col">' + escapeHtml(c) + "</th>";
+      })
+      .join("");
+    var bodyRows = result.rows
+      .map(function (row) {
+        var cells = row
+          .map(function (v) {
+            return "<td>" + escapeHtml(sigfig(v)) + "</td>";
+          })
+          .join("");
+        return "<tr>" + cells + "</tr>";
+      })
+      .join("");
+
+    var note = result.truncated
+      ? "Showing the first " +
+        result.rows.length +
+        " of " +
+        result.n_rows_total +
+        " rows. Values are shown to " +
+        SIGNIFICANT_FIGURES +
+        " significant figures; downloads carry every row at full precision."
+      : "Values are shown to " +
+        SIGNIFICANT_FIGURES +
+        " significant figures; downloads carry full precision.";
+
+    var downloadsHtml = "";
+    if (downloadUrl) {
+      downloadsHtml =
+        '<div class="downloads">' +
+        '<button type="button" onclick="window.ladaDownloadJobResult(this, \'csv\')" ' +
+        'data-download-url="' +
+        escapeHtml(downloadUrl) +
+        '">Download CSV</button>' +
+        '<button type="button" onclick="window.ladaDownloadJobResult(this, \'pgfplots\')" ' +
+        'data-download-url="' +
+        escapeHtml(downloadUrl) +
+        '">Download pgfplots table</button>' +
+        "</div>";
+    }
+
+    var resultJson = escapeHtml(JSON.stringify(result));
+    return (
+      '<section class="result" id="result" data-result="' +
+      resultJson +
+      '">' +
+      '<header class="result-header"><h2>' +
+      escapeHtml(result.title) +
+      '</h2><p class="result-summary">' +
+      summaryParts.join("") +
+      "</p></header>" +
+      plotHtml +
+      '<div class="table-scroll" tabindex="0" role="region" aria-label="' +
+      escapeHtml(result.title) +
+      ' table"><table class="numbers"><thead><tr>' +
+      headerCells +
+      "</tr></thead><tbody>" +
+      bodyRows +
+      "</tbody></table></div>" +
+      '<p class="result-note">' +
+      note +
+      "</p>" +
+      downloadsHtml +
+      "</section>"
+    );
+  }
+
+  // window.ladaDownloadJobResult is set by ladaRunJob per result, since a job result has no
+  // upload form to resubmit for a download the way the synchronous pages do — it re-POSTs the
+  // exact same form data used to start the job, to the same domain's ordinary (non-job)
+  // download route, which already knows how to turn that into a file.
+
+  function readValue(form, name) {
+    var input = form.querySelector('[name="' + name + '"]');
+    if (!input) {
+      return null;
+    }
+    return input.value === "" ? null : input.value;
+  }
+
+  function readNumber(form, name) {
+    var value = readValue(form, name);
+    return value === null ? null : Number(value);
+  }
+
+  function renderRegimeProgress(message) {
+    var results = document.getElementById("results");
+    if (results) {
+      results.innerHTML = '<p class="results-empty">' + message + "</p>";
+    }
+  }
+
+  function renderRegimeError(message) {
+    var results = document.getElementById("results");
+    if (results) {
+      results.innerHTML =
+        '<section class="result result-error" id="result" role="alert">' +
+        "<h2>That didn't work</h2><p></p></section>";
+      results.querySelector("p").textContent = message;
+    }
+  }
+
+  function dynamicsMergeBody(button, regimeResults) {
+    var valueColumn = button.dataset.valueColumn;
+    return {
+      regimes: regimeResults.map(function (result, index) {
+        return {
+          label: "regime " + (index + 1),
+          lag_time: result.plot.series.lag_time,
+          value: result.plot.series[valueColumn]
+        };
+      }),
+      value_column: valueColumn,
+      title: button.dataset.title,
+      y_label: button.dataset.yLabel,
+      download_stem: button.dataset.downloadStem
+    };
+  }
+
+  function rheologyGtMergeBody(regimeResults, downloadStem) {
+    return {
+      regimes: regimeResults.map(function (result, index) {
+        return {
+          label: "regime " + (index + 1),
+          lag_time: result.plot.series.lag_time,
+          G_GK: result.plot.series.G_GK,
+          G_FSR: result.plot.series.G_FSR
+        };
+      }),
+      download_stem: downloadStem
+    };
+  }
+
+  function rheologyModuliMergeBody(form, regimeResults, downloadStem) {
+    var body = rheologyGtMergeBody(regimeResults, downloadStem);
+    body.method = readValue(form, "method") || "GK";
+    body.t_min = readNumber(form, "t_min");
+    body.t_cutoff = readNumber(form, "t_cutoff");
+    body.n_modes = readNumber(form, "n_modes");
+    body.n_omega = readNumber(form, "n_omega");
+    body.omega_min = readNumber(form, "omega_min");
+    body.omega_max = readNumber(form, "omega_max");
+    return body;
+  }
+
+  async function startJob(url, formData) {
+    var response = await fetch(url, { method: "POST", body: formData });
+    var body = await response.json();
+    if (!response.ok) {
+      throw new Error(
+        body && body.detail ? String(body.detail) : "Could not start the calculation."
+      );
+    }
+    return body.job_id;
+  }
+
+  async function pollJob(jobId, onProgress) {
+    for (;;) {
+      var response = await fetch("/api/jobs/" + jobId);
+      var body = await response.json();
+      if (!response.ok) {
+        throw new Error(body && body.detail ? String(body.detail) : "Lost track of the job.");
+      }
+      if (onProgress) {
+        onProgress(body.progress || 0, body.message || "");
+      }
+      if (body.status === "done") {
+        return body.result;
+      }
+      if (body.status === "error") {
+        throw new Error(body.error || "The calculation failed.");
+      }
+      await new Promise(function (resolve) {
+        setTimeout(resolve, 500);
+      });
+    }
+  }
+
+  function setProgressBar(fraction, message) {
+    var wrap = document.getElementById("job-progress");
+    var bar = document.getElementById("job-progress-bar");
+    var label = document.getElementById("job-progress-label");
+    if (wrap) {
+      wrap.hidden = false;
+    }
+    if (bar) {
+      bar.value = Math.round((fraction || 0) * 100);
+    }
+    if (label) {
+      label.textContent = message || "Calculating…";
+    }
+  }
+
+  function hideProgressBar() {
+    var wrap = document.getElementById("job-progress");
+    if (wrap) {
+      wrap.hidden = true;
+    }
+  }
+
+  window.ladaRunJob = async function (button) {
+    var form = button.closest("form");
+    var startUrl = button.dataset.startUrl;
+    var downloadUrl = startUrl.replace(/\/start$/, "/download");
+    var results = document.getElementById("results");
+    button.disabled = true;
+    setProgressBar(0, "Starting…");
+    try {
+      var result = await pollJob(
+        await startJob(startUrl, new FormData(form)),
+        function (fraction, message) {
+          setProgressBar(fraction, message || "Calculating…");
+        }
+      );
+      if (results) {
+        results.innerHTML = renderTableResultHtml(result, downloadUrl);
+        window.ladaMountResult(document.getElementById("result"));
+      }
+    } catch (error) {
+      renderRegimeError(error && error.message ? error.message : String(error));
+    } finally {
+      button.disabled = false;
+      hideProgressBar();
+    }
+  };
+
+  window.ladaDownloadJobResult = async function (button, fmt) {
+    var form = button.closest("form") || document.getElementById("calc-form");
+    var downloadUrl = button.dataset.downloadUrl;
+    if (!form || !downloadUrl) {
+      return;
+    }
+    button.disabled = true;
+    try {
+      var response = await fetch(downloadUrl + "?fmt=" + fmt, {
+        method: "POST",
+        body: new FormData(form)
+      });
+      if (!response.ok) {
+        var body = await response.json().catch(function () {
+          return null;
+        });
+        throw new Error(body && body.detail ? String(body.detail) : "The download failed.");
+      }
+      var blob = await response.blob();
+      var disposition = response.headers.get("content-disposition") || "";
+      var match = /filename="?([^"]+)"?/.exec(disposition);
+      var url = URL.createObjectURL(blob);
+      var link = document.createElement("a");
+      link.href = url;
+      link.download = match ? match[1] : "download";
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(url);
+    } catch (error) {
+      renderRegimeError(error && error.message ? error.message : String(error));
+    } finally {
+      button.disabled = false;
+    }
+  };
+
+  window.ladaRunRegimes = async function (button) {
+    var form = button.closest("form");
+    var count = parseInt(button.dataset.regimeCount, 10) || 1;
+    var regimeFields = button.dataset.regimeFields.split(",");
+    var sharedFields = button.dataset.sharedFields
+      ? button.dataset.sharedFields.split(",")
+      : [];
+    var viewUrl = button.dataset.viewUrl;
+    var mergeUrl = button.dataset.mergeUrl;
+    var mergeKind = button.dataset.mergeKind;
+    var downloadStem = button.dataset.downloadStem || "regimes";
+
+    button.disabled = true;
+    try {
+      var regimeResults = [];
+      for (var i = 0; i < count; i++) {
+        var data = regimeFormData(form, i, regimeFields, sharedFields);
+        var result = await pollJob(
+          await startJob(viewUrl + "/start", data),
+          function (fraction, message) {
+            var prefix = "Regime " + (i + 1) + " of " + count + ": ";
+            renderRegimeProgress(prefix + (message || Math.round((fraction || 0) * 100) + "%"));
+          }
+        );
+        regimeResults.push(result);
+      }
+
+      renderRegimeProgress("Combining " + count + " regimes…");
+      var mergeBody;
+      if (mergeKind === "rheology-gt") {
+        mergeBody = rheologyGtMergeBody(regimeResults, downloadStem);
+      } else if (mergeKind === "rheology-moduli") {
+        mergeBody = rheologyModuliMergeBody(form, regimeResults, downloadStem);
+      } else {
+        mergeBody = dynamicsMergeBody(button, regimeResults);
+      }
+
+      var mergeResponse = await fetch(mergeUrl, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "HX-Request": "true" },
+        body: JSON.stringify(mergeBody)
+      });
+      if (!mergeResponse.ok) {
+        var errorBody = await mergeResponse.json().catch(function () {
+          return null;
+        });
+        throw new Error(
+          errorBody && errorBody.detail ? String(errorBody.detail) : "Merging the regimes failed."
+        );
+      }
+      var html = await mergeResponse.text();
+      var results = document.getElementById("results");
+      if (results) {
+        results.innerHTML = html;
+        // The injected partial's own <script> tag does not execute via innerHTML, so the plot
+        // is mounted explicitly here instead of relying on it.
+        window.ladaMountResult(document.getElementById("result"));
+      }
+    } catch (error) {
+      renderRegimeError(error && error.message ? error.message : String(error));
+    } finally {
+      button.disabled = false;
+    }
+  };
 })();

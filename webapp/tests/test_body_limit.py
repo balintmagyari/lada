@@ -149,7 +149,7 @@ def test_the_ceiling_is_per_route_family(tmp_path):
     # so the middleware passes it on and the .npz reader is what turns it down.
     npz = client.post(
         SEGMENT_URL,
-        files={"file": ("big.npz", body)},
+        files=[("files", ("big.npz", body))],
         data={
             "mode": "uniform",
             "n_chains": "4",

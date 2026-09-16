@@ -19,6 +19,12 @@ class Settings(BaseSettings):
     # ask for once loaded, independently of the upload size and the frame count.
     max_trajectory_memory_mb: float = 2048
     max_table_rows: int = 500
+    # Repeat-seed files or regime files averaged/merged into one calculation.
+    max_files_per_request: int = 10
+    # Background jobs: how long a finished/abandoned job's result stays fetchable, and how many
+    # calculations may run on background threads at once.
+    job_ttl_seconds: float = 600
+    max_concurrent_jobs: int = 4
     temp_root: Path | None = None
 
     @property

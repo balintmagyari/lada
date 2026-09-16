@@ -38,14 +38,29 @@ def test_reference_page_has_form_contract(client):
     assert "action=" not in form_tag
 
 
+# conformations/dynamics/rheology accept several files to average; parsers/modifiers stay
+# single-file.
+MULTI_FILE_SECTIONS = {"conformations", "dynamics", "rheology"}
+
+
+# conformations/dynamics/rheology also use the job-based Calculate button (real progress bar)
+# instead of a plain htmx submit.
+JOB_BASED_SECTIONS = {"conformations", "dynamics", "rheology"}
+
+
 @pytest.mark.parametrize("calc", CALCULATIONS, ids=lambda c: f"{c.section}-{c.slug}")
 def test_every_calculation_page_renders(client, calc):
     r = client.get(calc.path)
     assert r.status_code == 200
     assert 'id="calc-form"' in r.text
-    assert '<label for="file">' in r.text
+    field = "files" if calc.section in MULTI_FILE_SECTIONS else "file"
+    assert f'<label for="{field}">' in r.text
     assert r.text.count("<form") == 1
-    assert "hx-post=" in r.text or "formaction=" in r.text
+    if calc.section in JOB_BASED_SECTIONS:
+        assert 'onclick="window.ladaRunJob(this)"' in r.text
+        assert "data-start-url=" in r.text
+    else:
+        assert "hx-post=" in r.text or "formaction=" in r.text
 
 
 def test_unknown_page_is_404_json_and_html(client):

@@ -297,10 +297,16 @@
     return String(value);
   }
 
+  // Safe for text AND quoted attribute values. (Serializing a text node through innerHTML would
+  // not do: it leaves quotes as they are, so JSON placed in data-result="..." ended the attribute
+  // at its first quote and JSON.parse then saw only "{".)
   function escapeHtml(text) {
-    var div = document.createElement("div");
-    div.textContent = text;
-    return div.innerHTML;
+    return String(text)
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;")
+      .replace(/'/g, "&#39;");
   }
 
   function renderTableResultHtml(result, downloadUrl) {
@@ -311,7 +317,7 @@
     Object.keys(result.meta || {}).forEach(function (key) {
       var label = key.replace(/_/g, " ");
       label = label.charAt(0).toUpperCase() + label.slice(1);
-      summaryParts.push(" " + label + ": " + result.meta[key] + ".");
+      summaryParts.push(" " + escapeHtml(label) + ": " + escapeHtml(result.meta[key]) + ".");
     });
 
     var plotHtml = "";

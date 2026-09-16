@@ -6,13 +6,11 @@ where one applies), download it as CSV or a pgfplots-ready `.dat` file. Every ca
 thin web layer over the functions already documented in the repository root `README.md` — this
 document only covers the parts specific to running that functionality as a service.
 
-> **PyPI pin caveat.** `webapp/pyproject.toml` depends on `lada>=1.2.0,<2.0.0`, matching the
-> functions this app actually calls (`calculate_segment_acf_from_trajectory` and friends, added in
-> 1.2.0). As of this writing PyPI's latest published `lada` release is **1.0.6** — 1.2.0 exists only
-> as the unreleased local package in this repository. `pip install .` and the Docker build below
-> will fail until `lada` 1.2.0 is published to PyPI. Local development works today because
-> `pip install -e . -e "./webapp[dev]"` from the repo root installs `lada` from `src/` in editable
-> mode, bypassing the PyPI resolution entirely.
+> **Install `lada` from this repository.** `webapp/pyproject.toml` depends on `lada>=1.2.0,<2.0.0`,
+> and the app relies on functions only this repository's `lada` has (`*_from_trajectory`, and the
+> `progress_callback` argument behind the progress bars). PyPI's latest `lada` is older, so a bare
+> `pip install ./webapp` will fail to resolve. Install `lada` from `src/` first — the Quick start
+> below does this in editable mode, and the [Docker](#docker) image does it from the repository root.
 
 ## Quick start
 
@@ -31,6 +29,18 @@ automatically.
 
 Thirteen calculations across five sections, each a single page with one upload form. The file
 column names the multipart field the page's form (and the matching `/api/...` route) expects.
+
+The conformations, dynamics and rheology pages take **one or more** files in a repeated `files`
+field (up to `LADA_WEB_MAX_FILES_PER_REQUEST`), treated as repeat runs with different random seeds
+and averaged into one result: Rg²/Ree² per timestep (the files must share their timesteps),
+dynamics and rheology curves point by point after truncating to the shortest file. End-to-end
+vectors are the exception — vectors of different chains are not comparable, so files are stacked
+with a `repeat` column instead of averaged. The dynamics and rheology pages can also split a
+calculation into **regimes** (e.g. fast/mid/slow sampling, each with its own files and frame
+spacing): each regime is computed separately and the curves are joined by
+`POST /api/dynamics/merge-regimes` or `POST /api/rheology/merge-regimes`, which reject regimes whose
+lag-time ranges overlap. For dynamic moduli, the regimes' G(t) curves are merged first and fitted
+once (`POST /api/rheology/dynamic-moduli/from-regimes`).
 
 ### Read files (`/parsers/...`)
 
@@ -107,7 +117,7 @@ A request without the `HX-Request: true` header (i.e. anything that isn't the ap
 frontend) gets JSON back — a plain `curl` call needs no special `Accept` header:
 
 ```bash
-curl -F file=@tests/data/sample_stress_acf.txt \
+curl -F files=@tests/data/sample_stress_acf.txt \
      -F volume=1000 \
      -F temperature=1 \
      http://127.0.0.1:8000/api/rheology/stress-relaxation
@@ -131,13 +141,22 @@ returns
 `rows` is capped at `LADA_WEB_MAX_TABLE_ROWS` (`truncated` says so when it is); `plot.series`
 always carries every row.
 
+The eight conformations, dynamics and rheology calculations also have a `.../start` sibling that
+takes the same fields, runs the calculation on a background thread and answers HTTP 202 with
+`{"job_id": "..."}`. `GET /api/jobs/{job_id}` then reports `status` (`pending`, `running`, `done`
+or `error`),
+a `progress` fraction from 0 to 1, and — once done — the same `TableResult` as above in `result`.
+This is what the pages' progress bars poll. Finished jobs stay fetchable for
+`LADA_WEB_JOB_TTL_SECONDS`, and a start beyond `LADA_WEB_MAX_CONCURRENT_JOBS` running jobs answers
+HTTP 429.
+
 Every view route except `POST /api/parsers/dump/preview` has a `.../download` sibling that takes
 the same fields plus a `fmt` query parameter (`csv` or `pgfplots`; default `csv`) and streams the
 file instead of returning JSON — it recomputes from the same upload rather than reusing a cached
 result (see [Design notes](#design-notes)):
 
 ```bash
-curl -F file=@tests/data/sample_stress_acf.txt \
+curl -F files=@tests/data/sample_stress_acf.txt \
      -F volume=1000 \
      -F temperature=1 \
      "http://127.0.0.1:8000/api/rheology/stress-relaxation/download?fmt=pgfplots" \
@@ -158,6 +177,9 @@ Every setting is a `LADA_WEB_`-prefixed environment variable (`lada_web/config.p
 | `LADA_WEB_MAX_TRAJECTORY_FRAMES` | `3000` | Rejects a trajectory with more frames than this, checked from the array's header, before any of it is loaded |
 | `LADA_WEB_MAX_TRAJECTORY_MEMORY_MB` | `2048` | Rejects a trajectory whose `coords` array would need more than this once decompressed (`n_frames × n_atoms × 3 × itemsize`), checked from the same header |
 | `LADA_WEB_MAX_TABLE_ROWS` | `500` | Rows shown on screen / returned in JSON `rows`; downloads and plots are never truncated by this |
+| `LADA_WEB_MAX_FILES_PER_REQUEST` | `10` | Most files one calculation (or one regime) may average |
+| `LADA_WEB_MAX_CONCURRENT_JOBS` | `4` | Background calculations running at once; further starts answer HTTP 429 |
+| `LADA_WEB_JOB_TTL_SECONDS` | `600` | How long a job's result stays fetchable from `/api/jobs/{job_id}` |
 | `LADA_WEB_TEMP_ROOT` | unset (system temp directory) | Where per-request upload workspaces are created; set this to point uploads at a specific volume |
 
 ## Limits and timeouts
@@ -168,13 +190,15 @@ scattering directions) — a large trajectory can take minutes to process on one
 
 - `LADA_WEB_MAX_TRAJECTORY_FRAMES` (default 3000) and `LADA_WEB_MAX_TRAJECTORY_MEMORY_MB`
   (default 2048) are the guardrails: both are read from the `.npz` array header and answer HTTP
-  413 before the sliding-window loop starts, rather than running a job queue. The size of the
+  413 before the sliding-window loop starts. The size of the
   uploaded file bounds neither — a compressed `.npz` of a few megabytes can declare an array of
   hundreds of gigabytes — which is why the decompressed footprint is checked separately. Lower
   them if you're running on modest hardware; raise them only if you also raise proxy timeouts,
   and, under Docker, `mem_limit` in `docker-compose.yml`.
-- If you put this app behind a reverse proxy, raise its read timeout well past the default, or
-  large dynamics requests will be cut off mid-calculation. For nginx:
+- The pages run calculations as background jobs and poll for progress, so no single browser
+  request stays open for the whole calculation. The plain view and `.../download` routes still
+  compute inside the request, though — if API clients use those behind a reverse proxy, raise its
+  read timeout well past the default, or large dynamics requests will be cut off. For nginx:
 
   ```nginx
   proxy_read_timeout 600s;
@@ -199,32 +223,39 @@ streamed in have been spooled to disk. Put a limit in your reverse proxy as well
 
 ```bash
 cd webapp
-docker compose up
+docker compose up --build
 ```
 
-serves the app on `http://localhost:8000`. The image is built from `webapp/` only (`build: .` with
-`webapp/` as the build context) and runs as a non-root user. What the two files set beyond that:
+serves the app on `http://localhost:8000`. The build context is the **repository root** (compose
+sets `context: ..`; without compose, run `docker build -f webapp/Dockerfile .` from the root), so the
+image can install `lada` from `src/` before `lada-web`. `webapp/Dockerfile.dockerignore` allowlists
+the few paths that installs need, keeping `.venv/`, `.git/` and test data out of the build. The
+container runs as a non-root user. What the files set beyond that:
 
 - **`HEALTHCHECK`** fetches `/` every 30 s — the cheapest route that proves the app is wired up.
 - **`--proxy-headers --forwarded-allow-ips '*'`**, because the README recommends nginx in front
   and uvicorn otherwise logs the proxy's own address and scheme for every request. It trusts
   `X-Forwarded-*` from any peer, so `ports:` publishes to `127.0.0.1` only: put the proxy in
   front of that, and do not expose the container port to the internet.
-- **`--limit-concurrency 8`** per worker (16 across the two), so a burst of CPU-bound requests
-  is answered with 503 rather than queuing without bound.
+- **`--workers 1`**, and it must stay one: jobs and their progress live in the process's memory,
+  so with two workers a job started on one would answer "Job not found" when polled on the other.
+  To scale out, run more containers behind a proxy with sticky sessions, not more workers.
+- **`--limit-concurrency 16`**, so a burst of requests is answered with 503 rather than queuing
+  without bound. Progress polls count towards it, hence the headroom over the job cap.
+- **`LADA_WEB_MAX_CONCURRENT_JOBS=2`**, lowered from 4 so the running jobs' trajectories fit the
+  memory limit below.
 - **A 1200 MB `tmpfs` on `/tmp`**, with `LADA_WEB_TEMP_ROOT` pointing into it. Uploads land there
   twice — Starlette spools the multipart file part while parsing, then `save_upload` writes the
   request's own copy — so a 500 MB trajectory needs about 1 GB, and this keeps all of it out of
-  the container's writable layer.
-- **`mem_limit: 4g`**, which is that tmpfs plus two workers holding up to
+  the container's writable layer. It also caps a multi-file request's total upload — ten 500 MB
+  trajectories will not fit — so raise it if users average many large files at once.
+- **`mem_limit: 4g`**, which is that tmpfs plus two jobs holding up to
   `LADA_WEB_MAX_TRAJECTORY_MEMORY_MB` (lowered to 1024 in the compose file) each, plus the
   interpreter and NumPy. Those numbers move together: raising any of them means raising this.
 
-**This will not build successfully today** — see the PyPI pin caveat at the top of this document:
-the Dockerfile installs `lada>=1.2.0,<2.0.0` from PyPI, and PyPI does not yet have a 1.2.0 release.
-Docker was not available on the machine this was written on either, so the Dockerfile, image build,
-and `docker compose up` have not been run or verified end to end — review it carefully before
-relying on it, and treat "builds cleanly" as unconfirmed until both are true.
+**Not yet verified end to end.** Docker was not available on the machine this was written on, so
+the image build and `docker compose up` have not been run. Build and exercise it once locally before
+relying on it.
 
 ## Testing
 
@@ -247,10 +278,12 @@ the fixtures in the root `tests/data/` rather than duplicating any under `webapp
   "Download CSV" / "Download pgfplots" button resubmits the full form (file included) to a
   `.../download` route, which recomputes from scratch and streams the file. Simpler than caching a
   result keyed by upload; the cost is recomputing once per download, which is fine at this scale.
-- **No background job queue.** Long-running dynamics requests block the worker thread for the
-  duration of the request (see [Limits and timeouts](#limits-and-timeouts)) rather than being
-  handed off to Celery/RQ/etc. The `services/` layer is pure functions with no FastAPI imports
-  specifically so that move stays cheap later if usage ever demands it — it isn't built now.
+- **In-process jobs, no external queue.** The pages' calculations run on daemon threads tracked
+  by an in-memory `JobStore` (`jobs.py`), with a semaphore capping how many run at once and a sweep
+  thread dropping results after the TTL — no Redis, Celery or database. The cost is that jobs belong
+  to one process: the server must run a single worker, a restart loses running jobs, and a job keeps
+  running if its browser tab closes (it is swept later). The `services/` layer is pure functions
+  with no FastAPI imports, so moving to an external queue stays cheap if usage ever demands it.
 - **`/api/` is reserved, not yet a public API.** There is no auth, no rate limiting, and no API
   key — every route is reachable by anyone who can reach the server. That's fine for a single-user
   or trusted-network deployment; don't expose an unauthenticated instance to the open internet.

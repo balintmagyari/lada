@@ -1,0 +1,11 @@
+# Used by BuildKit for webapp/Dockerfile, whose build context is the repository root.
+# Allowlist: send only what the image installs, never .venv/, .git/ or large test data.
+*
+!pyproject.toml
+!README.md
+!src/
+!webapp/pyproject.toml
+!webapp/README.md
+!webapp/src/
+**/__pycache__
+**/*.pyc

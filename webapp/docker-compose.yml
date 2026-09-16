@@ -1,6 +1,9 @@
 services:
   web:
-    build: .
+    # The repository root is the context so the image can install lada from src/ (see Dockerfile).
+    build:
+      context: ..
+      dockerfile: webapp/Dockerfile
     restart: unless-stopped
     # The image trusts X-Forwarded-* from any peer (see the Dockerfile CMD), so this port is
     # meant for a reverse proxy on the same host or network, not for the open internet.
@@ -10,8 +13,10 @@ services:
       LADA_WEB_MAX_UPLOAD_MB: "50"
       LADA_WEB_MAX_TRAJECTORY_MB: "500"
       LADA_WEB_MAX_TRAJECTORY_FRAMES: "3000"
-      # Lowered from the 2048 MB default so two workers still fit inside mem_limit below.
+      # Lowered from the 2048 MB default so two concurrent jobs still fit inside mem_limit below.
       LADA_WEB_MAX_TRAJECTORY_MEMORY_MB: "1024"
+      # Lowered from the default 4: each running job can hold one decompressed trajectory.
+      LADA_WEB_MAX_CONCURRENT_JOBS: "2"
       LADA_WEB_MAX_TABLE_ROWS: "500"
       # Point every workspace at the tmpfs, so uploads never touch the writable layer.
       LADA_WEB_TEMP_ROOT: "/tmp/lada-web"
@@ -22,6 +27,8 @@ services:
     # disk. Raise this together with LADA_WEB_MAX_TRAJECTORY_MB, and mem_limit with both.
     tmpfs:
       - /tmp:size=1200m,mode=1777
-    # 1.2 GB of tmpfs plus two workers holding up to 1 GB of decompressed trajectory each,
+    # The tmpfs also caps a multi-file request's total upload: 10 × 500 MB will not fit, so raise it
+    # (and mem_limit) if users average many large trajectories in one go.
+    # 1.2 GB of tmpfs plus two jobs holding up to 1 GB of decompressed trajectory each,
     # plus the interpreter and NumPy. Every one of those three numbers moves this one.
     mem_limit: 4g

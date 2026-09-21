@@ -481,13 +481,45 @@
     return body;
   }
 
+  // FastAPI answers a field-constraint failure with `detail` as a LIST of error objects, and the
+  // app's own friendly-string formatter only runs for htmx/HTML requests — these fetch() calls
+  // send neither header. String(list-of-objects) renders as "[object Object]", so unpack the list
+  // here into "field: message", the way the server's HTML branch already does.
+  function detailMessage(body, fallback) {
+    var detail = body && body.detail;
+    if (!detail) {
+      return fallback;
+    }
+    if (typeof detail === "string") {
+      return detail;
+    }
+    if (Array.isArray(detail)) {
+      var parts = detail
+        .map(function (item) {
+          if (!item || typeof item !== "object") {
+            return String(item);
+          }
+          var where = Array.isArray(item.loc)
+            ? item.loc.filter(function (piece) {
+                return piece !== "body" && piece !== "query";
+              })
+            : [];
+          var message = item.msg || "is not valid";
+          return where.length ? where.join(" ") + ": " + message : message;
+        })
+        .filter(Boolean);
+      if (parts.length) {
+        return parts.join("; ");
+      }
+    }
+    return fallback;
+  }
+
   async function startJob(url, formData) {
     var response = await fetch(url, { method: "POST", body: formData });
     var body = await response.json();
     if (!response.ok) {
-      throw new Error(
-        body && body.detail ? String(body.detail) : "Could not start the calculation."
-      );
+      throw new Error(detailMessage(body, "Could not start the calculation."));
     }
     return body.job_id;
   }
@@ -497,7 +529,7 @@
       var response = await fetch("/api/jobs/" + jobId);
       var body = await response.json();
       if (!response.ok) {
-        throw new Error(body && body.detail ? String(body.detail) : "Lost track of the job.");
+        throw new Error(detailMessage(body, "Lost track of the job."));
       }
       if (onProgress) {
         onProgress(body.progress || 0, body.message || "");
@@ -578,7 +610,7 @@
         var body = await response.json().catch(function () {
           return null;
         });
-        throw new Error(body && body.detail ? String(body.detail) : "The download failed.");
+        throw new Error(detailMessage(body, "The download failed."));
       }
       var blob = await response.blob();
       var disposition = response.headers.get("content-disposition") || "";
@@ -645,7 +677,7 @@
           return null;
         });
         throw new Error(
-          errorBody && errorBody.detail ? String(errorBody.detail) : "Merging the regimes failed."
+          detailMessage(errorBody, "Merging the regimes failed.")
         );
       }
       var html = await mergeResponse.text();
@@ -662,4 +694,10 @@
       button.disabled = false;
     }
   };
+
+  // Exposed for tests/test_frontend_helpers.py. Both are pure string functions, and both have
+  // had a bug that reached a user: escapeHtml left quotes alone, which broke the attribute
+  // holding a job's result JSON, and detailMessage's predecessor printed "[object Object]" for
+  // every field-validation failure. Neither is reachable by a Python-level route test.
+  window.ladaTestHooks = { escapeHtml: escapeHtml, detailMessage: detailMessage };
 })();

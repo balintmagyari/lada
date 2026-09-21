@@ -1,6 +1,8 @@
-{# Optional additional regimes, for calculations whose sampling is split into several
-   non-overlapping time windows (e.g. fast / mid / slow), each possibly with its own files to
-   average. Regime 1 is the page's own fields above this partial; this only adds regime 2+.
+{# Optional additional regimes, for calculations whose sampling is split across several runs of
+   differing frame spacing (e.g. fast / mid / slow), each possibly with its own files to average.
+   Regime 1 is the page's own fields above this partial; this only adds regime 2+. The merge
+   takes each lag time from the most finely sampled regime reaching it, so the usual nested
+   windows (every regime's lag axis starts at zero) stitch together correctly.
    Once at least one extra regime exists, the Calculate button here switches to a JS-driven
    multi-regime run (still one ordinary synchronous request per regime, then one merge request
    — see static/js/app.js's ladaRunRegimes).
@@ -16,10 +18,12 @@
    - regime_download_stem. #}
 <fieldset x-data="{ extra: [], nextKey: 1 }" class="regimes">
   <legend>Additional regimes</legend>
-  <p class="field-help">Add a regime for each non-overlapping time window your data was
-    collected in (for example fast / mid / slow). Each regime can itself hold several files to
-    average, the same way the field above does. Every other field on this page (chain topology,
-    volume, temperature, fit settings) is shared across every regime.</p>
+  <p class="field-help">Add a regime for each sampling rate your data was collected at (for
+    example fast / mid / slow). Each regime can itself hold several repeat files to average, the
+    same way the field above does. Where regimes cover the same lag time, the one that sampled it
+    most finely is used, so runs that all start at time zero combine into one curve. Every other
+    field on this page (chain topology, volume, temperature, fit settings) is shared across every
+    regime.</p>
 
   <template x-for="regime in extra" :key="regime">
     <div class="regime-block">

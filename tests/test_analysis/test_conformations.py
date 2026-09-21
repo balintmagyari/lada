@@ -67,8 +67,8 @@ class TestCalculateAvgRgSq:
         )
 
         assert rg_sq is not None
-        assert isinstance(rg_sq, float)
-        assert rg_sq > 0
+        assert isinstance(rg_sq, dict)
+        assert rg_sq[0] > 0
 
     def test_rg_sq_with_numpy_array(self):
         """Test Rg² calculation with numpy array."""
@@ -85,8 +85,8 @@ class TestCalculateAvgRgSq:
         )
 
         assert rg_sq is not None
-        assert isinstance(rg_sq, float)
-        assert rg_sq > 0
+        assert isinstance(rg_sq, dict)
+        assert rg_sq[0] > 0
 
     def test_rg_sq_multiple_timesteps(self):
         """Test Rg² with multiple timesteps returns dict."""
@@ -116,8 +116,8 @@ class TestCalculateAvgRgSq:
         )
 
         assert rg_sq is not None
-        assert isinstance(rg_sq, float)
-        assert rg_sq > 0
+        assert isinstance(rg_sq, dict)
+        assert rg_sq[0] > 0
 
     def test_rg_sq_missing_column_raises_error(self):
         """Test that missing required column raises ValueError."""
@@ -144,8 +144,8 @@ class TestCalculateAvgReeSq:
         )
 
         assert ree_sq is not None
-        assert isinstance(ree_sq, float)
-        assert ree_sq > 0
+        assert isinstance(ree_sq, dict)
+        assert ree_sq[0] > 0
 
     def test_ree_sq_multiple_timesteps(self):
         """Test Ree² with multiple timesteps returns dict."""
@@ -223,7 +223,38 @@ class TestEdgeCases:
         )
 
         # Single atom should have Rg² = 0
+        assert isinstance(rg_sq, dict)
+        assert rg_sq[0] == 0.0
+
+    def test_one_frame_keeps_its_own_timestep(self):
+        """A one-frame trajectory is keyed by its real timestep, not collapsed to a float.
+
+        Collapsing it lost which frame the value belonged to, and callers rebuilding a table
+        then had to invent a timestep — they used 0, mislabelling every single-frame export.
+        """
+        df = create_synthetic_trajectory_df(num_atoms=20, num_timesteps=1)
+        df["timestep"] = 500
+
+        rg_sq = calculate_avg_rg_sq(
+            df, coord_cols=["xu", "yu", "zu"], molecule_col="mol", timestep_col="timestep"
+        )
+        assert list(rg_sq) == [500]
+
+    def test_without_a_timestep_column_the_result_is_a_bare_float(self):
+        """The documented single-frame case: no timestep column, so nothing to key by."""
+        df = create_synthetic_trajectory_df(num_atoms=20, num_timesteps=1).drop(
+            columns=["timestep"]
+        )
+
+        rg_sq = calculate_avg_rg_sq(df, coord_cols=["xu", "yu", "zu"], molecule_col="mol")
         assert isinstance(rg_sq, float)
+        assert rg_sq > 0
+
+    def test_a_missing_coordinate_column_is_named_in_the_error(self):
+        df = create_synthetic_trajectory_df(num_atoms=20, num_timesteps=1)
+
+        with pytest.raises(ValueError, match="yy"):
+            calculate_avg_rg_sq(df, coord_cols=["xu", "yy", "zu"], molecule_col="mol")
 
     def test_large_dataset(self):
         """Test with larger synthetic dataset."""
@@ -245,14 +276,14 @@ class TestEdgeCases:
         rg_sq_small = calculate_avg_rg_sq(
             df, coord_cols=["xu", "yu", "zu"], molecule_col="mol", timestep_col="timestep"
         )
-        assert isinstance(rg_sq_small, float)
+        assert isinstance(rg_sq_small, dict)
 
         # Test with large coordinates
         df[["xu", "yu", "zu"]] = df[["xu", "yu", "zu"]] * 1000
         rg_sq_large = calculate_avg_rg_sq(
             df, coord_cols=["xu", "yu", "zu"], molecule_col="mol", timestep_col="timestep"
         )
-        assert isinstance(rg_sq_large, float)
+        assert isinstance(rg_sq_large, dict)
 
 
 class TestProgressCallback:

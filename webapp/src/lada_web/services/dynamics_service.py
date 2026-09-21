@@ -54,11 +54,23 @@ def _uniform_extent(
         raise ValueError(
             "Uniform topology needs both the number of chains and the beads per chain."
         )
-    last = first_index + n_chains * beads_per_chain - 1
+    covered = n_chains * beads_per_chain
+    last = first_index + covered - 1
     if last >= n_atoms:
         raise ValueError(
             f"Bead index {last} is out of range: the trajectory has {n_atoms} atoms "
             f"(indices 0 to {n_atoms - 1})."
+        )
+    # Covering only part of the file is refused rather than analysed quietly: a mistyped chain
+    # count would otherwise return a plausible result computed from a fraction of the system,
+    # with nothing on screen to say so. A file that genuinely holds non-chain particles is what
+    # the custom topology mode is for.
+    if first_index + covered != n_atoms:
+        raise ValueError(
+            f"This topology covers {covered} atoms starting at index {first_index}, but the "
+            f"trajectory has {n_atoms}. Chains of equal length must account for every atom from "
+            "the first bead onwards — check the number of chains, the beads per chain and the "
+            "first index, or use the custom topology mode to list the chains by hand."
         )
     return n_chains, beads_per_chain
 

@@ -70,6 +70,12 @@ def table_result_from_df(
     meta: dict[str, str | int | float] | None = None,
 ) -> TableResult:
     """Cap the on-screen rows at max_rows; plot series always carry every row."""
+    # Averaging several files truncates them to the shortest before taking the mean. That is
+    # silent data loss, so when it actually dropped something the count travels on the frame
+    # (merge._with_discard_note) and is surfaced here rather than left for nobody to notice.
+    meta = dict(meta or {})
+    if df.attrs.get("discarded_rows"):
+        meta["Rows discarded"] = df.attrs["discarded_rows"]
     shown = df.iloc[:max_rows]
     rows = [[_cell(v) for v in row] for row in shown.itertuples(index=False, name=None)]
     if plot is not None:
@@ -82,7 +88,7 @@ def table_result_from_df(
         rows=rows,
         n_rows_total=len(df),
         truncated=len(df) > max_rows,
-        meta=dict(meta or {}),
+        meta=meta,
         plot=plot,
         download_stem=download_stem,
     )

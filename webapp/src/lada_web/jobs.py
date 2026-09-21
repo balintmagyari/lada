@@ -7,6 +7,7 @@ until it finishes. No Redis/Celery — this is a single-process app, so an in-me
 TTL sweep and a concurrency cap are enough.
 """
 
+import logging
 import threading
 import time
 import uuid
@@ -18,8 +19,19 @@ from typing import Any, Literal
 from fastapi import Request, UploadFile
 
 from .config import Settings
-from .errors import TooManyJobs
+from .errors import TooManyJobs, client_safe_message
 from .uploads import cleanup_workspace, new_workspace, save_uploads
+
+_log = logging.getLogger(__name__)
+
+
+def _cleanup_quietly(workspace: Path) -> None:
+    """Remove a job's workspace, logging rather than raising if it cannot be removed."""
+    try:
+        cleanup_workspace(workspace)
+    except Exception:
+        _log.exception("Could not clean up workspace %s", workspace)
+
 
 JobStatus = Literal["pending", "running", "done", "error"]
 
@@ -120,7 +132,7 @@ def run_job(
     thread or touching the workspace's lifetime further than cleaning it up immediately.
     """
     if not semaphore.acquire(blocking=False):
-        cleanup_workspace(workspace)
+        _cleanup_quietly(workspace)
         raise TooManyJobs(limit)
 
     job = store.create()
@@ -130,9 +142,13 @@ def run_job(
             result = target(throttled(store, job.id))
             store.set_result(job.id, result)
         except Exception as exc:
-            store.set_error(job.id, str(exc))
+            store.set_error(job.id, client_safe_message(exc))
+            _log.exception("Job %s failed", job.id)
         finally:
-            cleanup_workspace(workspace)
+            # The release must not hinge on the cleanup surviving: a cleanup that raised here
+            # would strand this permit for the life of the process, and enough of those would
+            # take the server's concurrency to zero with nothing visible to any client.
+            _cleanup_quietly(workspace)
             semaphore.release()
 
     threading.Thread(target=body, daemon=True).start()

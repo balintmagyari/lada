@@ -54,9 +54,34 @@ def _common_grid(frames: list[pd.DataFrame], grid_col: str, min_len: int, label:
         other = frame[grid_col].to_numpy()[:min_len]
         if not np.allclose(other, base, rtol=1e-9, atol=0):
             raise ValueError(
-                f"Files have different {label}; repeats must use the same sampling settings."
+                f"Files have different {label}; repeats must use the same sampling settings "
+                "(the rows must also be in the same order in every file)."
             )
     return base
+
+
+def _with_discard_note(merged: pd.DataFrame, frames: list[pd.DataFrame]) -> pd.DataFrame:
+    """Record on the result how many rows truncate-to-shortest dropped, for `meta` to report."""
+    dropped = discarded_rows(frames)
+    if dropped:
+        shortest = min(len(frame) for frame in frames)
+        merged.attrs["discarded_rows"] = (
+            f"{dropped} (files differ in length; averaged over the shortest file's {shortest} rows)"
+        )
+    return merged
+
+
+def discarded_rows(frames: list[pd.DataFrame]) -> int:
+    """Rows the truncate-to-shortest averaging drops, summed over the files that are longer.
+
+    Averaging truncates to the shortest file so replicates of unequal length can still be
+    combined. That is silent data loss, so routers report this count in `meta` whenever it is
+    non-zero, rather than leaving a shorter run (a crash, a restart) to quietly shrink the result.
+    """
+    if len(frames) < 2:
+        return 0
+    lengths = [len(frame) for frame in frames]
+    return sum(length - min(lengths) for length in lengths)
 
 
 def average_rheology(frames: list[pd.DataFrame], value_cols: tuple[str, ...]) -> pd.DataFrame:
@@ -74,7 +99,7 @@ def average_rheology(frames: list[pd.DataFrame], value_cols: tuple[str, ...]) ->
     for col in value_cols:
         stacked = np.column_stack([frame[col].to_numpy()[:min_len] for frame in frames])
         out[col] = stacked.mean(axis=1)
-    return pd.DataFrame(out)
+    return _with_discard_note(pd.DataFrame(out), frames)
 
 
 def average_dynamics(frames: list[pd.DataFrame], value_col: str) -> pd.DataFrame:
@@ -89,51 +114,56 @@ def average_dynamics(frames: list[pd.DataFrame], value_col: str) -> pd.DataFrame
     min_len = min(len(frame) for frame in frames)
     lag_time = frames[0]["lag_time"].to_numpy()[:min_len]
     stacked = np.column_stack([frame[value_col].to_numpy()[:min_len] for frame in frames])
-    return pd.DataFrame({"lag_time": lag_time, value_col: stacked.mean(axis=1)})
+    merged = pd.DataFrame({"lag_time": lag_time, value_col: stacked.mean(axis=1)})
+    return _with_discard_note(merged, frames)
 
 
 def merge_regimes(
     x_arrays: list[np.ndarray], series: list[dict[str, np.ndarray]]
 ) -> tuple[np.ndarray, dict[str, np.ndarray]]:
-    """Concatenate several regimes' series, sorted by x, into one non-overlapping series.
+    """Stitch several regimes into one series, taking each lag time from the finest regime.
 
-    Regimes are checked for range overlap first — one regime's [min, max] window overlapping
-    another's by more than a single shared boundary point is a genuine overlap, even if no
-    individual sampled point happens to collide (e.g. a finely-sampled fast regime and a
-    coarsely-sampled mid regime covering the same seconds at different lag times). A single
-    shared boundary point (one regime's max equals another's min) is allowed, and is silently
-    deduplicated if every series column also agrees there (a harmless resubmission of the same
-    point twice) — but rejected if the value disagrees, since silently picking one of two
-    disagreeing measurements at the same lag time would hide a real problem, not resolve one.
+    Regimes are ordered by how far they reach, and each contributes only the lag times beyond the
+    previous (finer) regime's end. This is the multi-tau correlator convention: where two regimes
+    cover the same lag time, the one that sampled it more finely wins, and a coarser regime is
+    used only past the point where the finer one stops.
+
+    One rule serves both geometries. Nested regimes — the usual case, since a correlation
+    function's lag axis is frame_index * time_per_frame and so always starts at zero — are each
+    trimmed to the window they are best at. Regimes that happen to be adjacent keep all their
+    points, because nothing finer reaches into them, which is what the previous non-overlap rule
+    produced for that case.
+
+    That previous rule rejected overlapping windows outright and required regimes to agree to
+    1e-9 where they met. Real regimes are independent runs: they all start at lag time zero, and
+    they agree at a shared lag time only to within run-to-run noise (~1%), so both halves of it
+    refused ordinary data.
     """
     if not x_arrays:
         raise ValueError("At least one regime is required.")
 
-    windows = sorted((float(x.min()), float(x.max())) for x in x_arrays if x.size)
-    for (_, end), (start, _) in zip(windows, windows[1:], strict=False):
-        if start < end:
-            raise ValueError(
-                f"Regimes overlap: one covers up to lag_time={end:g}, another starts at "
-                f"lag_time={start:g}. Regimes must cover non-overlapping lag-time ranges."
-            )
-
-    x = np.concatenate(x_arrays)
     names = list(series[0])
-    cols = {name: np.concatenate([s[name] for s in series]) for name in names}
+    indexed = [(x, s) for x, s in zip(x_arrays, series, strict=True) if x.size]
+    if not indexed:
+        raise ValueError("Every regime is empty; there is nothing to merge.")
+    # Finest first: under nested sampling the shortest reach is the finest grid.
+    indexed.sort(key=lambda pair: float(pair[0].max()))
 
-    order = np.argsort(x, kind="stable")
-    x_sorted = x[order]
-    cols_sorted = {name: col[order] for name, col in cols.items()}
+    x_parts: list[np.ndarray] = []
+    col_parts: dict[str, list[np.ndarray]] = {name: [] for name in names}
+    cutoff = -np.inf
+    for x, s in indexed:
+        keep = x > cutoff
+        if not keep.any():
+            # Wholly covered by finer regimes: it carries no lag time they don't already hold.
+            continue
+        x_parts.append(x[keep])
+        for name in names:
+            col_parts[name].append(s[name][keep])
+        cutoff = float(x.max())
 
-    duplicate = np.zeros(len(x_sorted), dtype=bool)
-    duplicate[1:] = x_sorted[1:] == x_sorted[:-1]
-    for i in np.flatnonzero(duplicate):
-        for name, col in cols_sorted.items():
-            if not np.isclose(col[i], col[i - 1], rtol=1e-9):
-                raise ValueError(
-                    f"Regimes overlap at lag_time={x_sorted[i]:g}: '{name}' disagrees between "
-                    "regimes. Regimes must cover non-overlapping lag-time ranges."
-                )
-
-    keep = ~duplicate
-    return x_sorted[keep], {name: col[keep] for name, col in cols_sorted.items()}
+    x_merged = np.concatenate(x_parts)
+    order = np.argsort(x_merged, kind="stable")
+    return x_merged[order], {
+        name: np.concatenate(parts)[order] for name, parts in col_parts.items()
+    }

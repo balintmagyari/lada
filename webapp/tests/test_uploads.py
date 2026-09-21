@@ -41,7 +41,7 @@ def test_save_upload_rejects_oversize_while_streaming(tmp_path: Path):
 def test_upload_too_large_message_names_the_limit(tmp_path: Path):
     data = b"x" * (MIB + 1)
     upload = make_upload(data, "big.txt", size=len(data))
-    with pytest.raises(UploadTooLarge, match="1 MB upload limit"):
+    with pytest.raises(UploadTooLarge, match="1 MiB upload limit"):
         save_upload(upload, tmp_path, MIB)
 
 

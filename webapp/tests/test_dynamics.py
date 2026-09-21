@@ -46,14 +46,23 @@ def write_npz(path: Path, n_frames: int, n_atoms: int) -> Path:
 
 def test_uniform_chain_indices_are_consecutive_blocks():
     indices = resolve_chain_indices(
-        "uniform", n_chains=2, beads_per_chain=3, first_index=10, custom="", n_atoms=32
+        "uniform", n_chains=2, beads_per_chain=3, first_index=10, custom="", n_atoms=16
     )
     assert indices.tolist() == [[10, 11, 12], [13, 14, 15]]
 
 
+def test_uniform_topology_that_covers_only_part_of_the_file_is_rejected():
+    # A mistyped chain count used to compute quietly on a fraction of the system and report
+    # success, which is worse than an error: the result looks ordinary and is wrong.
+    with pytest.raises(ValueError, match="covers 6 atoms"):
+        resolve_chain_indices(
+            "uniform", n_chains=2, beads_per_chain=3, first_index=0, custom="", n_atoms=32
+        )
+
+
 def test_uniform_segment_pairs_are_the_block_ends():
     pairs = resolve_segment_pairs(
-        "uniform", n_chains=2, beads_per_chain=3, first_index=10, custom="", n_atoms=32
+        "uniform", n_chains=2, beads_per_chain=3, first_index=10, custom="", n_atoms=16
     )
     assert pairs.tolist() == [[10, 12], [13, 15]]
 

@@ -127,22 +127,41 @@ def test_merge_regimes_dedupes_an_agreeing_exact_duplicate():
     assert cols["acf"].tolist() == [1.0, 0.5, 0.3]
 
 
-def test_merge_regimes_rejects_a_disagreeing_exact_duplicate():
+def test_merge_regimes_takes_a_shared_lag_time_from_the_finer_regime():
+    # Two regimes meeting at the same lag time: the one that stops there sampled it more
+    # finely, so its value is the one kept.
     x1 = np.array([0.0, 1.0])
     x2 = np.array([1.0, 2.0])
-    with pytest.raises(ValueError, match="disagrees"):
-        merge.merge_regimes(
-            [x1, x2], [{"acf": np.array([1.0, 0.5])}, {"acf": np.array([0.9, 0.3])}]
-        )
+    x, cols = merge.merge_regimes(
+        [x1, x2], [{"acf": np.array([1.0, 0.5])}, {"acf": np.array([0.9, 0.3])}]
+    )
+    assert x.tolist() == [0.0, 1.0, 2.0]
+    assert cols["acf"].tolist() == [1.0, 0.5, 0.3]
 
 
-def test_merge_regimes_rejects_a_genuine_overlap():
-    x1 = np.array([0.0, 1.0, 2.5])
-    x2 = np.array([2.0, 3.0])
-    with pytest.raises(ValueError, match="overlap"):
-        merge.merge_regimes(
-            [x1, x2], [{"acf": np.array([1.0, 0.5, 0.3])}, {"acf": np.array([0.35, 0.2])}]
-        )
+def test_merge_regimes_stitches_nested_regimes_at_the_finer_regimes_end():
+    # The real geometry: every regime's lag axis starts at zero, so a coarse regime wraps
+    # around a fine one rather than sitting beside it.
+    fine = np.array([0.0, 1.0, 2.0])
+    coarse = np.array([0.0, 2.5, 5.0])
+    x, cols = merge.merge_regimes(
+        [coarse, fine],
+        [{"acf": np.array([1.0, 0.31, 0.1])}, {"acf": np.array([1.0, 0.6, 0.35])}],
+    )
+    assert x.tolist() == [0.0, 1.0, 2.0, 2.5, 5.0]
+    # Up to 2.0 the values come from the fine regime; past it, from the coarse one.
+    assert cols["acf"].tolist() == [1.0, 0.6, 0.35, 0.31, 0.1]
+
+
+def test_merge_regimes_drops_a_regime_a_finer_one_already_covers():
+    fine = np.array([0.0, 0.5, 1.0, 1.5, 2.0])
+    inside = np.array([0.0, 2.0])
+    x, cols = merge.merge_regimes(
+        [fine, inside],
+        [{"acf": np.array([1.0, 0.8, 0.6, 0.45, 0.3])}, {"acf": np.array([1.0, 0.29])}],
+    )
+    assert x.tolist() == fine.tolist()
+    assert cols["acf"].tolist() == [1.0, 0.8, 0.6, 0.45, 0.3]
 
 
 def test_merge_regimes_requires_at_least_one_regime():

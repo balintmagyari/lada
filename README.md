@@ -172,7 +172,7 @@ The ACF column names are read from the **comma-separated header on line 1** of t
 
 ## 2) Analysis
 
-All DataFrame-based functions accept either a `pd.DataFrame` or a `np.ndarray` (pass `columns=list_of_names` for arrays). Single-frame data returns a `float`; multi-frame trajectories return `dict[timestep, float]`.
+All DataFrame-based functions accept either a `pd.DataFrame` or a `np.ndarray` (pass `columns=list_of_names` for arrays). Data with no timestep column returns a `float`; data that has one returns `dict[timestep, float]`, including when it holds a single frame — so a one-frame dump keeps its own timestep rather than being reported as 0.
 
 Functions that operate on `.npz` trajectory files expect the archive to contain a `'coords'` key with shape `(n_frames, n_atoms, 3)` and return a `np.ndarray` of shape `(n_frames, 2)` with columns `[lag_time, value]`.
 

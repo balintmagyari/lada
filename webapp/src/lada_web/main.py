@@ -15,8 +15,17 @@ from .jobs import JobStore
 from .rendering import STATIC_DIR
 from .routers import conformations, dynamics, jobs, modifiers, pages, parsers, rheology
 
-# How often the background sweep thread prunes jobs older than settings.job_ttl_seconds.
+# How often the background sweep thread prunes jobs older than settings.job_ttl_seconds. Capped
+# at a quarter of the TTL so a short TTL is actually honoured: at a fixed minute, a 10-second TTL
+# would leave finished jobs fetchable for up to a minute, with nothing swept at all until the
+# first tick. Floored so a tiny TTL cannot spin the thread.
 JOB_SWEEP_INTERVAL_SECONDS = 60
+MIN_JOB_SWEEP_INTERVAL_SECONDS = 1.0
+
+
+def sweep_interval(ttl_seconds: float) -> float:
+    return max(MIN_JOB_SWEEP_INTERVAL_SECONDS, min(JOB_SWEEP_INTERVAL_SECONDS, ttl_seconds / 4))
+
 
 # Headroom over the largest accepted upload for the multipart envelope and the other fields.
 BODY_OVERHEAD_BYTES = 1024 * 1024
@@ -52,7 +61,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     def sweep_loop() -> None:
         while True:
-            time.sleep(JOB_SWEEP_INTERVAL_SECONDS)
+            time.sleep(sweep_interval(resolved.job_ttl_seconds))
             app.state.job_store.sweep(resolved.job_ttl_seconds)
 
     threading.Thread(target=sweep_loop, daemon=True).start()

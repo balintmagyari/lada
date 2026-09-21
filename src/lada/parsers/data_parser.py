@@ -136,6 +136,19 @@ class LammpsData:
             try:
                 atom_style = self.metadata["atom style"]
                 columns = ATOM_STYLE_COLUMNS[atom_style]
+                # The trailing image flags are optional in a LAMMPS data file, so rows that stop
+                # before them are normal. Anything shorter than that is not: truncating the
+                # style's names to fit would label the data wrongly rather than merely
+                # incompletely — with one column missing, every name after it sits over the
+                # wrong values (x read as q, and so on) and the table looks perfectly ordinary.
+                required = [c for c in columns if c not in ("nx", "ny", "nz")]
+                if data_array.shape[1] < len(required):
+                    raise ValueError(
+                        f"The Atoms section declares style '{atom_style}', whose columns are "
+                        f"{', '.join(columns)} (the image flags nx, ny, nz may be omitted), but "
+                        f"its rows hold only {data_array.shape[1]} values. Fix the "
+                        f"'Atoms # {atom_style}' comment or the rows so they agree."
+                    )
                 valid_columns = columns[: data_array.shape[1]]
                 return pd.DataFrame(data_array, columns=valid_columns)
             except KeyError:
@@ -200,6 +213,9 @@ def read_data_file(filepath: str) -> LammpsData:
     """
     with open(filepath) as f:
         lines = f.readlines()
+
+    if not lines:
+        raise ValueError("The data file is empty.")
 
     metadata = {}
 
@@ -342,7 +358,14 @@ def read_lammps_acf(filepath: str | Path, lag_col: str = "lag_time") -> pd.DataF
     # ------------------------------------------------------------------
     # 1.  Parse column names from line 1 (comma-separated)
     # ------------------------------------------------------------------
+    if not lines:
+        raise ValueError("The ACF file is empty.")
     acf_columns = [c.strip() for c in lines[0].strip().split(",") if c.strip()]
+    if not acf_columns:
+        raise ValueError(
+            "The first line of an ACF file must list its column names, comma-separated "
+            "(for example 'ACF_Sxy,ACF_Sxz,ACF_Syz,ACF_Nxy,ACF_Nxz,ACF_Nyz')."
+        )
 
     # ------------------------------------------------------------------
     # 2.  Locate the last timestep block

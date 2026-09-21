@@ -58,7 +58,9 @@ def test_merge_regimes_single_regime_passes_through(client):
     assert r.json()["rows"] == [[0.0, 1.0], [1.0, 0.4]]
 
 
-def test_merge_regimes_rejects_overlapping_dynamics_regimes(client):
+def test_merge_regimes_stitches_overlapping_dynamics_regimes_at_the_finer_end(client):
+    # Regime "a" samples more finely and stops at 2.5; "b" takes over past that. Its 2.0 point
+    # lies inside "a"'s range, so the finer sampling there wins and it is dropped.
     body = {
         "regimes": [
             dynamics_regime("a", [0.0, 1.0, 2.5], [1.0, 0.6, 0.3]),
@@ -70,8 +72,31 @@ def test_merge_regimes_rejects_overlapping_dynamics_regimes(client):
         "download_stem": "x",
     }
     r = client.post(DYNAMICS_MERGE_URL, json=body)
-    assert r.status_code == 422
-    assert "overlap" in r.json()["detail"]
+    assert r.status_code == 200, r.text
+    assert r.json()["plot"]["series"]["lag_time"] == [0.0, 1.0, 2.5, 3.0]
+    assert r.json()["plot"]["series"]["acf"] == [1.0, 0.6, 0.3, 0.2]
+
+
+def test_merge_regimes_stitches_real_nested_dynamics_regimes(client):
+    # The geometry of real fast/mid/slow runs: each lag axis is frame * dt, so they all start
+    # at zero and nest. This is exactly what the previous overlap rule refused outright.
+    fast = [round(i * 0.4, 6) for i in range(6)]  # 0 -> 2.0
+    mid = [i * 10.0 for i in range(4)]  # 0 -> 30.0
+    body = {
+        "regimes": [
+            dynamics_regime("fast", fast, [1.0, 0.9, 0.82, 0.75, 0.7, 0.66]),
+            dynamics_regime("mid", mid, [1.0, 0.4, 0.2, 0.1]),
+        ],
+        "value_column": "acf",
+        "title": "x",
+        "y_label": "y",
+        "download_stem": "x",
+    }
+    r = client.post(DYNAMICS_MERGE_URL, json=body)
+    assert r.status_code == 200, r.text
+    lag = r.json()["plot"]["series"]["lag_time"]
+    assert lag == [*fast, 10.0, 20.0, 30.0]
+    assert lag == sorted(set(lag))
 
 
 def test_merge_regimes_rejects_empty_regime_list(client):
@@ -124,7 +149,9 @@ def test_rheology_merge_regimes_combines_non_overlapping_gt(client):
     assert result["meta"]["regimes"] == 2
 
 
-def test_rheology_merge_regimes_rejects_a_disagreeing_boundary_point(client):
+def test_rheology_merge_regimes_keeps_the_finer_regimes_value_where_they_meet(client):
+    # Independent runs never agree exactly at a shared lag time; requiring that they do (the
+    # old rule) rejected ordinary data. The finer regime's value wins instead.
     body = {
         "regimes": [
             rheology_regime("a", [0.0, 1.0], [10.0, 6.0], [7.0, 4.0]),
@@ -133,8 +160,11 @@ def test_rheology_merge_regimes_rejects_a_disagreeing_boundary_point(client):
         "download_stem": "x",
     }
     r = client.post(RHEOLOGY_MERGE_URL, json=body)
-    assert r.status_code == 422
-    assert "disagrees" in r.json()["detail"]
+    assert r.status_code == 200, r.text
+    series = r.json()["plot"]["series"]
+    assert series["lag_time"] == [0.0, 1.0, 2.0]
+    assert series["G_GK"] == [10.0, 6.0, 3.0]
+    assert series["G_FSR"] == [7.0, 4.0, 2.0]
 
 
 # --- Rheology: /api/rheology/dynamic-moduli/from-regimes ---------------------
@@ -176,17 +206,20 @@ def test_dynamic_moduli_from_regimes_merges_gt_then_fits_once(client):
     assert np.allclose(result["plot"]["series"]["G_prime"], expected["G_prime"].to_numpy())
 
 
-def test_dynamic_moduli_from_regimes_rejects_overlapping_regimes(client):
+def test_dynamic_moduli_from_regimes_stitches_overlapping_regimes(client):
     body = {
         "regimes": [
             rheology_regime("a", [0.0, 1.0, 2.5], [10.0, 6.0, 3.0], [7.0, 4.0, 2.0]),
             rheology_regime("b", [2.0, 3.0], [3.5, 2.0], [2.2, 1.0]),
         ],
         "download_stem": "x",
+        "t_min": 0.5,
+        "n_modes": 2,
+        "n_omega": 8,
     }
     r = client.post(MODULI_FROM_REGIMES_URL, json=body)
-    assert r.status_code == 422
-    assert "overlap" in r.json()["detail"]
+    assert r.status_code == 200, r.text
+    assert r.json()["columns"] == ["omega", "G_prime", "G_dprime"]
 
 
 def test_regime_merge_pages_still_have_no_page_route(client):

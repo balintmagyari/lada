@@ -68,11 +68,14 @@ def calculate_avg_rg_sq(
         raise TypeError("Data must be a pandas.DataFrame or numpy.ndarray.")
 
     # Extract column indices
-    try:
-        mol_idx = cols.index(molecule_col)
-        x_idx, y_idx, z_idx = [cols.index(c) for c in coord_cols]
-    except ValueError as e:
-        raise ValueError(f"Missing a required column for Rg calculation: {e}") from e
+    missing = [c for c in [molecule_col, *coord_cols] if c not in cols]
+    if missing:
+        raise ValueError(
+            f"Missing a required column for Rg calculation: {', '.join(missing)}. "
+            f"The data has: {', '.join(str(c) for c in cols)}."
+        )
+    mol_idx = cols.index(molecule_col)
+    x_idx, y_idx, z_idx = [cols.index(c) for c in coord_cols]
 
     # Extract targeting arrays and force float typing for math
     mols = arr[:, mol_idx]
@@ -132,7 +135,10 @@ def calculate_avg_rg_sq(
             progress_callback(i + 1, total_timesteps)
 
     # 4. Dynamic Return
-    if not has_timesteps or len(unique_timesteps) == 1:
+    # Keyed by timestep whenever the data carried a timestep column, even for a single frame:
+    # collapsing that case to a bare float threw away which timestep it was, and callers that
+    # rebuild a table then had to invent one (they used 0).
+    if not has_timesteps:
         return list(rg_sq_by_timestep.values())[0]
     else:
         return rg_sq_by_timestep
@@ -258,8 +264,8 @@ def calculate_avg_ree_sq(
         if progress_callback is not None:
             progress_callback(i + 1, total_timesteps)
 
-    # 4. Dynamic Return
-    if not has_timesteps or len(unique_timesteps) == 1:
+    # 4. Dynamic Return (keyed by timestep whenever one was present; see calculate_avg_rg_sq)
+    if not has_timesteps:
         return list(ree_sq_by_timestep.values())[0]
     else:
         return ree_sq_by_timestep

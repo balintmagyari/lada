@@ -234,6 +234,13 @@ def _generate_q_vectors(q_magnitude: float, n_vectors: int = 50) -> np.ndarray:
     numpy.ndarray
         A 2D array of shape (n_vectors, 3) containing the [qx, qy, qz] components.
     """
+    # Spreading points over a sphere needs at least two of them; one divides by zero below and
+    # hands back an all-NaN ISF without raising anything.
+    if n_vectors < 2:
+        raise ValueError(
+            f"n_vectors must be at least 2 to average over directions; got {n_vectors}."
+        )
+
     # The golden angle in radians
     phi = np.pi * (3.0 - np.sqrt(5.0))
 

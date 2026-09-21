@@ -1,5 +1,6 @@
 """Application errors and the handlers that turn them into partials, pages or JSON."""
 
+import logging
 from urllib.parse import urlsplit
 
 from fastapi import FastAPI, Request
@@ -11,10 +12,12 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 from .catalog import Calculation, get_calculation
 from .rendering import is_htmx, templates, wants_html
 
+_log = logging.getLogger(__name__)
+
 
 class UploadTooLarge(Exception):
     def __init__(self, filename: str, limit_mb: float) -> None:
-        super().__init__(f"'{filename}' is larger than the {limit_mb:g} MB upload limit.")
+        super().__init__(f"'{filename}' is larger than the {limit_mb:g} MiB upload limit.")
 
 
 class TrajectoryTooLarge(Exception):
@@ -40,14 +43,48 @@ class TrajectoryTooLargeInMemory(Exception):
     def __init__(self, needed_bytes: int, limit_bytes: int) -> None:
         mb = 1024 * 1024
         super().__init__(
-            f"The trajectory needs {needed_bytes / mb:,.0f} MB in memory once decompressed; "
-            f"this server allows {limit_bytes / mb:g} MB. Save fewer frames or fewer atoms, "
+            f"The trajectory needs {needed_bytes / mb:,.0f} MiB in memory once decompressed; "
+            f"this server allows {limit_bytes / mb:g} MiB. Save fewer frames or fewer atoms, "
             "or increase LADA_WEB_MAX_TRAJECTORY_MEMORY_MB."
         )
 
 
+_SAFE_ERRORS = (
+    ValueError,
+    KeyError,
+    UploadTooLarge,
+    TrajectoryTooLarge,
+    TrajectoryTooLargeInMemory,
+    TooManyJobs,
+)
+
+
 def _message(exc: Exception) -> str:
+    # UnicodeDecodeError is a ValueError whose args[0] is only the codec name ("utf-8"), which
+    # tells a user nothing about what went wrong.
+    if isinstance(exc, UnicodeDecodeError):
+        return (
+            "The file could not be read as text — it looks binary. Check that this is the "
+            "plain-text file this page asks for."
+        )
     return str(exc.args[0]) if exc.args else str(exc)
+
+
+def client_safe_message(exc: Exception) -> str:
+    """What an unexpected exception is allowed to tell a client.
+
+    Errors raised deliberately by this app carry messages written for the user, so they pass
+    through unchanged. Anything else — a full disk, a permission problem, a bug — arrives with
+    text that routinely embeds server paths (`/private/tmp/lada-web-.../000/upload.npz`), and an
+    instance meant to be reachable by other people should not hand out its filesystem layout.
+    Those get a fixed message instead; the real one goes to the server log.
+    """
+    if isinstance(exc, _SAFE_ERRORS):
+        return _message(exc)
+    return (
+        "The calculation stopped because of an unexpected server error. The details were "
+        "written to the server log."
+    )
 
 
 def _page_came_from(request: Request) -> Calculation | None:
@@ -127,9 +164,12 @@ def register_error_handlers(app: FastAPI) -> None:
 
     @app.exception_handler(Exception)
     async def unexpected(request: Request, exc: Exception) -> Response:
+        # Logged in full server-side; the response says only that it happened. The message used
+        # to interpolate str(exc), which handed every client the server's temp paths.
+        _log.exception("Unhandled error for %s %s", request.method, request.url.path)
         return error_response(
             request,
             500,
-            f"Unexpected error while processing the request: {type(exc).__name__}: {exc}",
+            client_safe_message(exc),
             title="Something went wrong",
         )

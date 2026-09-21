@@ -140,7 +140,10 @@ def test_no_request_leaves_a_temporary_workspace_behind(
     # The battery really exercised the paths it claims to.
     assert "<table" in seen["log view via htmx"].text
     assert seen["dump table csv download"].headers["content-disposition"].startswith("attachment")
-    assert "RuntimeError" in seen["unexpected server error"].json()["detail"]
+    # The body must not name the exception or any server path — that detail goes to the log.
+    unexpected = seen["unexpected server error"].json()["detail"]
+    assert "unexpected server error" in unexpected
+    assert "RuntimeError" not in unexpected and "/" not in unexpected
 
 
 def test_workspaces_really_live_under_the_temp_root(client, data_dir, temp_root, monkeypatch):

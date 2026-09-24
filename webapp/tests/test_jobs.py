@@ -212,6 +212,45 @@ def test_segment_acf_start_then_poll_matches_the_synchronous_route(client, data_
     assert finished["progress"] == 1.0
 
 
+def test_segment_acf_start_accepts_a_data_file_topology(client, data_dir):
+    """The data file is read before the job starts, and its workspace dies with the request.
+
+    The background thread must therefore hold the resolved indices, not the file: if anything
+    later moved that read into the thread, this is the test that would notice.
+    """
+    path = data_dir / "sample_trajectory.npz"
+    topology = data_dir / "sample_chains_molecular.data"
+    form = {"mode": "data_file", "time_per_frame": "1.0"}
+
+    def files():
+        return files_upload(path) + [("topology_file", (topology.name, topology.read_bytes()))]
+
+    sync = client.post("/api/dynamics/segment-acf", files=files(), data=form).json()
+
+    start = client.post("/api/dynamics/segment-acf/start", files=files(), data=form)
+    assert start.status_code == 202, start.text
+    finished = poll_until_finished(client, start.json()["job_id"])
+    assert finished["status"] == "done"
+    assert finished["result"]["rows"] == sync["rows"]
+    assert finished["result"]["meta"]["topology"] == "4 chains of 8 beads, from molecule ids"
+
+
+def test_segment_acf_start_rejects_a_mismatched_data_file_before_starting(
+    client, data_dir, temp_root
+):
+    path = data_dir / "sample_trajectory.npz"
+    topology = data_dir / "sample_molecular.data"
+    r = client.post(
+        "/api/dynamics/segment-acf/start",
+        files=files_upload(path) + [("topology_file", (topology.name, topology.read_bytes()))],
+        data={"mode": "data_file", "time_per_frame": "1.0"},
+    )
+
+    assert r.status_code == 422
+    assert "12 atoms" in r.json()["detail"]
+    assert not temp_root.exists() or list(temp_root.iterdir()) == []
+
+
 def test_stress_relaxation_start_then_poll_matches_the_synchronous_route(client, data_dir):
     path = data_dir / "sample_stress_acf.txt"
     form = {"volume": "1000", "temperature": "1"}
@@ -230,8 +269,9 @@ def test_stress_relaxation_start_then_poll_matches_the_synchronous_route(client,
 
 def test_conformations_job_reports_a_domain_error_via_polling(client, data_dir):
     """conformations has no cheap synchronous pre-check the way dynamics' topology validation
-    does, so a bad column is only discovered once the background thread runs the calculation —
-    the /start response itself is still a 202, and the error surfaces through polling."""
+    does (which now also covers reading a data file), so a bad column is only discovered once
+    the background thread runs the calculation — the /start response itself is still a 202, and
+    the error surfaces through polling."""
     start = client.post(
         "/api/conformations/rg/start",
         files=files_upload(data_dir / "sample_dump.dump"),

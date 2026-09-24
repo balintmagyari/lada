@@ -50,6 +50,22 @@ Meta = dict[str, str | int | float]
 LAG_LABEL = "Lag time"
 
 
+def _topology_meta(topology: TopologyForm) -> Meta:
+    """What a data-file topology contributed, for the result table to show.
+
+    The preview under the form says the same thing, but only to whoever watched it appear; the
+    result is the copy that gets saved, shared and looked at again a month later.
+    """
+    meta: Meta = {}
+    summary = topology.summary()
+    if summary:
+        meta["topology"] = summary
+    notes = topology.notes()
+    if notes:
+        meta["topology notes"] = " ".join(notes)
+    return meta
+
+
 def _stem(paths: list[Path]) -> str:
     """The download-stem prefix: a single file's own stem, or an "avgN" label for a repeat set."""
     return paths[0].stem if len(paths) == 1 else f"{paths[0].stem}_avg{len(paths)}"
@@ -100,6 +116,7 @@ def _segment_acf(
         "frames": len(df),
         "atoms": n_atoms,
         "chains": len(pairs),
+        **_topology_meta(topology),
     }
     return paths, df, meta
 
@@ -125,6 +142,7 @@ def _rouse_mode_acf(
         "frames": len(df),
         "atoms": n_atoms,
         "chains": len(chains),
+        **_topology_meta(topology),
     }
     return paths, df, meta
 
@@ -266,10 +284,14 @@ def segment_acf_start(
     ws, paths = start_workspace(
         settings, files, settings.max_trajectory_bytes, settings.max_files_per_request
     )
+    # Resolved here and not inside target(): the job thread deletes `ws` when it finishes, and
+    # a data-file topology is read from a file saved under the request's own workspace, which
+    # goes away with the response. Both are materialised now, so the thread holds only arrays.
     try:
         _, n_atoms = _inspect_and_validate(paths, settings)
         pairs = topology.segment_pairs(n_atoms)
         dynamics_service.check_indices(pairs, n_atoms)
+        topology_meta = _topology_meta(topology)
     except Exception:
         cleanup_workspace(ws)
         raise
@@ -291,6 +313,7 @@ def segment_acf_start(
             "frames": len(df),
             "atoms": n_atoms,
             "chains": len(pairs),
+            **topology_meta,
         }
         return table_result_from_df(
             df,
@@ -318,10 +341,12 @@ def rouse_mode_start(
     ws, paths = start_workspace(
         settings, files, settings.max_trajectory_bytes, settings.max_files_per_request
     )
+    # Materialised before the thread starts, for the reason given in segment_acf_start.
     try:
         _, n_atoms = _inspect_and_validate(paths, settings)
         chains = topology.chain_indices(n_atoms)
         dynamics_service.check_indices(chains, n_atoms)
+        topology_meta = _topology_meta(topology)
     except Exception:
         cleanup_workspace(ws)
         raise
@@ -344,6 +369,7 @@ def rouse_mode_start(
             "frames": len(df),
             "atoms": n_atoms,
             "chains": len(chains),
+            **topology_meta,
         }
         return table_result_from_df(
             df,

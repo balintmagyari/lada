@@ -22,7 +22,8 @@
         {% set rouse_mode_field = true %}
         {% include "dynamics/_topology.html" %}
         {% set regime_fields = "files,time_per_frame" %}
-        {% set regime_shared_fields = "mode,n_chains,beads_per_chain,first_index,custom,p" %}
+        {% set regime_shared_fields =
+             "mode,n_chains,beads_per_chain,first_index,custom,topology_file,p" %}
         {% set regime_view_url = "/api/dynamics/rouse-mode" %}
         {% set regime_merge_url = "/api/dynamics/merge-regimes" %}
         {% set regime_merge_kind = "dynamics" %}

@@ -41,6 +41,20 @@ def write_npz(path: Path, n_frames: int, n_atoms: int) -> Path:
     return path
 
 
+DATA_FILE = {"mode": "data_file"}
+
+
+def topology_upload(data_dir: Path, name: str):
+    path = data_dir / name
+    return ("topology_file", (path.name, path.read_bytes()))
+
+
+def data_file_post(client, data_dir, url, name="sample_chains_molecular.data", **extra):
+    """A dynamics request whose chain topology comes from an uploaded data file."""
+    files = files_upload(trajectory(data_dir)) + [topology_upload(data_dir, name)]
+    return client.post(url, files=files, data=DATA_FILE | {"time_per_frame": "1.0"} | extra)
+
+
 # --- Topology resolution ---------------------------------------------------
 
 
@@ -402,9 +416,51 @@ def test_topology_pages_carry_the_alpine_toggle(client, slug):
 
 
 def test_rouse_page_binds_the_mode_number_to_the_bead_count(client):
+    """max follows the active mode, and is dropped when no bead count is known yet.
+
+    Binding it to a null bead count would render max="-1", making p permanently invalid and
+    blocking the download buttons, which submit this same form.
+    """
     r = client.get("/dynamics/rouse-mode")
-    assert ':max="beads - 1"' in r.text
+    assert ':max="maxP"' in r.text
+    assert "this.activeBeads ? this.activeBeads - 1 : false" in r.text
     assert 'name="p"' in r.text
+
+
+@pytest.mark.parametrize("slug", ["segment-acf", "rouse-mode"])
+def test_topology_pages_offer_the_data_file_mode(client, slug):
+    r = client.get(f"/dynamics/{slug}")
+
+    assert 'value="data_file"' in r.text
+    assert 'name="topology_file"' in r.text
+    assert "x-show=\"mode === 'data_file'\" x-cloak" in r.text
+    assert "window.ladaReadTopology($event, $data)" in r.text
+
+
+@pytest.mark.parametrize("slug", ["segment-acf", "rouse-mode"])
+def test_every_required_topology_input_is_disabled_outside_its_own_mode(client, slug):
+    """The download buttons submit this form, so a hidden `required` input would silently
+    block them: the browser refuses to submit and cannot focus the field to say why."""
+    r = client.get(f"/dynamics/{slug}")
+
+    for name, mode in [
+        ("n_chains", "uniform"),
+        ("beads_per_chain", "uniform"),
+        ("first_index", "uniform"),
+        ("topology_file", "data_file"),
+    ]:
+        field = r.text.split(f'name="{name}"', 1)[1].split(">", 1)[0]
+        assert "required" in field, name
+        assert f":disabled=\"mode !== '{mode}'\"" in field, name
+
+
+@pytest.mark.parametrize("slug", ["segment-acf", "rouse-mode"])
+def test_the_data_file_travels_with_every_regime(client, slug):
+    """Topology is shared across regimes, so each per-regime request has to carry the file."""
+    r = client.get(f"/dynamics/{slug}")
+    shared = r.text.split('data-shared-fields="', 1)[1].split('"', 1)[0]
+
+    assert "topology_file" in shared.split(",")
 
 
 def test_segment_acf_page_has_no_mode_number_field(client):
@@ -412,3 +468,165 @@ def test_segment_acf_page_has_no_mode_number_field(client):
     r = client.get("/dynamics/segment-acf")
     assert r.status_code == 200
     assert 'name="p"' not in r.text
+
+
+# --- Topology from an uploaded data file -----------------------------------
+
+
+def test_data_file_topology_matches_the_hand_typed_uniform_form(client, data_dir):
+    """The anchor: reading the topology must change nothing but how it was entered.
+
+    The fixture data file describes exactly the layout UNIFORM spells out, so any difference
+    here is the reader mis-numbering beads rather than a difference of opinion about physics.
+    """
+    typed = client.post(
+        SEGMENT_URL,
+        files=files_upload(trajectory(data_dir)),
+        data=UNIFORM | {"time_per_frame": "1.0"},
+    )
+    read = data_file_post(client, data_dir, SEGMENT_URL)
+
+    assert read.status_code == 200, read.text
+    assert read.json()["rows"] == typed.json()["rows"]
+    assert read.json()["meta"]["chains"] == 4
+
+
+def test_data_file_topology_says_where_the_chains_came_from(client, data_dir):
+    meta = data_file_post(client, data_dir, SEGMENT_URL).json()["meta"]
+
+    assert meta["topology"] == "4 chains of 8 beads, from molecule ids"
+    assert "topology notes" not in meta
+
+
+def test_rouse_mode_accepts_a_data_file_topology(client, data_dir):
+    typed = client.post(
+        ROUSE_URL,
+        files=files_upload(trajectory(data_dir)),
+        data=UNIFORM | {"time_per_frame": "1.0", "p": "1"},
+    )
+    read = data_file_post(client, data_dir, ROUSE_URL, p="1")
+
+    assert read.status_code == 200, read.text
+    assert read.json()["rows"] == typed.json()["rows"]
+
+
+def test_chains_can_come_from_the_bond_graph_alone(client, data_dir):
+    """The bonds-only fixture has one chain whose ids run out of backbone order."""
+    r = data_file_post(client, data_dir, SEGMENT_URL, name="sample_chains_bonds_only.data")
+
+    assert r.status_code == 200, r.text
+    assert r.json()["meta"]["topology"] == "4 chains of 8 beads, from the bond graph"
+
+
+def test_a_walked_chain_is_not_the_same_as_an_id_sorted_one(client, data_dir):
+    """Proof the walk did the work: its answer differs from the naive one, on real routes."""
+    walked = data_file_post(client, data_dir, SEGMENT_URL, name="sample_chains_bonds_only.data")
+    sorted_ids = data_file_post(client, data_dir, SEGMENT_URL)
+
+    assert walked.json()["rows"] != sorted_ids.json()["rows"]
+
+
+def test_a_data_file_for_a_different_system_is_refused(client, data_dir):
+    r = data_file_post(client, data_dir, SEGMENT_URL, name="sample_molecular.data")
+
+    assert r.status_code == 422
+    assert "12 atoms" in r.json()["detail"]
+    assert "32" in r.json()["detail"]
+
+
+def test_data_file_mode_without_a_file_asks_for_one(client, data_dir):
+    """An empty file input arrives as no field at all, which must not read as a broken file."""
+    r = client.post(
+        SEGMENT_URL,
+        files=files_upload(trajectory(data_dir)),
+        data=DATA_FILE | {"time_per_frame": "1.0"},
+    )
+
+    assert r.status_code == 422
+    assert "Choose a LAMMPS data file" in r.json()["detail"]
+
+
+def test_a_file_with_neither_molecule_ids_nor_bonds_is_refused(client, data_dir, tmp_path):
+    plain = tmp_path / "plain.data"
+    plain.write_text(
+        "no topology here\n\n2 atoms\n\n1 atom types\n\n0.0 1.0 xlo xhi\n0.0 1.0 ylo yhi\n"
+        "0.0 1.0 zlo zhi\n\nAtoms # atomic\n\n1 1 0.0 0.0 0.0\n2 1 1.0 0.0 0.0\n"
+    )
+    files = files_upload(trajectory(data_dir)) + [
+        ("topology_file", ("plain.data", plain.read_bytes()))
+    ]
+    r = client.post(SEGMENT_URL, files=files, data=DATA_FILE | {"time_per_frame": "1.0"})
+
+    assert r.status_code == 422
+    assert "no molecule id" in r.json()["detail"]
+
+
+def test_ragged_chains_run_a_segment_acf_but_not_a_rouse_mode(client, data_dir, tmp_path):
+    """Polydisperse melts are ordinary; only the Rouse analysis genuinely cannot take them."""
+    rows = [f"{i} 1 1 {i}.0 0.0 0.0" for i in range(1, 21)]
+    rows += [f"{i} 2 1 {i}.0 0.0 0.0" for i in range(21, 33)]
+    ragged = tmp_path / "ragged.data"
+    ragged.write_text(
+        "two chains of different length\n\n32 atoms\n\n1 atom types\n\n"
+        "0.0 1.0 xlo xhi\n0.0 1.0 ylo yhi\n0.0 1.0 zlo zhi\n\n"
+        "Atoms # molecular\n\n" + "\n".join(rows) + "\n"
+    )
+    upload = ("topology_file", ("ragged.data", ragged.read_bytes()))
+    files = files_upload(trajectory(data_dir)) + [upload]
+
+    segment = client.post(SEGMENT_URL, files=files, data=DATA_FILE | {"time_per_frame": "1.0"})
+    assert segment.status_code == 200, segment.text
+    assert segment.json()["meta"]["topology"] == "2 chains of varying lengths, from molecule ids"
+
+    files = files_upload(trajectory(data_dir)) + [upload]
+    rouse = client.post(
+        ROUSE_URL, files=files, data=DATA_FILE | {"time_per_frame": "1.0", "p": "1"}
+    )
+    assert rouse.status_code == 422
+    assert "same number of beads" in rouse.json()["detail"]
+
+
+def test_a_guessed_bead_order_is_reported_in_the_result(client, data_dir, tmp_path):
+    """A file without bonds cannot confirm the order, so the result has to say so."""
+    rows = [f"{i} {1 + (i - 1) // 8} 1 {i}.0 0.0 0.0" for i in range(1, 33)]
+    no_bonds = tmp_path / "nobonds.data"
+    no_bonds.write_text(
+        "molecule ids but no bonds\n\n32 atoms\n\n1 atom types\n\n"
+        "0.0 1.0 xlo xhi\n0.0 1.0 ylo yhi\n0.0 1.0 zlo zhi\n\n"
+        "Atoms # molecular\n\n" + "\n".join(rows) + "\n"
+    )
+    files = files_upload(trajectory(data_dir)) + [
+        ("topology_file", ("nobonds.data", no_bonds.read_bytes()))
+    ]
+    r = client.post(SEGMENT_URL, files=files, data=DATA_FILE | {"time_per_frame": "1.0"})
+
+    assert r.status_code == 200, r.text
+    assert "atom-id order" in r.json()["meta"]["topology notes"]
+
+
+def test_data_file_topology_downloads(client, data_dir):
+    files = files_upload(trajectory(data_dir)) + [
+        topology_upload(data_dir, "sample_chains_molecular.data")
+    ]
+    r = client.post(
+        f"{SEGMENT_URL}/download?fmt=csv", files=files, data=DATA_FILE | {"time_per_frame": "1.0"}
+    )
+
+    assert r.status_code == 200, r.text
+    frame = pd.read_csv(io.StringIO(r.text))
+    assert list(frame.columns) == ["lag_time", "acf"]
+    assert len(frame) == 32
+
+
+def test_data_file_topology_leaves_no_workspace_behind(client, data_dir, temp_root):
+    r = data_file_post(client, data_dir, SEGMENT_URL)
+
+    assert r.status_code == 200
+    assert not temp_root.exists() or list(temp_root.iterdir()) == []
+
+
+def test_a_bad_data_file_leaves_no_workspace_behind(client, data_dir, temp_root):
+    r = data_file_post(client, data_dir, SEGMENT_URL, name="sample_molecular.data")
+
+    assert r.status_code == 422
+    assert not temp_root.exists() or list(temp_root.iterdir()) == []

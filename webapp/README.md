@@ -78,9 +78,19 @@ pages take `atom_id_col` (default `id`) to identify each chain's terminal atoms.
 | Intermediate scattering function | `/dynamics/isf` | a NumPy `.npz` trajectory file |
 
 The `.npz` file must contain a `coords` array of shape `(n_frames, n_atoms, 3)`. These pages need a
-`time_per_frame` and a way to group atoms into chains — either **uniform** mode (`n_chains`,
-`beads_per_chain`, `first_index`, contiguous ascending atom-ID blocks) or **custom** mode (one chain
-per line in a `custom` textarea). The Rouse mode page additionally takes `p` (which mode; `p=0` is
+`time_per_frame` and a way to group atoms into chains, in one of three modes:
+
+- **uniform** (`n_chains`, `beads_per_chain`, `first_index`) — contiguous ascending atom-ID blocks.
+- **data_file** (`topology_file`) — upload the LAMMPS data file for the same system and the chains
+  are read from it: from the molecule ids where the atom style has them, otherwise from the `Bonds`
+  section. Because a `.npz` holds no atom ids the two files are lined up by ranking atom ids, so
+  the data file has to describe the same number of atoms as the trajectory; a mismatch is a 422.
+  Chains of unequal length work for the segment ACF but not for Rouse modes. Choosing a file also
+  fires `POST /api/topology/preview`, which reports the chains found — and anything left out, such
+  as solvent — before the calculation is started.
+- **custom** — one chain per line in a `custom` textarea.
+
+The Rouse mode page additionally takes `p` (which mode; `p=0` is
 the non-decaying center-of-mass mode, `p=1` the whole-chain relaxation mode); the ISF page takes
 `q_magnitude` and `n_vectors` (isotropic averaging directions, default 50). See
 [Limits and timeouts](#limits-and-timeouts) — these are the CPU-heavy pages.
@@ -176,6 +186,7 @@ Every setting is a `LADA_WEB_`-prefixed environment variable (`lada_web/config.p
 | `LADA_WEB_MAX_TRAJECTORY_MB` | `500` | Size cap for `.npz` trajectory uploads |
 | `LADA_WEB_MAX_TRAJECTORY_FRAMES` | `3000` | Rejects a trajectory with more frames than this, checked from the array's header, before any of it is loaded |
 | `LADA_WEB_MAX_TRAJECTORY_MEMORY_MB` | `2048` | Rejects a trajectory whose `coords` array would need more than this once decompressed (`n_frames × n_atoms × 3 × itemsize`), checked from the same header |
+| `LADA_WEB_MAX_TOPOLOGY_MB` | `20` | Size cap for a chain-topology data file. Well under the general upload cap: the parser reads the whole file into memory and parses it there, so peak use is several times the file size, on a request thread |
 | `LADA_WEB_MAX_TABLE_ROWS` | `500` | Rows shown on screen / returned in JSON `rows`; downloads and plots are never truncated by this |
 | `LADA_WEB_MAX_FILES_PER_REQUEST` | `10` | Most files one calculation (or one regime) may average |
 | `LADA_WEB_MAX_CONCURRENT_JOBS` | `4` | Background calculations running at once; further starts answer HTTP 429 |

@@ -37,10 +37,22 @@ global.window = {
   matchMedia: () => ({ matches: false, addEventListener: noop }),
 };
 global.fetch = () => Promise.reject(new Error('not used'));
+global.FormData = class { constructor() { this.parts = {}; } append(k, v) { this.parts[k] = v; } };
 eval(fs.readFileSync(%s, 'utf8'));
 const hooks = global.window.ladaTestHooks;
-console.log(JSON.stringify(%s));
+Promise.resolve(%s).then((v) => console.log(JSON.stringify(v)));
 """
+
+# A file input holding one file, plus a fetch that answers with the given ok flag and body.
+# One expression, because it is substituted into Promise.resolve(...) in HARNESS.
+PREVIEW_HARNESS = """(function () {
+  const state = { preview: null, previewError: '', previewing: false };
+  const event = { target: { files: [{ name: 'system.data' }] } };
+  const fetcher = () => %s;
+  return hooks.readTopology(event, state, fetcher).then(function () { return state; });
+})()"""
+
+ANSWER = "Promise.resolve({ ok: %s, json: () => Promise.resolve(%s) })"
 
 
 def run_js(expression: str) -> object:
@@ -91,3 +103,54 @@ def test_detail_message_falls_back_when_there_is_no_detail():
     assert run_js("hooks.detailMessage({}, 'Could not start the calculation.')") == (
         "Could not start the calculation."
     )
+
+
+def preview_state(ok: bool, body: object) -> dict:
+    answer = ANSWER % ("true" if ok else "false", json.dumps(body))
+    return run_js(PREVIEW_HARNESS % answer)
+
+
+def test_reading_a_topology_file_fills_the_preview():
+    body = {
+        "n_atoms": 32,
+        "n_chains": 4,
+        "beads_per_chain": 8,
+        "summary": "4 chains of 8 beads, from molecule ids",
+        "notes": [],
+    }
+    state = preview_state(True, body)
+
+    assert state["preview"] == body
+    assert state["previewError"] == ""
+    assert state["previewing"] is False
+
+
+def test_a_refused_topology_file_shows_the_servers_reason():
+    """The refusals name what the file is missing; showing a generic message throws that away."""
+    detail = "This file cannot say which atoms form a chain: no molecule id, and no Bonds section."
+    state = preview_state(False, {"detail": detail})
+
+    assert state["previewError"] == detail
+    assert state["preview"] is None
+    assert state["previewing"] is False
+
+
+def test_the_spinner_is_cleared_even_when_the_request_fails_outright():
+    """Without the final `.then`, a dropped connection would leave "Reading…" on screen forever."""
+    state = run_js(PREVIEW_HARNESS % "Promise.reject(new Error('offline'))")
+
+    assert state["previewing"] is False
+    assert state["previewError"] == "This data file could not be read."
+
+
+def test_clearing_the_file_input_clears_the_stale_preview():
+    """Otherwise an earlier file's chain count stays on screen next to an empty input."""
+    state = run_js(
+        "(function () {"
+        "  var s = { preview: { n_atoms: 1 }, previewError: 'old', previewing: true };"
+        "  return hooks.readTopology({ target: { files: [] } }, s).then(function () { return s; });"
+        "})()"
+    )
+
+    assert state["preview"] is None
+    assert state["previewError"] == ""

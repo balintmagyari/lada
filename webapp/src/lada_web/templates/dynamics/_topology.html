@@ -1,14 +1,37 @@
 {# Chain topology fieldset, shared by the segment ACF and Rouse mode pages.
    Set `rouse_mode_field = true` before including it to add the mode number p,
-   which needs the bead count held in this fieldset's Alpine state. #}
-<fieldset x-data="{ mode: 'uniform', beads: 8 }">
+   which needs the bead count held in this fieldset's Alpine state.
+
+   Every input that is `required` must also carry `:disabled` for its own mode. The download
+   buttons on a result are `type="submit"` for this form, so a click runs native validation over
+   the whole form including the panes x-show has hidden; a hidden-but-enabled required field
+   makes the form invalid and the browser then silently does nothing at all. Disabled controls
+   are excluded from validation, which is what keeps all three modes working. #}
+<fieldset x-data="{
+            mode: 'uniform',
+            beads: 8,
+            preview: null,
+            previewError: '',
+            previewing: false,
+            get fileBeads() { return this.preview ? this.preview.beads_per_chain : null; },
+            get activeBeads() { return this.mode === 'data_file' ? this.fileBeads : this.beads; },
+            get maxP() { return this.activeBeads ? this.activeBeads - 1 : false; }
+          }">
   <legend>Chain topology</legend>
-  <p class="field-help">.npz files carry no atom ids. Atom order is assumed to match ascending atom ID, 0-indexed. Check the first and last indices against your data file.</p>
+  <p class="field-help">
+    .npz files carry no atom ids. Atom order is assumed to match ascending atom ID, 0-indexed.
+    Reading a LAMMPS data file is the surest way to get this right: it states the chains
+    outright, and because the two files are lined up by atom-id order it has to describe the
+    same number of atoms as the trajectory.</p>
 
   <div class="field">
     <label for="mode-uniform" class="field-checkbox">
       <input type="radio" id="mode-uniform" name="mode" value="uniform" x-model="mode" checked>
       Chains of equal length, one after the other
+    </label>
+    <label for="mode-data-file" class="field-checkbox">
+      <input type="radio" id="mode-data-file" name="mode" value="data_file" x-model="mode">
+      Read the chains from a LAMMPS data file
     </label>
     <label for="mode-custom" class="field-checkbox">
       <input type="radio" id="mode-custom" name="mode" value="custom" x-model="mode">
@@ -40,6 +63,38 @@
     </div>
   </div>
 
+  <div x-show="mode === 'data_file'" x-cloak>
+    <div class="field">
+      <label for="topology_file">LAMMPS data file</label>
+      <input type="file" id="topology_file" name="topology_file" required
+             aria-describedby="topology_file-help" :disabled="mode !== 'data_file'"
+             @change="window.ladaReadTopology($event, $data)">
+      <small class="field-help" id="topology_file-help">The chains come from the molecule ids, or
+        from the Bonds section when the file has no molecule column. Solvent and other single
+        beads are left out. Only the topology is read; the coordinates in this file are
+        ignored.</small>
+      <div class="topology-preview" role="status" aria-live="polite"
+           x-show="previewing || preview || previewError" x-cloak>
+        <span x-show="previewing">Reading the data file…</span>
+        <span class="topology-preview-error" x-show="previewError" x-text="previewError"></span>
+        <template x-if="preview">
+          <div>
+            <strong x-text="preview.summary"></strong>
+            <div x-text="preview.n_atoms + ' atoms — the trajectory must hold the same number.'">
+            </div>
+            <div x-show="preview.beads_per_chain === null"
+                 x-text="'Chains run from ' + preview.shortest + ' to ' + preview.longest +
+                         ' beads, median ' + preview.median + '. Rouse modes need equal lengths.'">
+            </div>
+            <template x-for="note in preview.notes">
+              <div class="topology-preview-note" x-text="note"></div>
+            </template>
+          </div>
+        </template>
+      </div>
+    </div>
+  </div>
+
   <div x-show="mode === 'custom'" x-cloak>
     <div class="field">
       <label for="custom">Chains</label>
@@ -54,8 +109,12 @@
   {% if rouse_mode_field %}
   <div class="field">
     <label for="p">Mode number p</label>
+    {# max follows whichever mode is active, and is dropped entirely when the bead count is not
+       known yet (no file chosen, or chains of unequal length): binding it to null would render
+       max="-1", making p permanently invalid and blocking the download buttons with it. The
+       server checks p against the real chain length either way. #}
     <input type="number" id="p" name="p" value="1" min="0" step="1" required
-           :max="beads - 1" aria-describedby="p-help">
+           :max="maxP" aria-describedby="p-help">
     <small class="field-help" id="p-help">p must be below the beads per chain. p = 0 is the centre
       of mass, p = 1 is the relaxation of the whole chain, higher p is more local motion.</small>
   </div>

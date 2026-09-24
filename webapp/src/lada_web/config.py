@@ -18,6 +18,10 @@ class Settings(BaseSettings):
     # can declare an array of hundreds of gigabytes. This caps what the shape is allowed to
     # ask for once loaded, independently of the upload size and the frame count.
     max_trajectory_memory_mb: float = 2048
+    # A data file read for its chain topology. Far below max_upload_mb on purpose: the parser
+    # reads the whole file into a list of strings and then parses that list, so peak memory is
+    # several times the file size and it is all spent on a request thread.
+    max_topology_mb: float = 20
     max_table_rows: int = 500
     # Repeat-seed files or regime files averaged/merged into one calculation.
     max_files_per_request: int = 10
@@ -30,6 +34,10 @@ class Settings(BaseSettings):
     @property
     def max_upload_bytes(self) -> int:
         return int(self.max_upload_mb * 1024 * 1024)
+
+    @property
+    def max_topology_bytes(self) -> int:
+        return int(self.max_topology_mb * 1024 * 1024)
 
     @property
     def max_trajectory_bytes(self) -> int:

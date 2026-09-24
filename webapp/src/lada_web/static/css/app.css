@@ -762,6 +762,26 @@ body {
   color: #fff;
 }
 
+/* What a chosen chain-topology data file turned out to contain. It sits under the file input,
+   so it is deliberately quieter than .result-error: most of what it says is good news. */
+.topology-preview {
+  margin-top: 0.5rem;
+  padding: 0.6rem 0.75rem;
+  background: var(--sheet-sunken, rgba(127, 127, 127, 0.08));
+  border-left: 3px solid var(--rule-soft);
+  border-radius: var(--sheet-radius);
+  line-height: 1.45;
+}
+
+.topology-preview-error {
+  color: var(--fault);
+}
+
+.topology-preview-note {
+  margin-top: 0.35rem;
+  color: var(--ink-muted);
+}
+
 .result-error {
   padding: 1.1rem 1.25rem;
   background: var(--fault-tint);

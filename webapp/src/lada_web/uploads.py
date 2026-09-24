@@ -47,6 +47,9 @@ def save_upload(upload: UploadFile, directory: Path, max_bytes: int) -> Path:
         raise UploadTooLarge(name, limit_mb)
     dest = directory / name
     written = 0
+    # Rewind first: a caller that has already peeked at the part would otherwise write only the
+    # tail of it, and the saved file would look valid but truncated.
+    upload.file.seek(0)
     try:
         with dest.open("wb") as out:
             for chunk in iter(lambda: upload.file.read(CHUNK_SIZE), b""):

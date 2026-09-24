@@ -13,7 +13,7 @@ from .config import Settings
 from .errors import error_response, register_error_handlers
 from .jobs import JobStore
 from .rendering import STATIC_DIR
-from .routers import conformations, dynamics, jobs, modifiers, pages, parsers, rheology
+from .routers import conformations, dynamics, jobs, modifiers, pages, parsers, rheology, topology
 
 # How often the background sweep thread prunes jobs older than settings.job_ttl_seconds. Capped
 # at a quarter of the TTL so a short TTL is actually honoured: at a fixed minute, a 10-second TTL
@@ -72,8 +72,12 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     multi_upload_ceiling = (
         resolved.max_upload_bytes * resolved.max_files_per_request + BODY_OVERHEAD_BYTES
     )
+    # The segment-ACF and Rouse-mode routes may also carry one data file to read the chain
+    # topology from, so its budget belongs in their body, not in the general headroom.
     trajectory_ceiling = (
-        resolved.max_trajectory_bytes * resolved.max_files_per_request + BODY_OVERHEAD_BYTES
+        resolved.max_trajectory_bytes * resolved.max_files_per_request
+        + resolved.max_topology_bytes
+        + BODY_OVERHEAD_BYTES
     )
 
     def body_ceiling(path: str) -> int:
@@ -117,6 +121,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         dynamics.router,
         rheology.router,
         modifiers.router,
+        topology.router,
         jobs.router,
         pages.router,  # last: it owns the catch-all /{section}/{slug}
     ):

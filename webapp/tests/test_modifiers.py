@@ -39,6 +39,26 @@ def test_atomic_style_file_is_422_mentioning_molecular(client, data_dir):
     assert "molecular" in r.json()["detail"]
 
 
+def test_angle_style_file_is_accepted(client, data_dir, tmp_path):
+    """`angle` carries a molecule id in column 2 just as `molecular` does.
+
+    It used to be invisible to the parser, so the style gate never saw it; now that the parser
+    detects it, the gate has to accept it or a file that got through yesterday is refused today.
+    """
+    source = (data_dir / "sample_molecular.data").read_text()
+    angle_file = tmp_path / "sample_angle.data"
+    angle_file.write_text(source.replace("Atoms # molecular", "Atoms # angle"))
+
+    r = client.post(URL, files=upload(angle_file), data={"new_end_type": 3, "base_type": 1})
+    assert r.status_code == 200, r.text
+
+    out_path = tmp_path / "out.data"
+    out_path.write_bytes(r.content)
+    atoms = read_data_file(str(out_path)).sections["Atoms"]
+    rewritten = {int(row[0]) for row in atoms if int(row[2]) == 3}
+    assert rewritten == END_ATOM_IDS
+
+
 def test_unknown_base_type_is_422_mentioning_base_type(client, data_dir):
     r = client.post(
         URL,

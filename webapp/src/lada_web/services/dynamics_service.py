@@ -1,14 +1,17 @@
 """Resolve the chain topology, inspect an .npz trajectory, and run `lada.analysis`."""
 
 import zipfile
+from collections import Counter
 from pathlib import Path
 
 import numpy as np
 import pandas as pd
 from lada.analysis import (
+    ChainTopology,
     calculate_isf_from_trajectory,
     calculate_rouse_mode_acf_from_trajectory,
     calculate_segment_acf_from_trajectory,
+    chains_from_data_file,
 )
 from numpy.lib import format as npformat
 
@@ -80,12 +83,77 @@ def _uniform_blocks(n_chains: int, beads_per_chain: int, first_index: int) -> np
     return start + np.arange(beads_per_chain)[None, :]
 
 
+NO_TOPOLOGY_FILE = (
+    "Choose a LAMMPS data file to read the chain topology from, or switch to one of the manual "
+    "topology modes."
+)
+
+
+def read_topology(path: Path) -> ChainTopology:
+    """Chains as positions into a `coords` array, read from an uploaded data file."""
+    return chains_from_data_file(str(path))
+
+
+def _checked_topology(topology: ChainTopology | None, n_atoms: int) -> ChainTopology:
+    """The uploaded topology, once it is known to describe this trajectory.
+
+    A `.npz` holds no atom ids, so a chain's beads are found by ranking the data file's ids: the
+    i-th smallest id is position i. That ranking only means anything if both files hold the same
+    atoms, and nothing else in either file can be used to line them up, so a count that differs
+    is refused rather than trimmed or padded.
+    """
+    if topology is None:
+        raise ValueError(NO_TOPOLOGY_FILE)
+    if topology.n_atoms != n_atoms:
+        raise ValueError(
+            f"The data file describes {topology.n_atoms} atoms but the trajectory holds "
+            f"{n_atoms}. Chains are matched to the trajectory by atom-id order, so the two "
+            "files have to describe the same system."
+        )
+    return topology
+
+
+def topology_summary(topology: ChainTopology) -> str:
+    """One line for the result's metadata: what was read, and from which section."""
+    distinct = set(topology.lengths)
+    count = len(topology.chains)
+    chains = "1 chain" if count == 1 else f"{count} chains"
+    beads = f"{distinct.pop()} beads" if len(distinct) == 1 else "varying lengths"
+    source = "molecule ids" if topology.source == "molecule" else "the bond graph"
+    return f"{chains} of {beads}, from {source}"
+
+
+def topology_stats(topology: ChainTopology) -> dict:
+    """Everything the preview shows, including the spread of chain lengths.
+
+    A bare chain count hides the case that matters: molecule ids in a solvated system put every
+    water and every counterion in its own "chain", and a count alone would look like success.
+    """
+    lengths = sorted(topology.lengths)
+    distinct = set(lengths)
+    common = Counter(lengths).most_common(3)
+    return {
+        "n_atoms": topology.n_atoms,
+        "n_chains": len(lengths),
+        "beads_per_chain": lengths[0] if len(distinct) == 1 else None,
+        "shortest": lengths[0],
+        "longest": lengths[-1],
+        "median": int(np.median(lengths)),
+        "lengths": [{"beads": beads, "chains": count} for beads, count in common],
+        "source": topology.source,
+        "summary": topology_summary(topology),
+        "notes": topology.notes,
+    }
+
+
 def resolve_chain_indices(
-    mode, *, n_chains, beads_per_chain, first_index, custom, n_atoms
+    mode, *, n_chains, beads_per_chain, first_index, custom, n_atoms, topology=None
 ) -> np.ndarray:
     if mode == "uniform":
         chains, beads = _uniform_extent(n_chains, beads_per_chain, first_index, n_atoms)
         return _uniform_blocks(chains, beads, first_index)
+    if mode == "data_file":
+        return _checked_topology(topology, n_atoms).chain_indices()
     chains_list = parse_custom_lines(custom)
     if len({len(c) for c in chains_list}) != 1:
         raise ValueError(
@@ -95,7 +163,7 @@ def resolve_chain_indices(
 
 
 def resolve_segment_pairs(
-    mode, *, n_chains, beads_per_chain, first_index, custom, n_atoms
+    mode, *, n_chains, beads_per_chain, first_index, custom, n_atoms, topology=None
 ) -> np.ndarray:
     if mode == "uniform":
         chains, beads = _uniform_extent(n_chains, beads_per_chain, first_index, n_atoms)
@@ -103,6 +171,10 @@ def resolve_segment_pairs(
         # directly instead of the whole (n_chains, beads_per_chain) matrix.
         starts = first_index + np.arange(chains) * beads
         return np.column_stack([starts, starts + beads - 1])
+    if mode == "data_file":
+        # Chains of unequal length are fine here, unlike for Rouse modes: an end-to-end vector
+        # needs only the two ends, so a polydisperse melt works as it stands.
+        return _checked_topology(topology, n_atoms).segment_pairs()
     return np.array([[c[0], c[-1]] for c in parse_custom_lines(custom)], dtype=int)
 
 

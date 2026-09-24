@@ -239,6 +239,12 @@
   function copyNamedValue(form, name, target) {
     var inputs = form.querySelectorAll('[name="' + name + '"]');
     Array.prototype.forEach.call(inputs, function (input) {
+      // Skip what the form itself would skip. The topology panes disable the inputs of whichever
+      // mode is not selected and new FormData(form) honours that; without this line a regime
+      // request would carry a data file that was chosen and then switched away from.
+      if (input.disabled) {
+        return;
+      }
       if (input.type === "file") {
         Array.prototype.forEach.call(input.files, function (file) {
           target.append(name, file);
@@ -695,9 +701,60 @@
     }
   };
 
-  // Exposed for tests/test_frontend_helpers.py. Both are pure string functions, and both have
-  // had a bug that reached a user: escapeHtml left quotes alone, which broke the attribute
-  // holding a job's result JSON, and detailMessage's predecessor printed "[object Object]" for
-  // every field-validation failure. Neither is reachable by a Python-level route test.
-  window.ladaTestHooks = { escapeHtml: escapeHtml, detailMessage: detailMessage };
+  // --- Chain topology read from a data file ----------------------------------
+  //
+  // Fired when a file is chosen on the segment-ACF or Rouse-mode page, so a wrong file is caught
+  // before a calculation that can run for minutes. `state` is the Alpine data object of
+  // templates/dynamics/_topology.html; writing to it is what updates the panel.
+  //
+  // It deliberately does not check the file against the trajectory: that would mean uploading
+  // the .npz twice, once to look at and once to compute with. The atom counts are compared
+  // server-side when the calculation runs.
+
+  var TOPOLOGY_PREVIEW_URL = "/api/topology/preview";
+  var TOPOLOGY_UNREADABLE = "This data file could not be read.";
+
+  function readTopology(event, state, fetcher) {
+    var input = event.target;
+    var send = fetcher || window.fetch;
+    state.preview = null;
+    state.previewError = "";
+    if (!input.files || !input.files.length) {
+      return Promise.resolve();
+    }
+    state.previewing = true;
+    var body = new FormData();
+    body.append("file", input.files[0]);
+    return send(TOPOLOGY_PREVIEW_URL, { method: "POST", body: body })
+      .then(function (response) {
+        return response.json().then(function (data) {
+          return { ok: response.ok, data: data };
+        });
+      })
+      .then(function (result) {
+        if (result.ok) {
+          state.preview = result.data;
+        } else {
+          state.previewError = detailMessage(result.data, TOPOLOGY_UNREADABLE);
+        }
+      })
+      .catch(function () {
+        state.previewError = TOPOLOGY_UNREADABLE;
+      })
+      .then(function () {
+        state.previewing = false;
+      });
+  }
+
+  window.ladaReadTopology = readTopology;
+
+  // Exposed for tests/test_frontend_helpers.py. These have no Python-level route test between
+  // them, and two of them have had a bug that reached a user: escapeHtml left quotes alone,
+  // which broke the attribute holding a job's result JSON, and detailMessage's predecessor
+  // printed "[object Object]" for every field-validation failure.
+  window.ladaTestHooks = {
+    escapeHtml: escapeHtml,
+    detailMessage: detailMessage,
+    readTopology: readTopology,
+  };
 })();

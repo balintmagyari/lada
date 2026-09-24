@@ -5,6 +5,7 @@ import os
 import pytest
 
 from lada import read_data_file, read_lammps_acf
+from lada.parsers.data_parser import ATOM_STYLE_COLUMNS, STYLES_WITH_MOLECULE
 
 # Get the directory containing test data files
 TEST_DATA_DIR = os.path.join(os.path.dirname(__file__), "../data")
@@ -138,6 +139,96 @@ class TestReadDataFile:
         atoms = lammps_data.get("Atoms")
         assert atoms is not None
         assert len(atoms) > 0
+
+
+HEADER = """Shape tests
+
+{n_atoms} atoms
+{n_bonds} bonds
+
+1 atom types
+1 bond types
+
+0.0 10.0 xlo xhi
+0.0 10.0 ylo yhi
+0.0 10.0 zlo zhi
+
+"""
+
+
+def write_data_file(path, body, n_atoms=2, n_bonds=1):
+    path.write_text(HEADER.format(n_atoms=n_atoms, n_bonds=n_bonds) + body)
+    return str(path)
+
+
+class TestSectionShape:
+    """A section is always 2-D, whatever its row count.
+
+    np.loadtxt drops a one-row section to 1-D, which made the smallest legal file explode in
+    every caller that indexes `[:, column]` -- the chain-topology reader reads atom ids that way.
+    """
+
+    def test_a_single_row_section_keeps_its_second_axis(self, tmp_path):
+        path = write_data_file(
+            tmp_path / "one.data",
+            "Masses\n\n1 1.0\n\nAtoms # atomic\n\n1 1 0.0 0.0 0.0\n2 1 1.0 0.0 0.0\n",
+        )
+        masses = read_data_file(path).get("Masses")
+
+        assert masses.shape == (1, 2)
+        assert masses[0, 0] == 1
+
+    def test_a_single_row_section_converts_to_a_one_row_frame(self, tmp_path):
+        path = write_data_file(
+            tmp_path / "one.data",
+            "Masses\n\n1 1.0\n\nAtoms # atomic\n\n1 1 0.0 0.0 0.0\n2 1 1.0 0.0 0.0\n",
+        )
+        frame = read_data_file(path).to_pandas("Masses")
+
+        assert list(frame.columns) == ["atom_id", "mass"]
+        assert len(frame) == 1
+
+    def test_an_absent_section_stays_empty(self, tmp_path):
+        """Empty stays 1-D and size 0 -- callers test `.size`, never a second axis."""
+        path = write_data_file(
+            tmp_path / "empty.data", "Atoms # atomic\n\n1 1 0.0 0.0 0.0\n2 1 1.0 0.0 0.0\n\nBonds\n"
+        )
+        assert read_data_file(path).get("Bonds").size == 0
+
+    def test_rows_of_differing_length_name_the_section(self, tmp_path):
+        """numpy's own message cites a line number in a file it never opened."""
+        path = write_data_file(
+            tmp_path / "ragged.data",
+            "Atoms # atomic\n\n1 1 0.0 0.0 0.0\n2 1 1.0 0.0 0.0 0 0 0\n",
+        )
+        with pytest.raises(ValueError, match="'Atoms' section has rows of differing lengths"):
+            read_data_file(path)
+
+
+class TestAngleStyle:
+    """`angle` is an ordinary bead-spring style and carries a molecule id like `molecular`."""
+
+    def test_angle_style_is_detected(self, tmp_path):
+        path = write_data_file(
+            tmp_path / "angle.data",
+            "Atoms # angle\n\n1 1 1 0.0 0.0 0.0\n2 1 1 1.0 0.0 0.0\n",
+        )
+        assert read_data_file(path).metadata["atom style"] == "angle"
+
+    def test_angle_style_names_its_molecule_column(self, tmp_path):
+        path = write_data_file(
+            tmp_path / "angle.data",
+            "Atoms # angle\n\n1 1 1 0.0 0.0 0.0\n2 1 1 1.0 0.0 0.0\n",
+        )
+        frame = read_data_file(path).to_pandas("Atoms")
+
+        assert list(frame.columns) == ["id", "molecule", "type", "x", "y", "z"]
+
+    def test_the_molecule_carrying_styles_are_derived_from_the_column_table(self):
+        """One source of truth: a style gains molecule support by gaining the column."""
+        assert sorted(STYLES_WITH_MOLECULE) == ["angle", "bond", "full", "molecular"]
+        for style in STYLES_WITH_MOLECULE:
+            assert ATOM_STYLE_COLUMNS[style][1] == "molecule"
 
 
 class TestReadLammpsACF:

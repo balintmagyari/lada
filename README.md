@@ -270,6 +270,40 @@ Raises `ValueError` if `p >= beads_per_chain`.
 
 ---
 
+### 2e-bis) Chain topology from a data file — `chains_from_data_file`
+
+`segment_pairs` and `chain_indices` above are 0-indexed positions into the `.npz` `coords` array, which carries no atom ids — so writing them by hand means counting chains and trusting that the beads sit where you think. If you still have the LAMMPS data file for the same system, read them from it instead.
+
+```python
+from lada import calculate_rouse_mode_acf_from_trajectory, chains_from_data_file
+
+topology = chains_from_data_file("system.data")
+print(topology.source)   # 'molecule' or 'bonds' — which section the chains came from
+print(topology.lengths)  # beads in each chain
+for note in topology.notes:
+    print(note)          # anything the reader had to decide for itself
+
+result = calculate_rouse_mode_acf_from_trajectory(
+    "trajectory.npz", topology.chain_indices(), p=1, time_per_frame=0.5
+)
+```
+
+- `.segment_pairs()` → `(n_chains, 2)` for `calculate_segment_acf_from_trajectory`. Chains of unequal length are fine: an end-to-end vector needs only the two ends.
+- `.chain_indices()` → `(n_chains, beads_per_chain)` for `calculate_rouse_mode_acf_from_trajectory`. Raises `ValueError` if the chains differ in length, since a Rouse mode has no meaning without a common N.
+- `.n_atoms` is the data file's atom count. The two files are lined up by ranking atom ids — position `i` is the `i`-th smallest id — so a data file describing a different number of atoms cannot be used with that trajectory.
+
+How the chains are found:
+
+1. **Molecule ids**, for the atom styles that carry one (`bond`, `angle`, `molecular`, `full`): atoms sharing a molecule id form a chain. Where the file also has a `Bonds` section, the bonds decide the order of the beads along the backbone; without one, ascending atom id is assumed and a note says so.
+2. **The bond graph**, when there is no molecule column: each connected component is a chain, walked end to end. A ring or a branch is refused by name, because neither has two ends to correlate.
+3. Otherwise a `ValueError` naming what is missing.
+
+Molecules with fewer than two beads — solvent, ions, free beads — are left out, and the count appears in `.notes`.
+
+> Bead order matters more than it looks. A Rouse amplitude weights bead *n* by cos(pπ(n−½)/N), so a chain held in the wrong order returns a curve that is wrong but entirely plausible.
+
+---
+
 ### 2f) Intermediate scattering function — `calculate_isf_from_trajectory`
 
 Coherent intermediate scattering function F(q, t) / F(q, 0), computed via the density-fluctuation autocorrelation method. Isotropic orientational averaging is performed over `n_vectors` scattering vectors distributed on a Fibonacci lattice.

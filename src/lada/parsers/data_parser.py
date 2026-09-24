@@ -11,9 +11,17 @@ ATOM_STYLE_COLUMNS = {
     "atomic": ["id", "type", "x", "y", "z", "nx", "ny", "nz"],
     "charge": ["id", "type", "q", "x", "y", "z", "nx", "ny", "nz"],
     "bond": ["id", "molecule", "type", "x", "y", "z", "nx", "ny", "nz"],
+    "angle": ["id", "molecule", "type", "x", "y", "z", "nx", "ny", "nz"],
     "molecular": ["id", "molecule", "type", "x", "y", "z", "nx", "ny", "nz"],
     "full": ["id", "molecule", "type", "q", "x", "y", "z", "nx", "ny", "nz"],
 }
+
+# The styles whose second column is the molecule id. Anything that groups atoms into chains --
+# the end-bead modifier, the chain topology reader -- asks this rather than keeping its own copy,
+# so adding a style above cannot leave those callers rejecting a file this parser understands.
+STYLES_WITH_MOLECULE = frozenset(
+    style for style, columns in ATOM_STYLE_COLUMNS.items() if "molecule" in columns
+)
 ALLOWED_SECTIONS = (
     "Masses",
     "Atoms",
@@ -181,6 +189,27 @@ class LammpsData:
             )
 
 
+def _section_array(name: str, rows: list[str]) -> np.ndarray:
+    """Parse one section's lines into a 2-D float array.
+
+    `ndmin=2` keeps a one-row section (a single mass, a single bond) two-dimensional; without it
+    numpy drops it to 1-D and every caller indexing `[:, col]` fails on the smallest possible
+    file. An absent section stays the empty 1-D array it has always been, so test it with `.size`
+    rather than for a second axis.
+    """
+    if not rows:
+        return np.array([])
+    try:
+        return np.loadtxt(rows, ndmin=2)
+    except ValueError as exc:
+        # numpy's own wording here names a line number in a file it never opened, which reads as
+        # nonsense to someone looking at their data file.
+        raise ValueError(
+            f"The '{name}' section has rows of differing lengths, so it cannot be read as a "
+            "table. Every row of a section must hold the same number of values."
+        ) from exc
+
+
 def read_data_file(filepath: str) -> LammpsData:
     """Parse a LAMMPS data file and return its contents as a ``LammpsData`` object.
 
@@ -279,9 +308,7 @@ def read_data_file(filepath: str) -> LammpsData:
             else:
                 sections_raw[current_section].append(clean_line)
 
-    sections = {
-        name: np.loadtxt(data) if data else np.array([]) for name, data in sections_raw.items()
-    }
+    sections = {name: _section_array(name, data) for name, data in sections_raw.items()}
 
     return LammpsData(
         metadata=metadata,

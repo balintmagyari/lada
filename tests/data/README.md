@@ -220,7 +220,30 @@ a two-exponential decay (fast + slow relaxation) with small seeded noise, held p
 with `Masses`, `Pair Coeffs`, `Bond Coeffs`, `Angle Coeffs`, `Bonds`, and `Angles`
 sections. Written by hand — there is no generator script for this one.
 
+### **`sample_chains_molecular.data`**
+**Purpose**: Chain-topology fixture for `lada.analysis.chains_from_data_file` and the web
+app's `mode=data_file`. Deliberately sized to `sample_trajectory.npz` — 4 chains of 8 beads,
+32 atoms, atom id = array index + 1 — so a data-file run can be asserted *numerically
+identical* to the hand-typed uniform form, which is the anchor test for the whole feature.
+**Contents**: `Atoms # molecular` (`id molecule type x y z`, coordinates taken from frame 0
+of the trajectory), 28 bonds joining consecutive beads within each molecule, one atom type.
+Exercises the molecule-id path with bonds available to confirm the bead order.
+
+### **`sample_chains_bonds_only.data`**
+**Purpose**: The same 32 atoms with **no molecule column** (`Atoms # atomic`), so the chains
+can only come from the bond graph.
+**Contents**: the same 28 bonds, written hostile to a naive implementation — the bond lines
+are shuffled, roughly half list the higher atom id first, and chain 4's backbone runs
+27-25-29-26-31-28-32-30, so sorting its ids yields the wrong head and tail. A reader that
+groups correctly but orders by atom id passes on the other fixture and fails on this one.
+Note that `sample.data` cannot do this job: its `Bonds` section is synthetic and broken
+(bond 50 duplicates bond 49, and it covers only atoms 1–50 of the 100 present).
+
+Both were written by a one-off script against `sample_trajectory.npz`; as with
+`sample_molecular.data`, no generator is kept for them.
+
 Guarding tests: `tests/test_fixtures.py` (byte-reproducibility of the two generated
-files from their scripts, and schema checks) and
+files from their scripts, and schema checks),
 `tests/test_modifiers/test_data_modifier.py` (behavioural tests of `rewrite_end_beads`
-against `sample_molecular.data`).
+against `sample_molecular.data`), and `tests/test_analysis/test_topology.py` plus
+`webapp/tests/test_dynamics.py` (the two chain-topology fixtures).

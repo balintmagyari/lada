@@ -534,9 +534,3 @@ def test_rheometer_tools_live_under_one_prefix_and_simulation_urls_are_unchanged
     for calc in SIMULATION_CALCULATIONS:
         assert calc.path == f"/{calc.section}/{calc.slug}"
     assert client.get("/rheometer/nope").status_code == 404
-
-
-def test_the_one_unbuilt_rheometer_tool_says_so(client):
-    r = client.get("/rheometer/master-curve")
-    assert "This tool is not ready yet." in r.text
-    assert 'href="/rheometer/my-data"' in r.text

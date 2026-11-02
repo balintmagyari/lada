@@ -59,6 +59,53 @@
         <span class="studio-export-status" id="studio-export-status" role="status"
               aria-live="polite"></span>
       </div>
+
+      {% if preset_key == 'master_curve' %}
+      {# How each sweep was shifted. The table can be edited: a value typed in replaces what
+         overlap found, and the fits follow the values actually used. #}
+      <section class="tts-panel" id="tts-panel" aria-labelledby="tts-title" hidden>
+        <h2 id="tts-title" class="tts-title">Shift factors</h2>
+        <div class="tts-controls">
+          <div class="studio-field">
+            <label for="tts-reference">Reference temperature</label>
+            <select id="tts-reference" data-tts="reference"></select>
+          </div>
+          <div class="studio-field">
+            <label for="tts-use">Shift by overlap of</label>
+            <select id="tts-use" data-tts="use">
+              <option value="both">G′ and G″</option>
+              <option value="storage">G′ only</option>
+              <option value="loss">G″ only</option>
+            </select>
+          </div>
+          <label class="studio-check tts-vertical">
+            <input type="checkbox" id="tts-vertical" data-tts="vertical">
+            Correct the moduli for temperature (bT = T / Tref, in kelvin)
+          </label>
+        </div>
+        <div class="tts-body">
+          <div class="tts-table-wrap">
+            <table class="tts-table">
+              <thead>
+                <tr><th scope="col">T (°C)</th><th scope="col">log aT</th>
+                    <th scope="col">aT</th><th scope="col"><span class="visually-hidden">Source</span></th></tr>
+              </thead>
+              <tbody id="tts-rows"></tbody>
+            </table>
+            <p class="studio-field-hint">Type a value to set a shift by hand; clear it to go
+              back to the one found by overlap.</p>
+          </div>
+          <div class="tts-plot" id="tts-plot" aria-label="log aT against temperature"></div>
+        </div>
+        <dl class="tts-fits" id="tts-fits"></dl>
+        <ul class="studio-notes" id="tts-notes" hidden></ul>
+        <div class="tts-downloads">
+          <span class="studio-export-label">Shift factors</span>
+          <button type="button" class="quiet-button" data-tts-export="csv">CSV</button>
+          <button type="button" class="quiet-button" data-tts-export="dat">pgfplots table</button>
+        </div>
+      </section>
+      {% endif %}
     </section>
 
     <section class="studio-panel studio-style" aria-labelledby="studio-style-title">

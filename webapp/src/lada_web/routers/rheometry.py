@@ -19,6 +19,7 @@ from ..rheometry.detect import block_temperature, detect_test_type
 from ..rheometry.figure import MEDIA_TYPES, FigureSpec, pgfplots_zip, render_with_notes
 from ..rheometry.model import FORMAT_LABELS, TEST_TYPE_LABELS, Block, ParseError, ParseResponse
 from ..rheometry.readers import ACCEPTED, Limits, read_file
+from ..rheometry.tts import TTSRequest, TTSResult, shift_factors
 from ..uploads import get_workspace, save_uploads
 
 router = APIRouter(prefix="/api/rheometry", tags=["rheometry"])
@@ -170,3 +171,14 @@ def pgfplots(spec: FigureSpec, ws: WorkspaceDep) -> Response:
             "Cache-Control": "no-store",
         },
     )
+
+
+# --- Time-temperature superposition -----------------------------------------------------------
+
+
+@router.post("/tts", response_model=TTSResult)
+def tts(body: TTSRequest) -> TTSResult:
+    """Shift factors that lay frequency sweeps at several temperatures onto one master curve
+    at the reference temperature, with WLF and Arrhenius fits to them. The browser applies
+    the shifts itself, so the master curve is drawn, styled and exported like any graph."""
+    return shift_factors(body)

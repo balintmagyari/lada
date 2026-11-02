@@ -2534,6 +2534,134 @@ dialog.jump {
   justify-self: start;
 }
 
+/* --- Rheometer: shift factors (Master curve) --------------------------------- */
+
+.tts-panel {
+  margin-top: 1.5rem;
+  padding: 1rem 1.1rem 1.1rem;
+  background: var(--sunken);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+}
+
+.tts-title {
+  margin: 0 0 0.7rem;
+  font-size: 1rem;
+  font-weight: 700;
+}
+
+.tts-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 0.25rem 1.25rem;
+}
+
+.tts-controls .studio-field {
+  min-width: 11rem;
+}
+
+.content .tts-controls select {
+  height: auto;
+  margin: 0;
+  padding: 0.32rem 2rem 0.32rem 0.5rem;
+  font-size: 0.85rem;
+}
+
+.tts-vertical {
+  margin-bottom: 0.65rem;
+}
+
+.tts-body {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 1rem;
+  margin-top: 0.4rem;
+}
+
+@media (min-width: 56rem) {
+  .tts-body {
+    grid-template-columns: minmax(0, 22rem) minmax(0, 1fr);
+    align-items: start;
+  }
+}
+
+.tts-table {
+  width: 100%;
+  margin: 0;
+  font-size: 0.85rem;
+}
+
+.tts-table th,
+.tts-table td {
+  padding: 0.3rem 0.45rem;
+  background: transparent;
+  border-color: var(--line);
+  white-space: nowrap;
+}
+
+.tts-table th {
+  color: var(--ink-muted);
+  font-weight: 600;
+}
+
+.tts-table td:first-child,
+.tts-at {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}
+
+.content .tts-table input {
+  width: 6.5rem;
+  height: auto;
+  margin: 0;
+  padding: 0.22rem 0.4rem;
+  font-family: var(--font-mono);
+  font-size: 0.83rem;
+}
+
+.tts-source {
+  color: var(--ink-faint);
+  font-size: 0.78rem;
+}
+
+.content .tts-source .quiet-button {
+  padding: 0.15rem 0.5rem;
+  font-size: 0.76rem;
+}
+
+.tts-plot {
+  min-height: 240px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+}
+
+.tts-fits {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 0.25rem 0.9rem;
+  margin: 0.9rem 0 0;
+  font-size: 0.87rem;
+}
+
+.tts-fits dt {
+  font-weight: 700;
+}
+
+.tts-fits dd {
+  margin: 0;
+  font-variant-numeric: tabular-nums;
+}
+
+.tts-downloads {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4rem 0.5rem;
+  margin-top: 0.9rem;
+}
+
 /* --- Quality floor -------------------------------------------------------- */
 
 :focus-visible {

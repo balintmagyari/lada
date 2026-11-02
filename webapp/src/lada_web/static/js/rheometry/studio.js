@@ -25,6 +25,8 @@
   var entries = []; // every table: { dataset, block, id }
   var spec = null;
   var view = "explore"; // or "figure"
+  var tts = null; // the last shift factors from /api/rheometry/tts (Master curve only)
+  var ttsSent = ""; // the request they answer, to skip asking twice
   var lastResult = null; // the last drawable build(), for export
 
   function $(id) {
@@ -117,10 +119,19 @@
     return name + ", " + (t !== null && t !== undefined ? t + " °C" : entry.block.name);
   }
 
+  // A table starts ticked when it is the page's kind of test; on the master curve it must
+  // also have been measured at one temperature, or it could not be shifted.
+  function defaultOn(entry) {
+    var block = entry.block;
+    var kind = preset.testTypes.indexOf(block.test_type) >= 0;
+    var temperature = block.temperature !== null && block.temperature !== undefined;
+    return kind && (!preset.superpose || temperature);
+  }
+
   function blockState(entry) {
     var saved = spec.blocks[entry.id] || {};
     return {
-      on: saved.on !== undefined ? saved.on : preset.testTypes.indexOf(entry.block.test_type) >= 0,
+      on: saved.on !== undefined ? saved.on : defaultOn(entry),
       label: saved.label || ""
     };
   }
@@ -299,6 +310,161 @@
     return text;
   }
 
+  // On a master curve the horizontal axis is the reduced frequency aT·ω.
+  function xTitle(p) {
+    if (spec.axes.x.title) {
+      return spec.axes.x.title;
+    }
+    var title = axisTitle([p.x], "");
+    return preset.superpose && title ? "aT·" + title : title;
+  }
+
+  // --- Superposition (Master curve) ----------------------------------------------------
+
+  function hasTemperature(entry) {
+    return entry.block.temperature !== null && entry.block.temperature !== undefined;
+  }
+
+  // The sweeps the shift factors are found for: ticked, at one temperature, with ω and a
+  // modulus to overlap.
+  function ttsEntries() {
+    return activeEntries().filter(function (entry) {
+      return hasTemperature(entry) && findColumn(entry.block, "q:angular_frequency") &&
+        (findColumn(entry.block, "q:storage_modulus") || findColumn(entry.block, "q:loss_modulus"));
+    });
+  }
+
+  function ttsRequest() {
+    var manual = {};
+    Object.keys(spec.tts.manual || {}).forEach(function (id) {
+      var value = parseFloat(spec.tts.manual[id]);
+      if (isFinite(value)) {
+        manual[id] = value;
+      }
+    });
+    var reference = parseFloat(spec.tts.reference);
+    return {
+      curves: ttsEntries().map(function (entry) {
+        var omega = findColumn(entry.block, "q:angular_frequency");
+        var g1 = findColumn(entry.block, "q:storage_modulus");
+        var g2 = findColumn(entry.block, "q:loss_modulus");
+        return {
+          id: entry.id,
+          label: labelOf(entry),
+          temperature: entry.block.temperature,
+          omega: omega.values,
+          storage: g1 ? g1.values : [],
+          loss: g2 ? g2.values : []
+        };
+      }),
+      reference: isFinite(reference) ? reference : null,
+      use: spec.tts.use,
+      vertical: !!spec.tts.vertical,
+      manual: manual
+    };
+  }
+
+  var ttsTimer = null;
+  function requestTTS() {
+    if (!preset.superpose) {
+      return;
+    }
+    clearTimeout(ttsTimer);
+    ttsTimer = setTimeout(function () {
+      var body = ttsRequest();
+      var sent = JSON.stringify(body);
+      if (body.curves.length < 2) {
+        tts = null;
+        ttsSent = "";
+        renderTTS();
+        draw();
+        return;
+      }
+      if (sent === ttsSent && tts) {
+        return;
+      }
+      ttsSent = sent;
+      fetch("/api/rheometry/tts", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: sent
+      })
+        .then(function (r) {
+          if (!r.ok) {
+            return errorText(r).then(function (text) {
+              throw new Error(text);
+            });
+          }
+          return r.json();
+        })
+        .then(function (result) {
+          if (sent !== ttsSent) {
+            return; // a newer request has been sent since
+          }
+          tts = result;
+          renderTTS();
+          draw();
+        })
+        .catch(function (error) {
+          tts = null;
+          renderTTS(String(error.message || error));
+          draw();
+        });
+    }, 150);
+  }
+
+  function shiftOf(id) {
+    if (!tts) {
+      return null;
+    }
+    return tts.shifts.filter(function (s) {
+      return s.id === id;
+    })[0] || null;
+  }
+
+  // A copy of a sweep moved onto the master curve: ω × aT, moduli ÷ bT, |η*| ÷ (aT bT).
+  // Quantities that do not shift (tan δ, δ) are kept; anything else is left out.
+  function shifted(entry, shift) {
+    var a = Math.pow(10, shift.log_at);
+    var b = Math.pow(10, shift.log_bt);
+    var scale = {
+      angular_frequency: a,
+      frequency: a,
+      storage_modulus: 1 / b,
+      loss_modulus: 1 / b,
+      complex_modulus: 1 / b,
+      complex_viscosity: 1 / (a * b),
+      tan_delta: 1,
+      phase_angle: 1
+    };
+    var columns = entry.block.columns.filter(function (c) {
+      return c.quantity && scale[c.quantity] !== undefined;
+    }).map(function (c) {
+      var k = scale[c.quantity];
+      return Object.assign({}, c, {
+        values: c.values.map(function (v) {
+          return v === null || v === undefined ? v : v * k;
+        })
+      });
+    });
+    var block = Object.assign({}, entry.block, { columns: columns });
+    return { dataset: entry.dataset, block: block, id: entry.id };
+  }
+
+  function superposed(active, notes) {
+    var out = [];
+    active.forEach(function (entry) {
+      var shift = shiftOf(entry.id);
+      if (shift) {
+        out.push(shifted(entry, shift));
+      } else if (!hasTemperature(entry)) {
+        notes.push(labelOf(entry) + " was not measured at one temperature, so it cannot be " +
+          "shifted and is not drawn.");
+      }
+    });
+    return out;
+  }
+
   // --- Building the graph -------------------------------------------------------------
 
   function build() {
@@ -306,6 +472,10 @@
     var palette = (P.palettes[spec.style.palette] || P.palettes.lada).colors;
     var traces = [];
     var notes = [];
+    if (preset.superpose) {
+      p.ticked = p.active;
+      p.active = superposed(p.active, notes);
+    }
     var single = p.active.length === 1;
     var series = p.left.map(function (ident) {
       return { ident: ident, axis: "y" };
@@ -485,10 +655,17 @@
       return ["Nothing to plot yet. Your rheometer files appear here once imported on",
         { text: "My data.", href: "/rheometer/my-data" }];
     }
-    if (!result.plan.active.length) {
+    if (!(result.plan.ticked || result.plan.active).length) {
       return [key === "custom"
         ? "Tick the tables to plot on the left, then choose what goes on each axis."
         : "Tick a table on the left to draw it.", null];
+    }
+    if (preset.superpose && ttsEntries().length < 2) {
+      return ["A master curve needs sweeps at two or more temperatures. Tick another, or " +
+        "import a temperature series on", { text: "My data.", href: "/rheometer/my-data" }];
+    }
+    if (preset.superpose && !tts) {
+      return ["Working out the shift factors…", null];
     }
     if (key === "custom" &&
         (!result.plan.x || !result.plan.left.length && !result.plan.right.length)) {
@@ -558,7 +735,7 @@
         color: ink
       },
       showlegend: !!legend,
-      xaxis: axisLayout(spec.axes.x, axisTitle([p.x], spec.axes.x.title), { mirror: "ticks" }),
+      xaxis: axisLayout(spec.axes.x, xTitle(p), { mirror: "ticks" }),
       yaxis: axisLayout(spec.axes.y, axisTitle(p.left, spec.axes.y.title),
         { mirror: hasY2 ? false : "ticks" }),
       hovermode: "closest"
@@ -649,7 +826,7 @@
       line_width: Number(spec.style.lineWidth) || 1.5,
       legend: spec.style.legend,
       grid: !!spec.style.grid,
-      x: axisSpec(spec.axes.x, [p.x]),
+      x: Object.assign(axisSpec(spec.axes.x, [p.x]), { title: xTitle(p) }),
       y: axisSpec(spec.axes.y, p.left),
       y2: hasY2 ? axisSpec(spec.axes.y2, p.right) : null,
       filename: key.replace(/_/g, "-"),
@@ -798,6 +975,264 @@
       });
   }
 
+  // --- The shift-factor panel ---------------------------------------------------------
+
+  function fixed(value, digits) {
+    return value === null || value === undefined ? "" : Number(value).toFixed(digits);
+  }
+
+  function renderTTS(error) {
+    var panel = $("tts-panel");
+    if (!panel) {
+      return;
+    }
+    var list = ttsEntries();
+    panel.hidden = list.length < 2 && !error;
+    if (panel.hidden) {
+      return;
+    }
+
+    // Reference choices: the temperatures that were measured.
+    var select = $("tts-reference");
+    var temps = list.map(function (e) {
+      return e.block.temperature;
+    }).filter(function (t, i, all) {
+      return all.indexOf(t) === i;
+    }).sort(function (a, b) {
+      return a - b;
+    });
+    var current = tts ? tts.reference : parseFloat(spec.tts.reference);
+    select.textContent = "";
+    temps.forEach(function (t) {
+      var o = el("option", "", t + " °C");
+      o.value = String(t);
+      o.selected = t === current;
+      select.appendChild(o);
+    });
+    $("tts-use").value = spec.tts.use;
+    $("tts-vertical").checked = !!spec.tts.vertical;
+
+    var rows = $("tts-rows");
+    rows.textContent = "";
+    var notes = $("tts-notes");
+    notes.textContent = "";
+    if (error) {
+      notes.hidden = false;
+      notes.appendChild(el("li", "", error));
+    }
+    if (!tts) {
+      $("tts-fits").textContent = "";
+      return;
+    }
+    tts.shifts.forEach(function (shift) {
+      var tr = el("tr");
+      var isRef = shift.temperature === tts.reference;
+      tr.appendChild(el("td", "", fixed(shift.temperature, 1)));
+      var cell = el("td");
+      var input = el("input");
+      input.type = "number";
+      input.step = "0.01";
+      input.value = fixed(shift.log_at, 3);
+      input.dataset.shift = shift.id;
+      input.disabled = isRef;
+      input.setAttribute("aria-label", "log aT at " + shift.temperature + " °C");
+      if (shift.auto_log_at !== null) {
+        input.placeholder = fixed(shift.auto_log_at, 3);
+      }
+      cell.appendChild(input);
+      tr.appendChild(cell);
+      tr.appendChild(el("td", "tts-at", Math.pow(10, shift.log_at).toPrecision(3)));
+      var source = el("td", "tts-source");
+      if (isRef) {
+        source.textContent = "reference";
+      } else if (shift.manual) {
+        var reset = el("button", "quiet-button", "Use overlap");
+        reset.type = "button";
+        reset.dataset.reset = shift.id;
+        reset.title = shift.auto_log_at !== null
+          ? "Overlap found " + fixed(shift.auto_log_at, 3) : "Overlap found no shift";
+        source.appendChild(reset);
+      } else {
+        source.textContent = "by overlap";
+      }
+      tr.appendChild(source);
+      rows.appendChild(tr);
+    });
+
+    var fits = $("tts-fits");
+    fits.textContent = "";
+    function fact(term, text) {
+      fits.appendChild(el("dt", "", term));
+      fits.appendChild(el("dd", "", text));
+    }
+    var ref = fixed(tts.reference, 1) + " °C";
+    // Three sweeps and two parameters fit exactly; say so rather than print "6e-17".
+    function rms(value) {
+      return value < 5e-4 ? "fits every point" : "rms " + value.toPrecision(2) + " in log aT";
+    }
+    fact("WLF", tts.wlf
+      ? "C1 = " + tts.wlf.c1.toPrecision(4) + ", C2 = " + tts.wlf.c2.toPrecision(4) +
+        " K at " + ref + " (" + rms(tts.wlf.rms) + ")"
+      : tts.wlf_note);
+    fact("Arrhenius", tts.arrhenius
+      ? "Ea = " + tts.arrhenius.ea_kj_per_mol.toPrecision(4) + " kJ/mol (" +
+        rms(tts.arrhenius.rms) + ")"
+      : tts.arrhenius_note);
+
+    notes.hidden = !tts.notes.length && !error;
+    tts.notes.forEach(function (note) {
+      notes.appendChild(el("li", "", note));
+    });
+    drawTTSPlot();
+  }
+
+  function drawTTSPlot() {
+    var target = $("tts-plot");
+    if (!target || !tts || !window.Plotly) {
+      return;
+    }
+    var ink = token("--ink", "#1e2832");
+    var accent = token("--accent", "#2f4fae");
+    var ts = tts.shifts.map(function (s) {
+      return s.temperature;
+    });
+    var lo = Math.min.apply(null, ts);
+    var hi = Math.max.apply(null, ts);
+    var pad = (hi - lo) * 0.08 || 5;
+    var grid = [];
+    for (var i = 0; i <= 60; i++) {
+      grid.push(lo - pad + (hi - lo + 2 * pad) * i / 60);
+    }
+    var traces = [{
+      type: "scatter",
+      mode: "markers",
+      name: "Shift factors",
+      x: ts,
+      y: tts.shifts.map(function (s) {
+        return s.log_at;
+      }),
+      marker: {
+        size: 8,
+        color: accent,
+        symbol: tts.shifts.map(function (s) {
+          return s.manual ? "circle-open" : "circle";
+        }),
+        line: { color: accent, width: 1.5 }
+      },
+      hovertemplate: "%{x} °C, log aT %{y:.3f}<extra></extra>"
+    }];
+    var dt = function (t) {
+      return t - tts.reference;
+    };
+    if (tts.wlf) {
+      var c1 = tts.wlf.c1;
+      var c2 = tts.wlf.c2;
+      traces.push({
+        type: "scatter",
+        mode: "lines",
+        name: "WLF",
+        x: grid,
+        y: grid.map(function (t) {
+          return c2 + dt(t) > 0 ? -c1 * dt(t) / (c2 + dt(t)) : null;
+        }),
+        line: { color: ink, width: 1.2 },
+        hoverinfo: "skip"
+      });
+    }
+    if (tts.arrhenius) {
+      var k = tts.arrhenius.ea_kj_per_mol * 1000 / 8.314462618 / Math.LN10;
+      traces.push({
+        type: "scatter",
+        mode: "lines",
+        name: "Arrhenius",
+        x: grid,
+        y: grid.map(function (t) {
+          return k * (1 / (t + 273.15) - 1 / (tts.reference + 273.15));
+        }),
+        line: { color: ink, width: 1.2, dash: "dot" },
+        hoverinfo: "skip"
+      });
+    }
+    var axis = {
+      showline: true,
+      linecolor: ink,
+      ticks: "inside",
+      tickcolor: ink,
+      mirror: "ticks",
+      zeroline: false,
+      showgrid: false
+    };
+    window.Plotly.react(target, traces, {
+      height: 240,
+      margin: { l: 56, r: 12, t: 28, b: 44 },
+      paper_bgcolor: "rgba(0,0,0,0)",
+      plot_bgcolor: "rgba(0,0,0,0)",
+      font: { family: token("--font-sans", "system-ui, sans-serif"), size: 11, color: ink },
+      showlegend: true,
+      legend: { orientation: "h", x: 0, y: 1.02, xanchor: "left", yanchor: "bottom",
+        bgcolor: "rgba(0,0,0,0)" },
+      xaxis: Object.assign({ title: { text: "T (°C)" } }, axis),
+      yaxis: Object.assign({ title: { text: "log aT" } }, axis)
+    }, { displaylogo: false, responsive: true, displayModeBar: false });
+  }
+
+  function exportShifts(kind) {
+    if (!tts) {
+      return;
+    }
+    var lines;
+    if (kind === "csv") {
+      lines = ["temperature_C,log_aT,aT,log_bT,set_by"];
+      tts.shifts.forEach(function (s) {
+        lines.push([s.temperature, s.log_at, Math.pow(10, s.log_at), s.log_bt,
+          s.manual ? "hand" : "overlap"].join(","));
+      });
+    } else {
+      lines = ["% Shift factors, reference " + tts.reference + " C", "T log_aT"];
+      tts.shifts.forEach(function (s) {
+        lines.push(s.temperature + " " + s.log_at);
+      });
+    }
+    var blob = new Blob([lines.join("\n") + "\n"], { type: "text/plain" });
+    download(blob, "shift-factors." + kind);
+  }
+
+  function setupTTS() {
+    var panel = $("tts-panel");
+    if (!panel) {
+      return;
+    }
+    panel.addEventListener("change", function (event) {
+      var target = event.target;
+      if (target.dataset.tts) {
+        spec.tts[target.dataset.tts] = target.type === "checkbox" ? target.checked : target.value;
+      } else if (target.dataset.shift) {
+        var value = target.value.trim();
+        if (value === "" || !isFinite(parseFloat(value))) {
+          delete spec.tts.manual[target.dataset.shift];
+        } else {
+          spec.tts.manual[target.dataset.shift] = parseFloat(value);
+        }
+      } else {
+        return;
+      }
+      saveSpec();
+      requestTTS();
+    });
+    panel.addEventListener("click", function (event) {
+      var reset = event.target.closest("[data-reset]");
+      if (reset) {
+        delete spec.tts.manual[reset.dataset.reset];
+        saveSpec();
+        requestTTS();
+      }
+      var exporter = event.target.closest("[data-tts-export]");
+      if (exporter) {
+        exportShifts(exporter.dataset.ttsExport);
+      }
+    });
+  }
+
   var drawTimer = null;
   function redrawSoon() {
     clearTimeout(drawTimer);
@@ -907,6 +1342,7 @@
     renderData();
     renderForm();
     draw();
+    requestTTS();
     var again = document.querySelector('[data-block="' + CSS.escape(blockId) + '"]');
     if (again) {
       again.focus();
@@ -1247,10 +1683,12 @@
         renderData();
         renderForm();
         draw();
+        requestTTS();
       })
       .catch(function () {
         message("The page could not reach the server. Check that it is running, then reload.");
       });
+    setupTTS();
 
     $("tab-explore").addEventListener("click", function () {
       setView("explore");
@@ -1280,6 +1718,7 @@
         previous();
       }
       draw();
+      drawTTSPlot();
     };
     if (window.ResizeObserver) {
       var lastWidth = 0;

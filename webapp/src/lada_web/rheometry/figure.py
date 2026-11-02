@@ -375,6 +375,7 @@ _LATEX_SPECIAL = {
     "^": r"\textasciicircum{}",
 }
 _LATEX_SYMBOLS = [
+    ("aT·", r"$a_T$"),
     ("|η*|", r"$|\eta^*|$"),
     ("|G*|", r"$|G^*|$"),
     ("G′", r"$G'$"),
@@ -410,7 +411,9 @@ def latex(text: str) -> str:
         else:
             out.append(_LATEX_SPECIAL.get(text[i], text[i]))
             i += 1
-    return "".join(out)
+    # Two symbols side by side ("aT·ω") would give "$a_T$$\omega$", and "$$" opens display
+    # maths: join neighbouring segments into one. An escaped "\$" is left alone.
+    return re.sub(r"(?<!\\)\$\$", "", "".join(out))
 
 
 def _pgf_axis_options(axis: AxisSpec, which: str) -> list[str]:

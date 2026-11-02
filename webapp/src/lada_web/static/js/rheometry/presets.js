@@ -71,6 +71,18 @@
       logX: true,
       logY: true
     },
+    master_curve: {
+      title: "Master curve",
+      testTypes: ["frequency_sweep"],
+      x: ["angular_frequency", "frequency"],
+      y: ["storage_modulus", "loss_modulus"],
+      right: ["tan_delta", "complex_viscosity", "phase_angle"],
+      defaultRight: "",
+      logX: true,
+      logY: true,
+      // The sweeps are drawn after time-temperature superposition (see studio.js).
+      superpose: true
+    },
     custom: {
       title: "Custom plot",
       testTypes: [],
@@ -141,7 +153,10 @@
       blocks: {}, // blockId -> { on: bool, label: string }
       right: preset.defaultRight,
       custom: { x: "", left: [], right: [] },
-      units: {}, // quantity -> display unit symbol
+      units: {}, // canonical unit -> display unit symbol
+      // Master curve only: reference temperature (°C, "" for the middle sweep), which moduli
+      // the overlap uses, the bT correction, and shifts set by hand (block id -> log aT).
+      tts: { reference: "", use: "both", vertical: false, manual: {} },
       axes: { x: axis(preset.logX), y: axis(preset.logY), y2: axis(!!preset.defaultRight) },
       style: {
         palette: "lada",

@@ -399,6 +399,7 @@ GRAPH_PAGES = {
     "flow-curve": "flow_curve",
     "creep": "creep",
     "stress-relaxation": "stress_relaxation",
+    "master-curve": "master_curve",
     "custom-plot": "custom",
 }
 
@@ -434,6 +435,7 @@ def test_preset_quantities_exist_in_the_registry(client):
         "flow_curve",
         "creep",
         "stress_relaxation",
+        "master_curve",
     }
     assert named <= set(q.QUANTITY_BY_KEY), named - set(q.QUANTITY_BY_KEY)
 

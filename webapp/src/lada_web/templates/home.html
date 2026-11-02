@@ -1,0 +1,34 @@
+{% extends "base.html" %}
+{% block title %}Simulations and rheometer data{% endblock %}
+{% block content %}
+<article class="overview home">
+  <header class="overview-head">
+    <h1>What are you working with today?</h1>
+  </header>
+
+  {# Two doors, one per workspace, in the same order as the switch in the sidebar. Each lists
+     its sections as beads so the colours learnt here are the ones the tools wear. #}
+  <div class="doors">
+    {% for workspace in doors %}
+    {% set groups = nav[loop.index0][1] %}
+    <a class="door" href="{{ workspace.home }}" data-workspace="{{ workspace.key }}">
+      <span class="door-title">{{ workspace.title }}</span>
+      <span class="door-blurb">{{ workspace.blurb }}</span>
+      <span class="door-sections">
+        {% for section, calcs in groups %}
+        <span class="door-section" data-section="{{ section.key }}">
+          <span class="bead" aria-hidden="true"></span>{{ section.title }}
+        </span>
+        {% endfor %}
+      </span>
+    </a>
+    {% endfor %}
+  </div>
+
+  {# Filled by app.js from this browser's own history; stays hidden until there is any. #}
+  <section class="recent" id="recent" aria-labelledby="recent-title" hidden>
+    <h2 id="recent-title">Recently used</h2>
+    <ul class="recent-list"></ul>
+  </section>
+</article>
+{% endblock %}

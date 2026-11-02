@@ -1,97 +1,146 @@
 <!doctype html>
+{% set here_section = calc.section if calc is defined else '' %}
+{% set here_workspace = here_workspace | default('') %}
+{# Which workspace's tools the sidebar opens on: the page's own, else the first. On the home
+   page app.js then switches to the one this browser used last. #}
+{% set open_workspace = here_workspace or nav[0][0].key %}
 <html lang="en" data-theme="light">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{% block title %}{% endblock %} – LaDa</title>
-  {# Set before the stylesheet paints so the section menus are never shown open for the
-     moment before app.js wires them up. Without scripting the class is never added, every
-     menu stays in the normal flow, and all the links remain reachable. #}
+  {# Set before the stylesheet paints so the mobile tool list is never shown open for the
+     moment before app.js wires up its toggle. Without scripting the class is never added and
+     the whole list stays in the normal flow, every link reachable. #}
   <script>document.documentElement.classList.add("js");</script>
+  {# Pick the theme before the first paint so a dark-mode visitor never sees a white flash.
+     "auto" (the default) follows the operating system; a choice made with the sidebar switch
+     is remembered in this browser only. Without scripting the page stays light. #}
+  <script>
+    (function () {
+      var root = document.documentElement, pref = "auto";
+      try { pref = localStorage.getItem("lada-theme") || "auto"; } catch (e) {}
+      var dark = pref === "dark" ||
+        (pref !== "light" && window.matchMedia("(prefers-color-scheme: dark)").matches);
+      root.setAttribute("data-theme", dark ? "dark" : "light");
+      root.setAttribute("data-theme-pref", pref);
+    })();
+  </script>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet"
-        href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;600&display=swap">
+        href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible+Mono:wght@400;500&family=Atkinson+Hyperlegible+Next:wght@400;600;700&display=swap">
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@2.1.1/css/pico.min.css">
-  <link rel="stylesheet" href="/static/css/app.css">
+  <link rel="stylesheet" href="{{ static_url('css/app.css') }}">
   <script src="https://cdn.jsdelivr.net/npm/htmx.org@2.0.4/dist/htmx.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/alpinejs@3.14.8/dist/cdn.min.js" defer></script>
   <script src="https://cdn.plot.ly/plotly-basic-3.0.1.min.js" defer></script>
-  <script src="/static/js/app.js" defer></script>
+  <script src="{{ static_url('js/app.js') }}" defer></script>
   {% block extra_head %}{% endblock %}
 </head>
-<body>
+<body data-section="{{ here_section }}" data-workspace="{{ here_workspace }}">
   <a class="skip-link" href="#main">Skip to content</a>
 
-  <header class="masthead">
-    <div class="shell">
-      <div class="masthead-bar">
-        <a class="wordmark" href="/">
-          <span class="wordmark-name">LaDa</span>
-          <span class="wordmark-role">LAMMPS post-processing</span>
+  <div class="app">
+    <aside class="sidebar">
+      <div class="sidebar-head">
+        <a class="brand" href="/" aria-label="LaDa, all tools">
+          {# The simulation sections as beads on one chain, in the order the sidebar lists them. #}
+          <svg class="brand-chain" viewBox="0 0 76 16" aria-hidden="true" focusable="false">
+            <path d="M8 8 H68" />
+            {% for section, _ in nav[0][1] %}
+            <circle cx="{{ 8 + loop.index0 * 15 }}" cy="8" r="6" class="bead-{{ section.key }}" />
+            {% endfor %}
+          </svg>
+          <span class="brand-name">LaDa</span>
         </a>
-        <button type="button" class="nav-toggle" data-nav-toggle
-                aria-controls="site-nav" aria-expanded="false">Menu</button>
+        <div class="sidebar-actions">
+          <button type="button" class="theme-toggle" data-theme-toggle hidden
+                  title="Colour theme: follow the system, light, or dark">
+            <span class="theme-icon" aria-hidden="true"></span>
+            <span class="theme-label">Auto</span>
+          </button>
+          <button type="button" class="nav-toggle" data-nav-toggle
+                  aria-controls="site-nav" aria-expanded="false">Tools</button>
+        </div>
       </div>
 
-      <nav id="site-nav" class="site-nav" aria-label="Calculations">
-        <ul class="nav-bar">
-          <li class="nav-item">
-            <a class="nav-overview" href="/"
-               {% if request.url.path == '/' %}aria-current="page"{% endif %}>Overview</a>
-          </li>
-          {% for section, calcs in nav %}
-          {% set on_section = calc is defined and calc.section == section.key %}
-          <li class="nav-item{% if on_section %} is-current{% endif %}" data-nav-item>
-            <button type="button" class="nav-section-button"
-                    aria-expanded="false" aria-controls="nav-menu-{{ section.key }}">
-              <span>{{ section.title }}</span>
-              <span class="nav-caret" aria-hidden="true"></span>
-            </button>
-            <div class="nav-menu" id="nav-menu-{{ section.key }}">
-              <p class="nav-menu-blurb">{{ section.blurb }}</p>
-              <ul class="nav-menu-list">
-                {% for item in calcs %}
-                <li>
-                  <a class="nav-link" href="{{ item.path }}"
-                     {% if calc is defined and calc.path == item.path %}aria-current="page"{% endif %}>{{ item.title }}</a>
-                </li>
-                {% endfor %}
-              </ul>
-            </div>
-          </li>
-          {% endfor %}
-        </ul>
-      </nav>
-    </div>
-    <div class="pad-edge" aria-hidden="true"></div>
-  </header>
+      <button type="button" class="jump-open" data-jump-open aria-haspopup="dialog"
+              aria-keyshortcuts="/ Control+K Meta+K">
+        <span>Find a tool</span><kbd>/</kbd>
+      </button>
 
-  <main id="main" class="content" tabindex="-1">
-    <div class="shell">
+      {# Two workspaces, always in this place and this order. Switching only changes which tools
+         the list below shows; it does not leave the page. #}
+      <div class="workspace-switch" role="group" aria-label="Workspace">
+        {% for workspace, _ in nav %}
+        <button type="button" data-workspace-switch="{{ workspace.key }}"
+                aria-controls="site-nav"
+                aria-pressed="{{ 'true' if workspace.key == open_workspace else 'false' }}">{{ workspace.title }}</button>
+        {% endfor %}
+      </div>
+
+      <nav id="site-nav" class="site-nav" aria-label="Tools">
+        {% for workspace, groups in nav %}
+        <div class="nav-workspace{% if workspace.key == open_workspace %} is-active{% endif %}"
+             data-workspace="{{ workspace.key }}" data-workspace-title="{{ workspace.title }}">
+          <a class="nav-overview" href="{{ workspace.home }}"
+             {% if request.url.path == workspace.home %}aria-current="page"{% endif %}>{{ workspace.title }} overview</a>
+          {% for section, calcs in groups %}
+          <div class="nav-group{% if section.key == here_section %} is-current{% endif %}"
+               data-section="{{ section.key }}">
+            <h2 class="nav-group-title" id="nav-section-{{ section.key }}">
+              <span class="bead" aria-hidden="true"></span>{{ section.title }}
+            </h2>
+            <ul class="nav-list" aria-labelledby="nav-section-{{ section.key }}">
+              {% for item in calcs %}
+              <li>
+                <a class="nav-link" href="{{ item.path }}"
+                   {% if calc is defined and calc.path == item.path %}aria-current="page"{% endif %}>{{ item.title }}</a>
+              </li>
+              {% endfor %}
+            </ul>
+          </div>
+          {% endfor %}
+        </div>
+        {% endfor %}
+      </nav>
+
+      <div class="sidebar-foot">
+        <a href="/api/docs">API reference</a>
+        <span>lada-web {{ app_version }}</span>
+      </div>
+    </aside>
+
+    <main id="main" class="content" tabindex="-1">
       {% if calc is defined %}
       <nav class="breadcrumb" aria-label="Breadcrumb">
         <ol class="breadcrumb-list">
-          <li><a href="/">Overview</a></li>
-          <li><a href="/#{{ calc.section }}">{{ sections[calc.section].title }}</a></li>
+          {% set ws = workspaces[sections[calc.section].workspace] %}
+          <li><a href="{{ ws.home }}">{{ ws.title }}</a></li>
+          <li><a class="section-tag" href="{{ ws.home }}#{{ calc.section }}"><span class="bead" aria-hidden="true"></span>{{ sections[calc.section].title }}</a></li>
           <li><span class="breadcrumb-current">{{ calc.title }}</span></li>
         </ol>
+        {% set kind = input_kinds.get(calc.input_kind) %}
+        {% if kind %}<span class="needs-chip" title="{{ kind.needs }}">{{ kind.short }}</span>{% endif %}
       </nav>
       {% endif %}
       {% block content %}{% endblock %}
-    </div>
-  </main>
+    </main>
+  </div>
 
-  <footer class="site-footer">
-    <div class="pad-edge pad-edge-foot" aria-hidden="true"></div>
-    <div class="shell">
-      <div class="footer-inner">
-        <span class="footer-version">lada-web {{ app_version }}</span>
-        <a href="/">All calculations</a>
-        <a href="/api/docs">API reference</a>
-      </div>
+  {# Type a few letters of any tool and press Enter. Filled from the sidebar by app.js, so the
+     two can never list different tools. #}
+  <dialog class="jump" id="jump" aria-label="Find a tool">
+    <div class="jump-box">
+      <input type="search" id="jump-input" placeholder="Type a tool name" autocomplete="off"
+             role="combobox" aria-controls="jump-list" aria-autocomplete="list"
+             aria-expanded="true" aria-label="Tool name">
+      <ul id="jump-list" class="jump-list" role="listbox" aria-label="Tools"></ul>
+      <p class="jump-hint"><kbd>↑</kbd> <kbd>↓</kbd> to choose, <kbd>Enter</kbd> to open,
+        <kbd>Esc</kbd> to close</p>
     </div>
-  </footer>
+  </dialog>
 
   {% block scripts %}{% endblock %}
 </body>

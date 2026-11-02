@@ -29,11 +29,19 @@ class Settings(BaseSettings):
     # calculations may run on background threads at once.
     job_ttl_seconds: float = 600
     max_concurrent_jobs: int = 4
+    # Rheometer imports: data points across all blocks of one file, and how large an .xlsx may
+    # unpack to (a workbook is a zip archive, so its upload size says little about its contents).
+    max_rheometry_rows: int = 200_000
+    max_xlsx_uncompressed_mb: float = 200
     temp_root: Path | None = None
 
     @property
     def max_upload_bytes(self) -> int:
         return int(self.max_upload_mb * 1024 * 1024)
+
+    @property
+    def max_xlsx_uncompressed_bytes(self) -> int:
+        return int(self.max_xlsx_uncompressed_mb * 1024 * 1024)
 
     @property
     def max_topology_bytes(self) -> int:

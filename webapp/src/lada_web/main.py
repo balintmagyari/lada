@@ -13,7 +13,17 @@ from .config import Settings
 from .errors import error_response, register_error_handlers
 from .jobs import JobStore
 from .rendering import STATIC_DIR
-from .routers import conformations, dynamics, jobs, modifiers, pages, parsers, rheology, topology
+from .routers import (
+    conformations,
+    dynamics,
+    jobs,
+    modifiers,
+    pages,
+    parsers,
+    rheology,
+    rheometry,
+    topology,
+)
 
 # How often the background sweep thread prunes jobs older than settings.job_ttl_seconds. Capped
 # at a quarter of the TTL so a short TTL is actually honoured: at a fixed minute, a 10-second TTL
@@ -36,7 +46,7 @@ TRAJECTORY_PREFIX = "/api/dynamics/"
 
 # These routes accept several files (repeat seeds, or regime files) to average into one
 # calculation; parsers/modifiers stay single-file, so they keep the tighter one-file ceiling.
-MULTI_FILE_TEXT_PREFIXES = ("/api/conformations/", "/api/rheology/")
+MULTI_FILE_TEXT_PREFIXES = ("/api/conformations/", "/api/rheology/", "/api/rheometry/")
 
 TOO_LARGE_MESSAGE = "The request body is larger than this server accepts."
 NO_LENGTH_MESSAGE = (
@@ -120,6 +130,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         conformations.router,
         dynamics.router,
         rheology.router,
+        rheometry.router,
         modifiers.router,
         topology.router,
         jobs.router,

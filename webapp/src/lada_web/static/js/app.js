@@ -1,108 +1,399 @@
-/* Four behaviours: open and close the section menus in the top bar, render error responses
+/* Four behaviours: the sidebar's quick-jump box and recently used tools, render error responses
    into #results, report a dead server, and draw the plot that comes with a result. */
 
 (function () {
   "use strict";
 
-  // --- Section navigation ---------------------------------------------------
-  // Plain DOM rather than Alpine: the bar is the only way around the app, so it must not
+  // --- Navigation -------------------------------------------------------------
+  // Plain DOM rather than Alpine: the sidebar is the only way around the app, so it must not
   // depend on a CDN that a locked-down network might drop. app.js is served from this app.
 
+  var RECENT_KEY = "lada-recent";
+  var RECENT_MAX = 5;
+
+  function readRecent() {
+    try {
+      var list = JSON.parse(window.localStorage.getItem(RECENT_KEY) || "[]");
+      return Array.isArray(list) ? list : [];
+    } catch (e) {
+      return [];
+    }
+  }
+
+  function writeRecent(list) {
+    try {
+      window.localStorage.setItem(RECENT_KEY, JSON.stringify(list));
+    } catch (e) {
+      /* Private window or blocked storage: the list is a convenience, so skip it. */
+    }
+  }
+
+  // Every tool, read back from the sidebar so there is one source of truth.
+  function collectTools(nav) {
+    var tools = [];
+    nav.querySelectorAll(".nav-group").forEach(function (group) {
+      var title = group.querySelector(".nav-group-title");
+      var sectionTitle = title ? title.textContent.trim() : "";
+      var workspace = group.closest(".nav-workspace");
+      group.querySelectorAll(".nav-link").forEach(function (link) {
+        tools.push({
+          path: link.getAttribute("href"),
+          title: link.textContent.trim(),
+          section: group.dataset.section,
+          sectionTitle: sectionTitle,
+          workspace: workspace ? workspace.dataset.workspace : "",
+          workspaceTitle: workspace ? workspace.dataset.workspaceTitle : ""
+        });
+      });
+    });
+    return tools;
+  }
+
+  function el(tag, className, text) {
+    var node = document.createElement(tag);
+    if (className) {
+      node.className = className;
+    }
+    if (text) {
+      node.textContent = text;
+    }
+    return node;
+  }
+
+  function beadFor(section) {
+    var bead = el("span", "bead");
+    bead.setAttribute("aria-hidden", "true");
+    bead.dataset.section = section;
+    return bead;
+  }
+
+  function setupMobileToggle(nav) {
+    var toggle = document.querySelector("[data-nav-toggle]");
+    if (!toggle) {
+      return;
+    }
+    toggle.addEventListener("click", function () {
+      var open = nav.classList.toggle("is-open");
+      toggle.setAttribute("aria-expanded", open ? "true" : "false");
+    });
+  }
+
+  // Remember the tool this page is, and list the latest few on the overview.
+  function setupRecent(tools) {
+    var here = window.location.pathname;
+    var current = tools.filter(function (tool) {
+      return tool.path === here;
+    })[0];
+    var list = readRecent().filter(function (path) {
+      return path !== here;
+    });
+    if (current) {
+      list.unshift(here);
+      writeRecent(list.slice(0, RECENT_MAX));
+      return;
+    }
+
+    var holder = document.getElementById("recent");
+    if (!holder) {
+      return;
+    }
+    var only = holder.dataset.recentWorkspace;
+    var known = list
+      .map(function (path) {
+        return tools.filter(function (tool) {
+          return tool.path === path;
+        })[0];
+      })
+      .filter(function (tool) {
+        return tool && (!only || tool.workspace === only);
+      });
+    if (!known.length) {
+      return;
+    }
+    var ul = holder.querySelector(".recent-list");
+    known.forEach(function (tool) {
+      var li = el("li");
+      var a = el("a");
+      a.href = tool.path;
+      a.dataset.section = tool.section;
+      a.appendChild(beadFor(tool.section));
+      a.appendChild(document.createTextNode(tool.title));
+      li.appendChild(a);
+      ul.appendChild(li);
+    });
+    holder.hidden = false;
+  }
+
+  // "/" or Ctrl/Cmd+K opens a box; type part of a name, Enter goes there.
+  function setupJump(tools) {
+    var dialog = document.getElementById("jump");
+    var input = document.getElementById("jump-input");
+    var list = document.getElementById("jump-list");
+    if (!dialog || !input || !list || typeof dialog.showModal !== "function") {
+      document.querySelectorAll("[data-jump-open]").forEach(function (b) {
+        b.hidden = true;
+      });
+      return;
+    }
+
+    var matches = [];
+    var active = 0;
+
+    function score(tool, words) {
+      var hay = (tool.title + " " + tool.sectionTitle + " " + tool.workspaceTitle).toLowerCase();
+      var title = tool.title.toLowerCase();
+      var total = 0;
+      for (var i = 0; i < words.length; i++) {
+        var at = hay.indexOf(words[i]);
+        if (at < 0) {
+          return -1;
+        }
+        total += title.indexOf(words[i]) === 0 ? 0 : at < title.length ? 1 : 2;
+      }
+      return total;
+    }
+
+    function render() {
+      var words = input.value.toLowerCase().split(/\s+/).filter(Boolean);
+      var recent = readRecent();
+      matches = tools
+        .map(function (tool, order) {
+          var s = words.length ? score(tool, words) : 0;
+          var r = recent.indexOf(tool.path);
+          // With nothing typed, the tools you used last come first.
+          return { tool: tool, s: s, r: r < 0 ? 99 : r, order: order };
+        })
+        .filter(function (m) {
+          return m.s >= 0;
+        })
+        .sort(function (a, b) {
+          return a.s - b.s || a.r - b.r || a.order - b.order;
+        })
+        .map(function (m) {
+          return m.tool;
+        });
+      active = Math.min(active, Math.max(matches.length - 1, 0));
+
+      list.textContent = "";
+      if (!matches.length) {
+        list.appendChild(el("li", "jump-empty", "No tool matches that name."));
+        input.removeAttribute("aria-activedescendant");
+        return;
+      }
+      matches.forEach(function (tool, index) {
+        var li = el("li");
+        var option = el("a", "jump-option");
+        option.id = "jump-option-" + index;
+        option.href = tool.path;
+        option.setAttribute("role", "option");
+        option.setAttribute("aria-selected", index === active ? "true" : "false");
+        option.dataset.section = tool.section;
+        option.appendChild(beadFor(tool.section));
+        option.appendChild(el("span", "", tool.title));
+        option.appendChild(
+          el("span", "jump-option-section", tool.workspaceTitle + " / " + tool.sectionTitle)
+        );
+        option.addEventListener("mousemove", function () {
+          if (active !== index) {
+            active = index;
+            render();
+          }
+        });
+        li.appendChild(option);
+        list.appendChild(li);
+      });
+      input.setAttribute("aria-activedescendant", "jump-option-" + active);
+      var chosen = document.getElementById("jump-option-" + active);
+      if (chosen && chosen.scrollIntoView) {
+        chosen.scrollIntoView({ block: "nearest" });
+      }
+    }
+
+    function open() {
+      if (dialog.open) {
+        return;
+      }
+      input.value = "";
+      active = 0;
+      render();
+      dialog.showModal();
+      input.focus();
+    }
+
+    input.addEventListener("input", function () {
+      active = 0;
+      render();
+    });
+
+    input.addEventListener("keydown", function (event) {
+      if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+        event.preventDefault();
+        if (matches.length) {
+          var step = event.key === "ArrowDown" ? 1 : -1;
+          active = (active + step + matches.length) % matches.length;
+          render();
+        }
+      } else if (event.key === "Enter") {
+        event.preventDefault();
+        if (matches[active]) {
+          window.location.href = matches[active].path;
+        }
+      }
+    });
+
+    // A click on the dimmed backdrop (the dialog itself, outside the box) closes it.
+    dialog.addEventListener("click", function (event) {
+      if (event.target === dialog) {
+        dialog.close();
+      }
+    });
+
+    document.querySelectorAll("[data-jump-open]").forEach(function (button) {
+      button.addEventListener("click", open);
+    });
+
+    document.addEventListener("keydown", function (event) {
+      var target = event.target;
+      var typing =
+        target &&
+        (target.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(target.tagName));
+      var isSlash = event.key === "/" && !typing && !event.metaKey && !event.ctrlKey;
+      var isK = (event.key === "k" || event.key === "K") && (event.metaKey || event.ctrlKey);
+      if (isSlash || isK) {
+        event.preventDefault();
+        open();
+      }
+    });
+  }
+
+  // --- Colour theme -----------------------------------------------------------
+  // The inline script in base.html has already applied the theme before first paint; this
+  // wires up the switch and follows the system while the choice is "auto".
+
+  var THEME_KEY = "lada-theme";
+  var THEME_ORDER = ["auto", "light", "dark"];
+  var THEME_LABEL = { auto: "Auto", light: "Light", dark: "Dark" };
+
+  function systemDark() {
+    return window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches;
+  }
+
+  function applyTheme(pref) {
+    var root = document.documentElement;
+    var dark = pref === "dark" || (pref === "auto" && systemDark());
+    var before = root.getAttribute("data-theme");
+    root.setAttribute("data-theme", dark ? "dark" : "light");
+    root.setAttribute("data-theme-pref", pref);
+    var toggle = document.querySelector("[data-theme-toggle]");
+    if (toggle) {
+      toggle.querySelector(".theme-label").textContent = THEME_LABEL[pref];
+      toggle.setAttribute(
+        "aria-label",
+        "Colour theme: " + THEME_LABEL[pref] + ". Activate to change."
+      );
+    }
+    if (before !== root.getAttribute("data-theme") && window.ladaRepaintPlots) {
+      window.ladaRepaintPlots();
+    }
+  }
+
+  function setupTheme() {
+    var toggle = document.querySelector("[data-theme-toggle]");
+    var pref = document.documentElement.getAttribute("data-theme-pref") || "auto";
+    if (THEME_ORDER.indexOf(pref) < 0) {
+      pref = "auto";
+    }
+    applyTheme(pref);
+    if (toggle) {
+      toggle.hidden = false;
+      toggle.addEventListener("click", function () {
+        pref = THEME_ORDER[(THEME_ORDER.indexOf(pref) + 1) % THEME_ORDER.length];
+        try {
+          window.localStorage.setItem(THEME_KEY, pref);
+        } catch (e) {
+          /* Blocked storage: the choice lasts for this page only. */
+        }
+        applyTheme(pref);
+      });
+    }
+    if (window.matchMedia) {
+      var query = window.matchMedia("(prefers-color-scheme: dark)");
+      var follow = function () {
+        if (pref === "auto") {
+          applyTheme("auto");
+        }
+      };
+      if (query.addEventListener) {
+        query.addEventListener("change", follow);
+      } else if (query.addListener) {
+        query.addListener(follow);
+      }
+    }
+  }
+
+  // --- Workspaces ---------------------------------------------------------------
+  // The switch only changes which workspace's tools the sidebar lists. A tool page always
+  // opens on its own workspace; the home page opens on the one this browser used last.
+
+  var WORKSPACE_KEY = "lada-workspace";
+
+  function setupWorkspaces(nav) {
+    var buttons = Array.prototype.slice.call(
+      document.querySelectorAll("[data-workspace-switch]")
+    );
+    if (!buttons.length) {
+      return;
+    }
+
+    function show(key) {
+      nav.querySelectorAll(".nav-workspace").forEach(function (group) {
+        group.classList.toggle("is-active", group.dataset.workspace === key);
+      });
+      buttons.forEach(function (button) {
+        button.setAttribute(
+          "aria-pressed",
+          button.dataset.workspaceSwitch === key ? "true" : "false"
+        );
+      });
+    }
+
+    var here = document.body.dataset.workspace;
+    if (here) {
+      try {
+        window.localStorage.setItem(WORKSPACE_KEY, here);
+      } catch (e) {
+        /* Blocked storage: the home page simply opens on the first workspace. */
+      }
+    } else {
+      var last = null;
+      try {
+        last = window.localStorage.getItem(WORKSPACE_KEY);
+      } catch (e) {
+        last = null;
+      }
+      if (last && nav.querySelector('.nav-workspace[data-workspace="' + last + '"]')) {
+        show(last);
+      }
+    }
+
+    buttons.forEach(function (button) {
+      button.addEventListener("click", function () {
+        show(button.dataset.workspaceSwitch);
+      });
+    });
+  }
+
   function setupNavigation() {
+    setupTheme();
     var nav = document.getElementById("site-nav");
     if (!nav) {
       return;
     }
-
-    var buttons = Array.prototype.slice.call(nav.querySelectorAll(".nav-section-button"));
-
-    function panelOf(button) {
-      return document.getElementById(button.getAttribute("aria-controls"));
-    }
-
-    function setOpen(button, open) {
-      var panel = panelOf(button);
-      button.setAttribute("aria-expanded", open ? "true" : "false");
-      if (panel) {
-        panel.classList.toggle("is-open", open);
-      }
-    }
-
-    function closeAll(except) {
-      buttons.forEach(function (button) {
-        if (button !== except) {
-          setOpen(button, false);
-        }
-      });
-    }
-
-    buttons.forEach(function (button) {
-      setOpen(button, false);
-
-      button.addEventListener("click", function () {
-        var open = button.getAttribute("aria-expanded") === "true";
-        closeAll(button);
-        setOpen(button, !open);
-      });
-
-      // Down arrow on the button walks into the menu, the way a menu bar is expected to.
-      button.addEventListener("keydown", function (event) {
-        if (event.key !== "ArrowDown") {
-          return;
-        }
-        event.preventDefault();
-        closeAll(button);
-        setOpen(button, true);
-        var first = panelOf(button) && panelOf(button).querySelector(".nav-link");
-        if (first) {
-          first.focus();
-        }
-      });
-    });
-
-    // Escape closes the open menu and hands focus back to the button that owns it.
-    nav.addEventListener("keydown", function (event) {
-      if (event.key !== "Escape") {
-        return;
-      }
-      var open = buttons.filter(function (button) {
-        return button.getAttribute("aria-expanded") === "true";
-      });
-      if (!open.length) {
-        return;
-      }
-      open.forEach(function (button) {
-        setOpen(button, false);
-      });
-      open[0].focus();
-    });
-
-    // Tabbing or clicking away closes what you left behind.
-    document.addEventListener("focusin", function (event) {
-      buttons.forEach(function (button) {
-        var item = button.closest("[data-nav-item]");
-        if (item && !item.contains(event.target)) {
-          setOpen(button, false);
-        }
-      });
-    });
-
-    document.addEventListener("click", function (event) {
-      if (!nav.contains(event.target)) {
-        closeAll(null);
-      }
-    });
-
-    var toggle = document.querySelector("[data-nav-toggle]");
-    if (toggle) {
-      toggle.addEventListener("click", function () {
-        var open = nav.classList.toggle("is-open");
-        toggle.setAttribute("aria-expanded", open ? "true" : "false");
-        if (!open) {
-          closeAll(null);
-        }
-      });
-    }
+    var tools = collectTools(nav);
+    setupWorkspaces(nav);
+    setupMobileToggle(nav);
+    setupRecent(tools);
+    setupJump(tools);
   }
 
   if (document.readyState === "loading") {
@@ -116,28 +407,67 @@
   // The identity lives in app.css. Read the shared tokens from there so a palette edit
   // reaches the plot too; the literals are only a fallback if the stylesheet is missing.
   var FALLBACK = {
-    "--accent": "#1b4fd8",
-    "--ink": "#14232e",
-    "--grid-major": "#d3dbd3",
-    "--rule": "#c6d0c9"
+    "--accent": "#2f4fae",
+    "--ink": "#1e2832",
+    "--ink-muted": "#5e6b77",
+    "--line": "#e1e5ea",
+    "--line-strong": "#c9d0d7",
+    "--font-sans": "system-ui, sans-serif"
   };
 
-  var palette = null;
-
+  // Read from <body>, freshly each time: that is where the page's section sets --accent, and
+  // the values change when the theme does.
   function token(name) {
-    if (!palette) {
-      palette = getComputedStyle(document.documentElement);
-    }
-    var value = (palette.getPropertyValue(name) || "").trim();
+    var value = (getComputedStyle(document.body).getPropertyValue(name) || "").trim();
     return value || FALLBACK[name];
   }
 
-  // Only the first series is part of the identity; the rest keep the plot readable.
-  var COMPANIONS = ["#b4661b", "#2e7d5b", "#8c2f6b", "#4a6572"];
+  // The first series takes the section's colour and the second the text colour, so a pair
+  // (G_GK / G_FSR, G' / G'') reads in either theme; the rest are mid-tones that work on both
+  // grounds and are not mistaken for another section.
+  var COMPANIONS = ["#8a96a1", "#3a8fb7", "#b08850"];
 
   function seriesColor(index) {
-    return index === 0 ? token("--accent") : COMPANIONS[(index - 1) % COMPANIONS.length];
+    if (index === 0) {
+      return token("--accent");
+    }
+    if (index === 1) {
+      return token("--ink");
+    }
+    return COMPANIONS[(index - 2) % COMPANIONS.length];
   }
+
+  function themeLayout() {
+    return {
+      "font.color": token("--ink"),
+      "xaxis.gridcolor": token("--line"),
+      "yaxis.gridcolor": token("--line"),
+      "xaxis.zerolinecolor": token("--line-strong"),
+      "yaxis.zerolinecolor": token("--line-strong"),
+      "legend.font.color": token("--ink")
+    };
+  }
+
+  // Called when the theme switches: recolour every plot on the page in place, keeping its
+  // data, zoom and log-axis state.
+  window.ladaRepaintPlots = function () {
+    if (typeof Plotly === "undefined") {
+      return;
+    }
+    document.querySelectorAll(".plot").forEach(function (target) {
+      if (!target.data || !target.data.length) {
+        return;
+      }
+      var colors = target.data.map(function (_, index) {
+        return seriesColor(index);
+      });
+      Plotly.update(
+        target,
+        { "marker.color": colors, "line.color": colors },
+        themeLayout()
+      );
+    });
+  };
 
   // Error responses carry the partial to display, so let htmx swap them in.
   document.body.addEventListener("htmx:beforeSwap", function (evt) {
@@ -188,8 +518,8 @@
     // The series keep full precision; only the hover readout is rounded, so that a point
     // reads the same on the plot as it does in the table.
     var axis = {
-      gridcolor: token("--grid-major"),
-      zerolinecolor: token("--rule"),
+      gridcolor: token("--line"),
+      zerolinecolor: token("--line-strong"),
       hoverformat: ".6g"
     };
 
@@ -198,7 +528,7 @@
       showlegend: plot.y.length > 1,
       paper_bgcolor: "rgba(0,0,0,0)",
       plot_bgcolor: "rgba(0,0,0,0)",
-      font: { color: token("--ink") },
+      font: { color: token("--ink"), family: token("--font-sans"), size: 12 },
       xaxis: {
         title: { text: plot.x_label || plot.x },
         type: axisType(plot.x_log),

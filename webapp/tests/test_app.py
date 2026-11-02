@@ -1,9 +1,19 @@
+import html
+import os
 import re
 
 import pytest
 from starlette.testclient import TestClient
 
-from lada_web.catalog import CALCULATIONS, SECTIONS
+from lada_web.catalog import (
+    CALCULATIONS,
+    RHEOMETER_CALCULATIONS,
+    SECTION_BY_KEY,
+    SECTIONS,
+    SIMULATION_CALCULATIONS,
+    WORKSPACE_BY_KEY,
+    WORKSPACES,
+)
 from lada_web.config import Settings
 from lada_web.main import create_app
 from lada_web.rendering import templates
@@ -20,7 +30,7 @@ def test_index_lists_every_calculation(client):
 
 
 def test_index_explains_the_flow_and_the_input_each_page_needs(client):
-    r = client.get("/")
+    r = client.get("/simulations")
     assert "Upload" in r.text and "Download" in r.text
     assert "Needs a LAMMPS dump file" in r.text
     assert "Needs a NumPy .npz trajectory" in r.text
@@ -48,7 +58,7 @@ MULTI_FILE_SECTIONS = {"conformations", "dynamics", "rheology"}
 JOB_BASED_SECTIONS = {"conformations", "dynamics", "rheology"}
 
 
-@pytest.mark.parametrize("calc", CALCULATIONS, ids=lambda c: f"{c.section}-{c.slug}")
+@pytest.mark.parametrize("calc", SIMULATION_CALCULATIONS, ids=lambda c: f"{c.section}-{c.slug}")
 def test_every_calculation_page_renders(client, calc):
     r = client.get(calc.path)
     assert r.status_code == 200
@@ -316,51 +326,70 @@ def test_a_wide_table_can_be_scrolled_from_the_keyboard(client, data_dir, htmx):
 # --- Navigation and page layout --------------------------------------------
 
 
-def test_the_top_bar_discloses_every_section(client):
-    """Each section is a real button that owns a menu, so it works from the keyboard."""
+def test_the_sidebar_lists_every_section_open(client):
+    """No menus to open: every section and tool is in the page, in catalog order, always."""
     r = client.get("/parsers/log")
+    positions = []
     for section in SECTIONS:
-        button = re.search(
-            rf'<button[^>]*aria-controls="nav-menu-{section.key}"[^>]*>', r.text, re.S
-        )
-        assert button is not None, f"no disclosure button for {section.key}"
-        assert 'aria-expanded="false"' in button.group(0), section.key
-        assert f'id="nav-menu-{section.key}"' in r.text, section.key
-        assert section.title in r.text
+        group = re.search(rf'<div class="nav-group[^"]*"\s+data-section="{section.key}">', r.text)
+        assert group is not None, f"no sidebar group for {section.key}"
+        assert f'id="nav-section-{section.key}"' in r.text, section.key
+        assert html.escape(section.title) in r.text
+        positions.append(group.start())
+    assert positions == sorted(positions), "sidebar sections are out of catalog order"
+    sidebar = re.search(r'<nav id="site-nav".*?</nav>', r.text, re.S).group(0)
+    assert "aria-expanded" not in sidebar, "a sidebar section can be collapsed"
 
 
-def test_every_calculation_link_lives_in_its_section_menu(client):
+def test_every_calculation_link_lives_in_its_section_group(client):
     r = client.get("/")
     for calc in CALCULATIONS:
-        menu = re.search(
-            rf'id="nav-menu-{calc.section}".*?</ul>',
-            r.text,
+        group = re.search(
+            rf'data-section="{calc.section}">.*?</ul>',
+            re.search(r'<nav id="site-nav".*?</nav>', r.text, re.S).group(0),
             re.S,
         )
-        assert menu is not None, calc.section
-        assert f'href="{calc.path}"' in menu.group(0), calc.path
+        assert group is not None, calc.section
+        assert f'href="{calc.path}"' in group.group(0), calc.path
 
 
 @pytest.mark.parametrize("calc", CALCULATIONS, ids=lambda c: f"{c.section}-{c.slug}")
 def test_the_navigation_names_the_section_the_page_and_the_way_back(client, calc):
-    """Three statements of place: the section on the bar, the page in its menu, a breadcrumb."""
+    """Statements of place: workspace and section colour, the page in the sidebar, a breadcrumb."""
     r = client.get(calc.path)
-    section_title = next(s.title for s in SECTIONS if s.key == calc.section)
+    assert r.status_code == 200
+    section = SECTION_BY_KEY[calc.section]
+    workspace = WORKSPACE_BY_KEY[section.workspace]
+    section_title = html.escape(section.title)
 
-    current_item = re.search(r'<li class="nav-item is-current"[^>]*>.*?</li>', r.text, re.S)
-    assert current_item is not None, f"{calc.path} marks no current section"
-    assert section_title in current_item.group(0)
+    # The whole page takes the section's colour and the workspace from these attributes.
+    assert f'<body data-section="{calc.section}" data-workspace="{workspace.key}">' in r.text
+
+    current_group = re.search(r'<div class="nav-group is-current"[^>]*>.*?</div>', r.text, re.S)
+    assert current_group is not None, f"{calc.path} marks no current section"
+    assert section_title in current_group.group(0)
 
     here = re.search(rf'href="{re.escape(calc.path)}"\s+aria-current="page"', r.text)
-    assert here is not None, f"{calc.path} is not marked current in its menu"
+    assert here is not None, f"{calc.path} is not marked current in the sidebar"
 
     crumbs = re.search(r'<nav class="breadcrumb".*?</nav>', r.text, re.S).group(0)
-    assert '<a href="/">Overview</a>' in crumbs
+    assert f'<a href="{workspace.home}">{workspace.title}</a>' in crumbs
     assert section_title in crumbs
-    assert f'<span class="breadcrumb-current">{calc.title}</span>' in crumbs
+    assert f'<span class="breadcrumb-current">{html.escape(calc.title)}</span>' in crumbs
+    assert 'class="needs-chip"' in crumbs
 
 
-@pytest.mark.parametrize("calc", CALCULATIONS, ids=lambda c: f"{c.section}-{c.slug}")
+def test_any_tool_is_a_keystroke_away(client):
+    """The jump box is on every page and is filled from the sidebar, so the two never differ."""
+    r = client.get("/conformations/rg")
+    assert 'id="jump"' in r.text and 'id="jump-input"' in r.text
+    assert "data-jump-open" in r.text
+    js = client.get("/static/js/app.js").text
+    assert "collectTools" in js and "showModal" in js
+    assert '"lada-recent"' in js
+
+
+@pytest.mark.parametrize("calc", SIMULATION_CALCULATIONS, ids=lambda c: f"{c.section}-{c.slug}")
 def test_the_form_sits_left_of_the_results(client, calc):
     """Inputs and what came back share one screen, so a changed parameter shows its effect."""
     r = client.get(calc.path)
@@ -383,28 +412,131 @@ def test_the_results_column_says_what_will_appear_in_it(client):
 
 
 def test_one_web_font_is_loaded_with_a_system_fallback(client):
-    """A single family, two weights, swap — and a stack that survives an offline machine."""
+    """One legibility-first family (sans plus its mono), swap, and an offline-safe stack."""
     page = client.get("/").text
     link = re.search(r'href="https://fonts\.googleapis\.com/css2\?[^"]*"', page).group(0)
-    assert "family=IBM+Plex+Sans:wght@400;600" in link
+    assert "family=Atkinson+Hyperlegible+Next" in link
+    assert "family=Atkinson+Hyperlegible+Mono" in link
     assert "display=swap" in link
     assert page.count("fonts.googleapis.com/css2") == 1
 
     css = client.get("/static/css/app.css").text
     stack = re.search(r"--font-sans:(.*?);", css, re.S).group(1)
-    assert "IBM Plex Sans" in stack
+    assert "Atkinson Hyperlegible Next" in stack
     assert "system-ui" in stack and "sans-serif" in stack
+    mono = re.search(r"--font-mono:(.*?);", css, re.S).group(1)
+    assert "ui-monospace" in mono and "monospace" in mono
     # The numeric tables have to keep their columns lined up under the new face.
     assert "font-variant-numeric: tabular-nums" in css
-    # Monospace stays a system stack rather than a second download.
     assert "fonts.googleapis.com" not in css
 
 
-def test_no_grid_is_ruled_behind_the_text(client):
-    """The pad's ruling survives only as an edge; the working surface is plain white."""
+def _section_colour_var(css: str, key: str) -> str:
+    rule = re.search(rf'\[data-section="{key}"\] \{{(.*?)\}}', css, re.S)
+    assert rule is not None, key
+    return re.search(r"--hue: var\(--([a-z-]+)\)", rule.group(1)).group(1)
+
+
+def test_every_section_has_its_own_colour(client):
+    """Each section has a hue that reaches the actions; within a workspace no two share one,
+    except the workspace-general My data and Custom plot, which share neutral graphite."""
     css = client.get("/static/css/app.css").text
+    for workspace in WORKSPACES:
+        hues = [_section_colour_var(css, s.key) for s in SECTIONS if s.workspace == workspace.key]
+        distinct = [h for h in hues if h != "graphite"]
+        assert len(distinct) == len(set(distinct)), workspace.key
+    assert _section_colour_var(css, "mydata") == _section_colour_var(css, "custom") == "graphite"
     body_rule = re.search(r"\nbody \{(.*?)\n\}", css, re.S).group(1)
     assert "background-image" not in body_rule
-    assert "background-color: var(--paper)" in body_rule
-    edge = re.search(r"\.pad-edge \{(.*?)\n\}", css, re.S).group(1)
-    assert "linear-gradient" in edge
+
+
+def test_dark_mode_follows_the_system_and_can_be_overridden(client):
+    """The theme is set before the stylesheet paints, and every section has a dark variant."""
+    page = client.get("/dynamics/isf").text
+    head = page[: page.index("</head>")]
+    assert head.index('localStorage.getItem("lada-theme")') < head.index("/static/css/app.css")
+    assert "prefers-color-scheme: dark" in head
+    assert "data-theme-toggle" in page
+
+    css = client.get("/static/css/app.css").text
+    dark = re.search(r':root\[data-theme="dark"\] \{(.*?)\n\}', css, re.S).group(1)
+    for token in ("--ground", "--surface", "--ink", "--line", "--hue-ink"):
+        assert f"{token}:" in dark, token
+    for section in SECTIONS:
+        hue = _section_colour_var(css, section.key)
+        assert f"--{hue}-ink:" in dark, section.key
+        assert f"--{hue}-tint:" in dark, section.key
+
+    js = client.get("/static/js/app.js").text
+    assert "ladaRepaintPlots" in js
+
+
+def test_stylesheet_and_script_urls_change_when_the_files_do(client, tmp_path, monkeypatch):
+    """Fingerprinted URLs, so no browser (Safari especially) can keep an outdated copy."""
+    from lada_web import rendering
+
+    page = client.get("/").text
+    for path in ("css/app.css", "js/app.js"):
+        url = re.search(rf'"(/static/{re.escape(path)}\?v=[0-9a-f]{{10}})"', page)
+        assert url is not None, path
+        assert client.get(url.group(1)).status_code == 200
+
+    asset = tmp_path / "css" / "x.css"
+    asset.parent.mkdir()
+    asset.write_text("a { color: red; }")
+    monkeypatch.setattr(rendering, "STATIC_DIR", tmp_path)
+    before = rendering.static_url("css/x.css")
+    asset.write_text("a { color: blue; }")
+    os.utime(asset, ns=(asset.stat().st_atime_ns, asset.stat().st_mtime_ns + 1_000_000))
+    after = rendering.static_url("css/x.css")
+    assert before != after
+    assert rendering.static_url("css/missing.css") == "/static/css/missing.css"
+
+
+# --- Workspaces ----------------------------------------------------------------
+
+
+def test_home_offers_one_door_per_workspace(client):
+    r = client.get("/")
+    assert r.status_code == 200
+    doors = re.findall(r'<a class="door" href="([^"]+)" data-workspace="([^"]+)">', r.text)
+    assert doors == [(w.home, w.key) for w in WORKSPACES]
+
+
+@pytest.mark.parametrize("workspace", WORKSPACES, ids=lambda w: w.key)
+def test_each_workspace_overview_lists_only_its_own_tools(client, workspace):
+    r = client.get(workspace.home)
+    assert r.status_code == 200
+    main = re.search(r'<main id="main".*?</main>', r.text, re.S).group(0)
+    for calc in CALCULATIONS:
+        listed = f'href="{calc.path}"' in main
+        assert listed == (SECTION_BY_KEY[calc.section].workspace == workspace.key), calc.path
+    # The sidebar opens on this workspace and says so on the switch.
+    assert f'aria-current="page">{workspace.title} overview</a>' in r.text
+    pressed = re.search(r'data-workspace-switch="([a-z]+)"[^>]*aria-pressed="true"', r.text, re.S)
+    assert pressed.group(1) == workspace.key
+
+
+@pytest.mark.parametrize("calc", CALCULATIONS, ids=lambda c: f"{c.section}-{c.slug}")
+def test_the_sidebar_opens_on_the_pages_own_workspace(client, calc):
+    r = client.get(calc.path)
+    own = SECTION_BY_KEY[calc.section].workspace
+    active = re.search(r'<div class="nav-workspace is-active"\s+data-workspace="([a-z]+)"', r.text)
+    assert active.group(1) == own
+    switch = re.search(r'<div class="workspace-switch".*?</div>', r.text, re.S).group(0)
+    assert [w.key for w in WORKSPACES] == re.findall(r'data-workspace-switch="([a-z]+)"', switch)
+
+
+def test_rheometer_tools_live_under_one_prefix_and_simulation_urls_are_unchanged(client):
+    for calc in RHEOMETER_CALCULATIONS:
+        assert calc.path.startswith("/rheometer/"), calc.path
+        assert client.get(calc.path).status_code == 200
+    for calc in SIMULATION_CALCULATIONS:
+        assert calc.path == f"/{calc.section}/{calc.slug}"
+    assert client.get("/rheometer/nope").status_code == 404
+
+
+def test_an_unbuilt_rheometer_tool_says_so(client):
+    r = client.get("/rheometer/frequency-sweep")
+    assert "This tool is not ready yet." in r.text
+    assert 'href="/rheometer/my-data"' in r.text

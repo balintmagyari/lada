@@ -9,7 +9,7 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse, Response
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
-from .catalog import Calculation, get_calculation
+from .catalog import Calculation, get_calculation_by_path
 from .rendering import is_htmx, templates, wants_html
 
 _log = logging.getLogger(__name__)
@@ -106,8 +106,7 @@ def _page_came_from(request: Request) -> Calculation | None:
     origin = urlsplit(str(request.base_url))
     if referer.netloc and (referer.scheme, referer.netloc) != (origin.scheme, origin.netloc):
         return None
-    parts = referer.path.strip("/").split("/")
-    return get_calculation(*parts) if len(parts) == 2 else None
+    return get_calculation_by_path(referer.path) if referer.path.count("/") == 2 else None
 
 
 def error_response(

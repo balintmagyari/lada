@@ -1,68 +1,269 @@
-/* LaDa web — an instrument, not a marketing site.
+/* LaDa web — a bench, not a brochure.
 
-   A plotting pad with the ruling kept to its edges: white sheets of work on a pale enamel
-   ground, the millimetre rule surviving only as the torn edge under the masthead and above
-   the footer, so nothing is ever printed on top of a grid. Navy ink, cobalt for anything you
-   can act on, rust for anything that failed. */
+   Every tool lives in one sidebar that never moves, in the same order on every page, so the
+   hand learns where things are. Each of the five sections owns a bead colour; the colour
+   follows you from the sidebar into the page header, the Calculate button and the first plot
+   series, so you know which kind of tool you are in without reading. Everything else is quiet:
+   white work area, pale sidebar, hairlines, no shadows at rest. */
 
 :root {
-  --paper: #edf0ec;
-  --panel: #ffffff;
-  --ink: #14232e;
-  --ink-muted: #55655f;
-  --rule: #c6d0c9;
-  --rule-soft: #dfe4de;
-  --accent: #1b4fd8;
-  --accent-dark: #143da8;
-  --accent-tint: #eef2fd;
-  --fault: #9e2b25;
-  --fault-tint: #fbf0ef;
+  --ground: #f2f4f6;
+  --surface: #ffffff;
+  --sunken: #f6f7f9;
+  --ink: #1e2832;
+  --ink-muted: #5e6b77;
+  --ink-faint: #8a96a1;
+  --line: #e1e5ea;
+  --line-strong: #c9d0d7;
+  --fault: #b0323a;
+  --fault-tint: #fdf1f1;
+  --hover: rgba(30, 40, 50, 0.05);
+  --shadow: rgba(30, 40, 50, 0.18);
+  --overlay: rgba(30, 40, 50, 0.28);
+  --sketch: #c9d0d7;
 
-  --grid-minor: #e4e8e3;
-  --grid-major: #d3dbd3;
+  /* One bead per section. `--hue` draws beads and marks; `--hue-strong` fills buttons that
+     carry white text (all pass WCAG AA at body size, in both themes); `--hue-ink` is the hue
+     used as text or a plot line on the page's own ground; `--hue-tint` is the quiet wash
+     behind the current item. */
+  --parsers: #64788c;
+  --parsers-strong: #475a6d;
+  --parsers-ink: #475a6d;
+  --parsers-tint: #eef1f4;
+  --conformations: #1f9c88;
+  --conformations-strong: #11745f;
+  --conformations-ink: #11745f;
+  --conformations-tint: #e8f5f2;
+  --dynamics: #7563d6;
+  --dynamics-strong: #5544b8;
+  --dynamics-ink: #5544b8;
+  --dynamics-tint: #f0eefb;
+  --rheology: #d68b1f;
+  --rheology-strong: #94590a;
+  --rheology-ink: #94590a;
+  --rheology-tint: #fbf3e6;
+  --modifiers: #cf5470;
+  --modifiers-strong: #a3344f;
+  --modifiers-ink: #a3344f;
+  --modifiers-tint: #fbeef1;
 
-  /* One web font, two weights. The stack after it is what an offline machine gets. */
-  --font-sans: "IBM Plex Sans", "Source Sans 3", "Segoe UI", system-ui, -apple-system,
-    "Helvetica Neue", Arial, sans-serif;
-  --font-mono: ui-monospace, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+  /* Rheometer workspace. My data and Custom plot share a neutral graphite: they belong to no
+     one kind of test. */
+  --graphite: #5b6573;
+  --graphite-strong: #3f4854;
+  --graphite-ink: #3f4854;
+  --graphite-tint: #eef0f2;
+  --oscillation: #2f7fd8;
+  --oscillation-strong: #1d5fae;
+  --oscillation-ink: #1d5fae;
+  --oscillation-tint: #e9f2fc;
+  --flow: #6f9a2a;
+  --flow-strong: #4d7212;
+  --flow-ink: #4d7212;
+  --flow-tint: #f0f5e6;
+  --superposition: #b04fb0;
+  --superposition-strong: #8a338a;
+  --superposition-ink: #8a338a;
+  --superposition-tint: #f8eef8;
 
-  --sheet-radius: 2px;
-  --measure: 68ch;
+  /* Outside any section (the overview) actions take the ink-blue default. */
+  --hue: #3f63c9;
+  --hue-strong: #2f4fae;
+  --hue-ink: #2f4fae;
+  --hue-tint: #eef2fc;
+
+  --font-sans: "Atkinson Hyperlegible Next", "Atkinson Hyperlegible", system-ui, -apple-system,
+    "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+  --font-mono: "Atkinson Hyperlegible Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+
+  --radius: 8px;
+  --radius-small: 5px;
+  --sidebar-width: 16.5rem;
+  --measure: 66ch;
+  color-scheme: light;
 }
 
-/* Pico overrides: the identity lives here, not in the templates. */
-:root:not([data-theme="dark"]),
-[data-theme="light"] {
+/* Dark: a deep blue-grey rather than black, the sidebar a step darker than the work area,
+   text off-white. The beads get lighter so they still read as their colour on dark; button
+   fills keep their light-theme values, which already carry white text. */
+:root[data-theme="dark"] {
+  --ground: #14191f;
+  --surface: #1a2027;
+  --sunken: #1f262e;
+  --ink: #e3e7eb;
+  --ink-muted: #a4aeb8;
+  --ink-faint: #7a8590;
+  --line: #2b333c;
+  --line-strong: #3c4651;
+  --fault: #f0868c;
+  --fault-tint: #362126;
+  --hover: rgba(255, 255, 255, 0.05);
+  --shadow: rgba(0, 0, 0, 0.5);
+  --overlay: rgba(5, 8, 12, 0.6);
+  --sketch: #46515c;
+
+  --parsers: #8ea2b6;
+  --parsers-ink: #a9bacb;
+  --parsers-tint: #222b35;
+  --conformations: #34bea7;
+  --conformations-ink: #5fd3bf;
+  --conformations-tint: #16302c;
+  --dynamics: #9586ec;
+  --dynamics-ink: #b2a7f5;
+  --dynamics-tint: #26233f;
+  --rheology: #e6a240;
+  --rheology-ink: #f0bb6c;
+  --rheology-tint: #322817;
+  --modifiers: #e8728e;
+  --modifiers-ink: #f297ad;
+  --modifiers-tint: #36202a;
+
+  --graphite: #9aa4b0;
+  --graphite-ink: #bcc4cd;
+  --graphite-tint: #242a31;
+  --oscillation: #5aa0ee;
+  --oscillation-ink: #8cbcf5;
+  --oscillation-tint: #172a40;
+  --flow: #92bf4a;
+  --flow-ink: #b3d97a;
+  --flow-tint: #212c16;
+  --superposition: #d27ad2;
+  --superposition-ink: #e3a3e3;
+  --superposition-tint: #311f32;
+
+  --hue: #7d9bf0;
+  --hue-ink: #a3b9f7;
+  --hue-tint: #1f2740;
+  color-scheme: dark;
+}
+
+[data-section="parsers"] {
+  --hue: var(--parsers);
+  --hue-strong: var(--parsers-strong);
+  --hue-ink: var(--parsers-ink);
+  --hue-tint: var(--parsers-tint);
+}
+
+[data-section="conformations"] {
+  --hue: var(--conformations);
+  --hue-strong: var(--conformations-strong);
+  --hue-ink: var(--conformations-ink);
+  --hue-tint: var(--conformations-tint);
+}
+
+[data-section="dynamics"] {
+  --hue: var(--dynamics);
+  --hue-strong: var(--dynamics-strong);
+  --hue-ink: var(--dynamics-ink);
+  --hue-tint: var(--dynamics-tint);
+}
+
+[data-section="rheology"] {
+  --hue: var(--rheology);
+  --hue-strong: var(--rheology-strong);
+  --hue-ink: var(--rheology-ink);
+  --hue-tint: var(--rheology-tint);
+}
+
+[data-section="modifiers"] {
+  --hue: var(--modifiers);
+  --hue-strong: var(--modifiers-strong);
+  --hue-ink: var(--modifiers-ink);
+  --hue-tint: var(--modifiers-tint);
+}
+
+[data-section="mydata"] {
+  --hue: var(--graphite);
+  --hue-strong: var(--graphite-strong);
+  --hue-ink: var(--graphite-ink);
+  --hue-tint: var(--graphite-tint);
+}
+
+[data-section="custom"] {
+  --hue: var(--graphite);
+  --hue-strong: var(--graphite-strong);
+  --hue-ink: var(--graphite-ink);
+  --hue-tint: var(--graphite-tint);
+}
+
+[data-section="oscillation"] {
+  --hue: var(--oscillation);
+  --hue-strong: var(--oscillation-strong);
+  --hue-ink: var(--oscillation-ink);
+  --hue-tint: var(--oscillation-tint);
+}
+
+[data-section="flow"] {
+  --hue: var(--flow);
+  --hue-strong: var(--flow-strong);
+  --hue-ink: var(--flow-ink);
+  --hue-tint: var(--flow-tint);
+}
+
+[data-section="superposition"] {
+  --hue: var(--superposition);
+  --hue-strong: var(--superposition-strong);
+  --hue-ink: var(--superposition-ink);
+  --hue-tint: var(--superposition-tint);
+}
+
+/* Anything derived from the section hue is declared again wherever a section is set: a custom
+   property that refers to another is resolved where it is declared, so declaring these on
+   :root alone would freeze them at the default blue. The plot reads --accent (see app.js). */
+:root,
+[data-section] {
+  --hue-press: color-mix(in srgb, var(--hue-strong) 78%, #000);
+  --pico-primary-hover-background: var(--hue-press);
+  --pico-primary-hover-border: var(--hue-press);
+  --accent: var(--hue-ink);
+  --pico-primary: var(--hue-ink);
+  --pico-primary-underline: color-mix(in srgb, var(--hue-ink) 45%, transparent);
+  --pico-primary-background: var(--hue-strong);
+  --pico-primary-border: var(--hue-strong);
+  --pico-primary-focus: color-mix(in srgb, var(--hue) 30%, transparent);
+  --pico-form-element-focus-color: var(--hue);
+  --pico-form-element-active-border-color: var(--hue);
+}
+
+/* Pico overrides: the identity lives here, not in the templates. Every value is a token, so
+   one block serves both themes; `:root[data-theme]` outranks Pico's own theme blocks. */
+:root,
+:root[data-theme] {
   --pico-font-family: var(--font-sans);
+  --pico-font-family-sans-serif: var(--font-sans);
   --pico-font-family-monospace: var(--font-mono);
   --pico-font-size: 100%;
-  --pico-line-height: 1.55;
-  --pico-border-radius: var(--sheet-radius);
-  --pico-background-color: var(--paper);
+  --pico-line-height: 1.5;
+  --pico-border-radius: var(--radius-small);
+  --pico-spacing: 1rem;
+  --pico-typography-spacing-vertical: 0.75rem;
+  --pico-form-element-spacing-vertical: 0.5rem;
+  --pico-form-element-spacing-horizontal: 0.7rem;
+  --pico-background-color: var(--surface);
   --pico-color: var(--ink);
   --pico-h1-color: var(--ink);
   --pico-h2-color: var(--ink);
   --pico-h3-color: var(--ink);
   --pico-muted-color: var(--ink-muted);
-  --pico-muted-border-color: var(--rule);
-  --pico-border-color: var(--rule);
-  --pico-primary: var(--accent);
-  --pico-primary-hover: var(--accent-dark);
-  --pico-primary-background: var(--accent);
-  --pico-primary-hover-background: var(--accent-dark);
-  --pico-primary-focus: rgba(27, 79, 216, 0.28);
+  --pico-muted-border-color: var(--line);
+  --pico-border-color: var(--line);
+  --pico-primary-hover: var(--ink);
+  --pico-primary-hover-underline: var(--ink);
   --pico-primary-inverse: #ffffff;
-  --pico-card-background-color: var(--panel);
-  --pico-card-border-color: var(--rule);
-  --pico-card-box-shadow: none;
-  --pico-card-sectioning-background-color: var(--panel);
-  --pico-form-element-background-color: var(--panel);
-  --pico-form-element-border-color: #a9b7af;
+  --pico-secondary-background: var(--surface);
+  --pico-secondary-border: var(--line-strong);
+  --pico-secondary-hover-background: var(--sunken);
+  --pico-secondary-hover-border: var(--ink-faint);
+  --pico-secondary-inverse: var(--ink);
+  --pico-form-element-background-color: var(--surface);
+  --pico-form-element-border-color: var(--line-strong);
   --pico-form-element-color: var(--ink);
-  --pico-form-element-focus-color: var(--accent);
-  --pico-code-background-color: #eef1ed;
+  --pico-form-element-placeholder-color: var(--ink-faint);
+  --pico-code-background-color: var(--sunken);
   --pico-code-color: var(--ink);
-  --pico-table-border-color: var(--rule);
+  --pico-table-border-color: var(--line);
+  --pico-modal-overlay-background-color: var(--overlay);
+  --pico-modal-overlay-backdrop-filter: blur(1.5px);
 }
 
 /* --- Ground --------------------------------------------------------------- */
@@ -73,22 +274,28 @@
   box-sizing: border-box;
 }
 
-body {
-  display: flex;
-  flex-direction: column;
-  min-height: 100vh;
-  margin: 0;
-  color: var(--ink);
-  background-color: var(--paper);
+html {
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
 }
 
-/* One measure for every full-width band, so the masthead, the content and the footer
-   line up down the left edge. */
-.shell {
-  width: 100%;
-  max-width: 90rem;
-  margin-inline: auto;
-  padding-inline: clamp(1rem, 3vw, 2.25rem);
+body {
+  margin: 0;
+  color: var(--ink);
+  background: var(--surface);
+  font-size: 0.97rem;
+}
+
+.app {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  min-height: 100vh;
+}
+
+@media (min-width: 60rem) {
+  .app {
+    grid-template-columns: var(--sidebar-width) minmax(0, 1fr);
+  }
 }
 
 .skip-link {
@@ -97,7 +304,7 @@ body {
   top: 0;
   z-index: 100;
   padding: 0.5rem 0.9rem;
-  background: var(--accent);
+  background: var(--hue-strong);
   color: #fff;
   text-decoration: none;
 }
@@ -106,228 +313,350 @@ body {
   left: 0;
 }
 
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
 /* Alpine is deferred; anything it owns stays hidden until it boots. */
 [x-cloak] {
   display: none !important;
 }
 
-/* The one place the graph ruling survives: the edge of the pad. It carries no text. */
-.pad-edge {
-  height: 12px;
-  background-color: var(--panel);
-  background-image:
-    linear-gradient(90deg, var(--grid-minor) 1px, transparent 1px),
-    linear-gradient(90deg, var(--grid-major) 1px, transparent 1px);
-  background-size: 8px 100%, 40px 100%;
-  border-bottom: 1px solid var(--rule);
+code {
+  padding: 0.05em 0.3em;
+  border-radius: 4px;
+  font-size: 0.9em;
 }
 
-.pad-edge-foot {
-  border-bottom: 0;
-  border-top: 1px solid var(--rule);
+kbd {
+  display: inline-block;
+  min-width: 1.5em;
+  padding: 0.05rem 0.35rem;
+  background: var(--surface);
+  border: 1px solid var(--line-strong);
+  border-bottom-width: 2px;
+  border-radius: 4px;
+  color: var(--ink-muted);
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  line-height: 1.4;
+  text-align: center;
 }
 
-/* --- Masthead ------------------------------------------------------------- */
-
-.masthead {
-  position: relative;
-  z-index: 30;
-  /* Pico pads body > header; the bar and the pad edge do their own spacing. */
-  padding-block: 0;
-  background: var(--panel);
+/* The section's bead: a filled circle in its colour, wherever the section is named. */
+.bead {
+  display: inline-block;
+  flex: none;
+  width: 0.62rem;
+  height: 0.62rem;
+  border-radius: 50%;
+  background: var(--hue);
 }
 
-.masthead-bar {
+/* --- Sidebar -------------------------------------------------------------- */
+
+.sidebar {
   display: flex;
-  align-items: baseline;
+  flex-direction: column;
+  gap: 0.75rem;
+  padding: 0.85rem 1rem;
+  background: var(--ground);
+  border-bottom: 1px solid var(--line);
+}
+
+@media (min-width: 60rem) {
+  .sidebar {
+    position: sticky;
+    top: 0;
+    height: 100vh;
+    overflow-y: auto;
+    padding: 1.25rem 0.9rem 1rem;
+    border-bottom: 0;
+    border-right: 1px solid var(--line);
+    scrollbar-width: thin;
+    scrollbar-color: var(--line-strong) transparent;
+  }
+}
+
+.sidebar-head {
+  display: flex;
+  align-items: center;
   justify-content: space-between;
-  gap: 0.75rem 1.5rem;
-  flex-wrap: wrap;
-  padding-block: 0.95rem 0.7rem;
+  gap: 1rem;
 }
 
-.wordmark {
-  display: flex;
-  align-items: baseline;
-  gap: 0.55rem;
-  flex-wrap: wrap;
+.brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.2rem 0.3rem;
+  border-radius: var(--radius-small);
   color: var(--ink);
   text-decoration: none;
 }
 
-.wordmark-name {
-  font-size: 1.35rem;
-  font-weight: 600;
-  letter-spacing: -0.02em;
+.brand:hover {
+  color: var(--ink);
 }
 
-.wordmark-role {
-  font-size: 0.85rem;
+.brand-chain {
+  width: 3.4rem;
+  height: auto;
+  overflow: visible;
+}
+
+.brand-chain path {
+  fill: none;
+  stroke: var(--line-strong);
+  stroke-width: 2;
+}
+
+.brand-chain circle {
+  stroke: var(--ground);
+  stroke-width: 2;
+  transition: transform 160ms ease;
+  transform-box: fill-box;
+  transform-origin: center;
+}
+
+.brand:hover .brand-chain circle {
+  transform: translateY(-1.5px);
+}
+
+.brand:hover .brand-chain circle:nth-of-type(even) {
+  transform: translateY(1.5px);
+}
+
+.bead-parsers { fill: var(--parsers); }
+.bead-conformations { fill: var(--conformations); }
+.bead-dynamics { fill: var(--dynamics); }
+.bead-rheology { fill: var(--rheology); }
+.bead-modifiers { fill: var(--modifiers); }
+
+.brand-name {
+  font-size: 1.3rem;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+
+.sidebar-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+/* Auto / Light / Dark. The icon is a disc: half-filled for auto, hollow for light, full for
+   dark, so the state reads at a glance without the word. */
+.theme-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  width: auto;
+  margin: 0;
+  padding: 0.3rem 0.65rem 0.3rem 0.5rem;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 999px;
   color: var(--ink-muted);
+  font-size: 0.8rem;
 }
 
-.wordmark:hover .wordmark-name,
-.wordmark:focus-visible .wordmark-name {
-  color: var(--accent);
+.theme-toggle:hover,
+.theme-toggle:focus-visible {
+  background: var(--hover);
+  border-color: var(--line);
+  color: var(--ink);
+}
+
+.theme-icon {
+  width: 0.8rem;
+  height: 0.8rem;
+  border: 1.5px solid currentColor;
+  border-radius: 50%;
+  background: linear-gradient(90deg, currentColor 50%, transparent 50%);
+}
+
+[data-theme-pref="light"] .theme-icon {
+  background: transparent;
+}
+
+[data-theme-pref="dark"] .theme-icon {
+  background: currentColor;
 }
 
 .nav-toggle {
   width: auto;
   margin: 0;
   padding: 0.35rem 0.85rem;
-  background: transparent;
-  border: 1px solid var(--rule);
+  background: var(--surface);
+  border: 1px solid var(--line-strong);
+  border-radius: 999px;
   color: var(--ink);
-  font-size: 0.9rem;
+  font-size: 0.88rem;
 }
 
-.nav-toggle:hover {
-  background: var(--paper);
-  border-color: var(--accent);
-  color: var(--accent);
+.nav-toggle:hover,
+.nav-toggle[aria-expanded="true"] {
+  background: var(--surface);
+  border-color: var(--ink-muted);
+  color: var(--ink);
 }
 
-/* --- Section navigation --------------------------------------------------- */
-
-/* Pico turns every <nav> and the lists inside one into flex rows with negative
-   outer margins. The rules below are deliberately two classes deep so they outrank it. */
-.site-nav {
-  display: block;
-  padding-bottom: 0.4rem;
-}
-
-.site-nav .nav-bar {
+.jump-open {
   display: flex;
-  flex-direction: column;
-  align-items: stretch;
-  justify-content: flex-start;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  margin: 0;
+  padding: 0.45rem 0.55rem 0.45rem 0.75rem;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  color: var(--ink-faint);
+  font-size: 0.9rem;
+  text-align: left;
+}
+
+/* A keyboard hint means nothing on a touch screen. */
+@media (hover: none) {
+  .jump-open kbd {
+    display: none;
+  }
+}
+
+.jump-open:hover,
+.jump-open:focus-visible {
+  background: var(--surface);
+  border-color: var(--line-strong);
+  color: var(--ink-muted);
+}
+
+/* Pico turns every <nav> and the lists inside it into flex rows with negative margins, and
+   pads every link in one. The rules below are two classes deep so they outrank it. */
+.sidebar .site-nav {
+  display: block;
+}
+
+.sidebar .site-nav ul {
+  display: block;
   margin: 0;
   padding: 0;
   list-style: none;
 }
 
-.nav-item {
-  position: relative;
+.sidebar .site-nav li {
+  display: block;
   margin: 0;
   padding: 0;
 }
 
-.nav-overview,
-.nav-section-button {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  width: 100%;
+.sidebar .site-nav a {
   margin: 0;
-  padding: 0.55rem 0.15rem;
-  background: transparent;
-  border: 0;
-  border-bottom: 1px solid var(--rule-soft);
-  border-radius: 0;
+}
+
+.sidebar .nav-overview,
+.sidebar .nav-link {
+  display: block;
+  padding: 0.32rem 0.6rem 0.32rem 1.6rem;
+  border-radius: var(--radius-small);
   color: var(--ink);
-  font-family: inherit;
-  font-size: 0.98rem;
-  font-weight: 400;
+  font-size: 0.92rem;
   line-height: 1.35;
-  text-align: left;
   text-decoration: none;
 }
 
-.nav-overview:hover,
-.nav-section-button:hover,
-.nav-section-button[aria-expanded="true"] {
-  background: var(--paper);
-  color: var(--accent);
-}
-
-/* Which section you are in, stated on the bar itself. */
-.nav-overview[aria-current="page"],
-.nav-item.is-current > .nav-section-button {
+.sidebar .nav-overview {
+  margin-bottom: 0.4rem;
+  padding-left: 0.6rem;
   font-weight: 600;
-  box-shadow: inset 0 -2px 0 var(--accent);
 }
 
-.nav-caret {
-  width: 0;
-  height: 0;
-  margin-left: auto;
-  border-left: 4px solid transparent;
-  border-right: 4px solid transparent;
-  border-top: 5px solid currentColor;
-  opacity: 0.55;
-  transition: transform 150ms ease;
+.sidebar .nav-overview:hover,
+.sidebar .nav-link:hover {
+  background: var(--hover);
+  color: var(--ink);
 }
 
-.nav-section-button[aria-expanded="true"] .nav-caret {
-  transform: rotate(180deg);
-  opacity: 1;
+.sidebar .nav-overview[aria-current="page"] {
+  background: var(--surface);
+  box-shadow: inset 0 0 0 1px var(--line);
 }
 
-.nav-menu {
-  padding: 0.5rem 0 0.9rem 0.9rem;
-  background: var(--panel);
+/* Where you are: the section's own wash and a bar in its colour. */
+.sidebar .nav-link[aria-current="page"] {
+  background: var(--hue-tint);
+  box-shadow: inset 3px 0 0 var(--hue);
+  color: var(--ink);
+  font-weight: 600;
 }
 
-.js .nav-menu {
+.nav-group {
+  margin-top: 0.85rem;
+}
+
+.sidebar .nav-group-title {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  margin: 0 0 0.15rem;
+  padding: 0 0.6rem;
+  color: var(--ink-muted);
+  font-size: 0.8rem;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  line-height: 1.6;
+}
+
+.nav-group.is-current .nav-group-title {
+  color: var(--ink);
+}
+
+.sidebar-foot {
   display: none;
 }
 
-.js .nav-menu.is-open {
-  display: block;
+@media (min-width: 60rem) {
+  .sidebar-foot {
+    display: flex;
+    flex-direction: column;
+    gap: 0.15rem;
+    margin-top: auto;
+    padding: 1rem 0.6rem 0;
+    color: var(--ink-faint);
+    font-size: 0.8rem;
+  }
+
+  .sidebar-foot a {
+    color: var(--ink-muted);
+    text-decoration: none;
+  }
+
+  .sidebar-foot a:hover {
+    color: var(--ink);
+    text-decoration: underline;
+  }
 }
 
-.nav-menu-blurb {
-  max-width: 36ch;
-  margin: 0 0 0.5rem;
-  color: var(--ink-muted);
-  font-size: 0.85rem;
-  line-height: 1.4;
-}
-
-.site-nav .nav-menu-list {
-  display: block;
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-
-.site-nav .nav-menu-list li {
-  display: block;
-  margin: 0;
-  padding: 0;
-}
-
-.nav-link {
-  display: block;
-  margin: 0;
-  padding: 0.35rem 0.55rem;
-  border-left: 2px solid transparent;
-  color: var(--ink);
-  font-size: 0.95rem;
-  text-decoration: none;
-}
-
-.nav-link:hover {
-  background: var(--paper);
-  border-left-color: var(--rule);
-  color: var(--accent);
-}
-
-/* Which page you are on, stated inside the section's menu. */
-.nav-link[aria-current="page"] {
-  background: var(--accent-tint);
-  border-left-color: var(--accent);
-  font-weight: 600;
-}
-
+/* Small screens: the list folds away behind the Tools button. Without scripting it stays
+   open in the normal flow, so every link is still reachable. */
 @media (max-width: 59.99rem) {
   .js .site-nav {
     display: none;
   }
 
-  .js .site-nav.is-open {
+  /* The switch only changes the folded-away list, so it folds away with it. */
+  .js .sidebar:not(:has(.site-nav.is-open)) .workspace-switch {
+    display: none;
+  }
+
+  .js .sidebar .site-nav.is-open {
     display: block;
-    padding-bottom: 1rem;
+    padding-bottom: 0.5rem;
   }
 }
 
@@ -335,188 +664,280 @@ body {
   .nav-toggle {
     display: none;
   }
+}
 
-  /* Identity and navigation share one line where there is room, and the bar wraps to two
-     when there is not — either way the masthead stays shallow, so the form and its result
-     start high on the page. */
-  .js .masthead > .shell {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: 0 2rem;
-  }
+/* --- Workspaces ------------------------------------------------------------ */
 
-  .js .masthead-bar {
-    flex: 0 1 auto;
-    padding-block: 0.7rem;
-  }
+/* Two segments, always under the search box: which family of tools the list shows. */
+.workspace-switch {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 2px;
+  padding: 3px;
+  background: var(--hover);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+}
 
-  .js .site-nav {
-    flex: 1 1 auto;
-    padding-bottom: 0.3rem;
-  }
+.workspace-switch button {
+  width: auto;
+  margin: 0;
+  padding: 0.38rem 0.5rem;
+  background: transparent;
+  border: 0;
+  border-radius: var(--radius-small);
+  color: var(--ink-muted);
+  font-size: 0.86rem;
+  font-weight: 600;
+}
 
-  .js .site-nav .nav-bar {
-    flex-direction: row;
-    flex-wrap: wrap;
-    align-items: stretch;
-    gap: 0 0.1rem;
-  }
+.workspace-switch button:hover {
+  background: transparent;
+  color: var(--ink);
+}
 
-  .js .site-nav .nav-item {
-    width: auto;
-  }
+.workspace-switch button[aria-pressed="true"] {
+  background: var(--surface);
+  box-shadow: 0 0 0 1px var(--line), 0 1px 2px var(--shadow);
+  color: var(--ink);
+}
 
-  .js .nav-overview,
-  .js .nav-section-button {
-    width: auto;
-    padding: 0.45rem 0.7rem 0.55rem;
-    border-bottom: 0;
-  }
+/* With scripting both workspaces' tools are in the page and the switch shows one; without
+   it every link stays in the normal flow, so nothing becomes unreachable. */
+.js .nav-workspace:not(.is-active) {
+  display: none;
+}
 
-  .js .nav-caret {
-    margin-left: 0;
-  }
+.nav-workspace + .nav-workspace {
+  margin-top: 1.25rem;
+}
 
-  /* Opened by a click, never at rest, so it cannot sit over text unbidden. */
-  .js .nav-menu {
-    position: absolute;
-    top: 100%;
-    left: 0;
-    z-index: 40;
-    min-width: 17rem;
-    max-width: min(24rem, calc(100vw - 2rem));
-    padding: 0.8rem 0.9rem 0.85rem;
-    border: 1px solid var(--rule);
-    border-top: 2px solid var(--accent);
-    box-shadow: 0 12px 26px rgba(20, 35, 46, 0.14);
-  }
+.js .nav-workspace + .nav-workspace {
+  margin-top: 0;
+}
 
-  /* The rightmost menus hang from the right edge so they cannot run off screen. */
-  .js .nav-item:nth-last-child(-n + 2) .nav-menu {
-    left: auto;
-    right: 0;
-  }
+/* --- Jump to a tool -------------------------------------------------------- */
+
+dialog.jump {
+  align-items: flex-start;
+  padding-top: 12vh;
+}
+
+.jump-box {
+  width: min(32rem, calc(100vw - 2rem));
+  padding: 0.6rem;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  box-shadow: 0 24px 48px var(--shadow);
+}
+
+.jump-box input[type="search"] {
+  margin: 0 0 0.4rem;
+  border-radius: var(--radius);
+  font-size: 1.05rem;
+}
+
+/* Pico's focus glow already shows where typing goes; a second outline only adds noise. */
+.jump-box input[type="search"]:focus-visible {
+  outline: none;
+}
+
+.jump-list {
+  max-height: min(24rem, 55vh);
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: var(--line-strong) transparent;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.jump-list li {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.jump-option {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  padding: 0.5rem 0.65rem;
+  border-radius: var(--radius-small);
+  color: var(--ink);
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.jump-option-section {
+  margin-left: auto;
+  color: var(--ink-faint);
+  font-size: 0.82rem;
+}
+
+.jump-option[aria-selected="true"] {
+  background: var(--hue-tint);
+  box-shadow: inset 3px 0 0 var(--hue);
+}
+
+.jump-empty {
+  padding: 0.6rem 0.65rem;
+  color: var(--ink-muted);
+}
+
+.jump-hint {
+  margin: 0.5rem 0.4rem 0.15rem;
+  color: var(--ink-faint);
+  font-size: 0.8rem;
 }
 
 /* --- Content -------------------------------------------------------------- */
 
 .content {
-  flex: 1 0 auto;
   min-width: 0;
-  padding-block: 1.5rem 2.5rem;
+  padding: 1.25rem clamp(1rem, 3vw, 2.5rem) 3rem;
+}
+
+.content:focus {
+  outline: none;
 }
 
 @media (min-width: 60rem) {
   .content {
-    padding-block: 2rem 3.25rem;
+    padding-top: 1.6rem;
   }
 }
 
+/* Where you are, in one line: section (in its colour), page, and the file it needs. */
 .breadcrumb {
-  display: block;
-  margin-bottom: 1rem;
-}
-
-.breadcrumb .breadcrumb-list {
   display: flex;
   flex-wrap: wrap;
-  align-items: baseline;
-  justify-content: flex-start;
-  gap: 0.2rem 0.5rem;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem 1rem;
+  margin-bottom: 1.1rem;
+}
+
+.content .breadcrumb .breadcrumb-list {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.2rem 0.45rem;
   margin: 0;
   padding: 0;
   list-style: none;
-  font-size: 0.88rem;
+  font-size: 0.85rem;
 }
 
-.breadcrumb .breadcrumb-list li {
-  display: block;
+.content .breadcrumb .breadcrumb-list li {
+  display: flex;
+  align-items: center;
   margin: 0;
   padding: 0;
 }
 
 .breadcrumb-list li + li::before {
   content: "/";
-  margin-right: 0.5rem;
-  color: var(--rule);
+  margin-right: 0.45rem;
+  color: var(--line-strong);
 }
 
-.breadcrumb a {
+.content .breadcrumb a {
   margin: 0;
   padding: 0;
   color: var(--ink-muted);
   text-decoration: none;
-  border-bottom: 1px solid var(--rule);
 }
 
-.breadcrumb a:hover {
-  color: var(--accent);
-  border-bottom-color: var(--accent);
+.content .breadcrumb a:hover {
+  color: var(--ink);
+  text-decoration: underline;
+}
+
+.content .breadcrumb .section-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  color: var(--hue-ink);
+  font-weight: 600;
 }
 
 .breadcrumb-current {
   color: var(--ink);
-  font-weight: 600;
 }
 
-/* The sheet. Everything on a page is written on one, and it is plain white. */
-.calc {
+/* What the tool needs, shaped like a file tab. */
+.needs-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.12rem 0.55rem;
+  background: var(--sunken);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  color: var(--ink-muted);
+  font-size: 0.78rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.needs-chip::before {
+  content: "";
+  width: 0.55rem;
+  height: 0.68rem;
+  border: 1.5px solid currentColor;
+  border-radius: 1.5px;
+  clip-path: polygon(0 0, 62% 0, 100% 30%, 100% 100%, 0 100%);
+  opacity: 0.7;
+}
+
+/* The page itself sits straight on the white ground: no sheet, no frame. Pico draws every
+   <article> as a card with a shaded header band, so both are undone here. */
+.content article.calc,
+.content article.overview {
   margin: 0;
-  padding: 1.5rem clamp(1rem, 2.5vw, 2rem) 1.75rem;
-  background: var(--panel);
-  border: 1px solid var(--rule);
-  border-radius: var(--sheet-radius);
+  padding: 0;
+  background: transparent;
+  border: 0;
+  border-radius: 0;
   box-shadow: none;
 }
 
-.calc > .calc-head {
-  margin: 0 0 1.25rem;
+.content article > .calc-head,
+.content article > .overview-head {
+  margin: 0 0 1.4rem;
   padding: 0;
   background: transparent;
-  border-bottom: 0;
-  border-radius: 0;
+  border: 0;
 }
 
 .calc-head h1 {
-  margin: 0 0 0.65rem;
-  font-size: clamp(1.5rem, 1.2rem + 1.1vw, 1.95rem);
-  font-weight: 600;
+  margin: 0 0 0.5rem;
+  font-size: clamp(1.45rem, 1.15rem + 0.9vw, 1.8rem);
+  font-weight: 700;
   letter-spacing: -0.015em;
   line-height: 1.2;
 }
 
 .calc-head p {
   max-width: var(--measure);
-  margin: 0 0 0.65rem;
+  margin: 0 0 0.45rem;
+  color: var(--ink-muted);
+  font-size: 0.93rem;
+  line-height: 1.55;
 }
 
 .calc-head p:last-child {
   margin-bottom: 0;
 }
 
-.lede {
-  font-size: 1.05rem;
-}
-
-.flow {
-  max-width: var(--measure);
-  margin: 0.9rem 0 1.1rem;
-  padding-left: 1.35rem;
-}
-
-.flow li {
-  margin-bottom: 0.3rem;
-}
-
-/* --- The workbench: inputs on the left, what came back on the right -------- */
+/* --- The workbench: settings on the left, what came back on the right ------ */
 
 .workbench {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
   gap: 1.5rem;
-  padding-top: 1.25rem;
-  border-top: 1px solid var(--rule);
 }
 
 .workbench-inputs,
@@ -524,29 +945,32 @@ body {
   min-width: 0;
 }
 
-@media (min-width: 68rem) {
+@media (min-width: 72rem) {
   .workbench {
-    grid-template-columns: 23rem minmax(0, 1fr);
-    gap: 0;
+    grid-template-columns: 22rem minmax(0, 1fr);
+    gap: 2.25rem;
+    align-items: start;
   }
 
+  /* The settings scroll on their own, so Calculate is always in reach beside the result. */
   .workbench-inputs {
-    padding-right: 1.75rem;
-    border-right: 1px solid var(--rule);
+    position: sticky;
+    top: 1rem;
+    max-height: calc(100vh - 2rem);
+    overflow-y: auto;
+    padding-right: 0.25rem;
+    scrollbar-width: thin;
+    scrollbar-color: var(--line-strong) transparent;
   }
 
-  .workbench-output {
-    padding-left: 1.75rem;
-  }
-
-  /* A page whose only outcome is a download keeps one comfortable column. */
   .workbench-single {
-    grid-template-columns: minmax(0, 40rem);
+    grid-template-columns: minmax(0, 32rem);
   }
 
   .workbench-single .workbench-inputs {
-    padding-right: 0;
-    border-right: 0;
+    position: static;
+    max-height: none;
+    overflow: visible;
   }
 }
 
@@ -554,80 +978,203 @@ body {
 
 #calc-form {
   margin: 0;
+  padding: 1.1rem 1.1rem 0;
+  background: var(--sunken);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
 }
 
 .field {
-  margin-bottom: 1rem;
+  margin-bottom: 0.95rem;
 }
 
 .field label {
-  margin-bottom: 0.25rem;
+  margin-bottom: 0.3rem;
+  font-size: 0.9rem;
   font-weight: 600;
+}
+
+#calc-form input:not([type="checkbox"], [type="radio"]),
+#calc-form select,
+#calc-form textarea {
+  margin-bottom: 0;
+  border-radius: var(--radius-small);
+  font-size: 0.93rem;
+}
+
+#calc-form input:not([type="checkbox"], [type="radio"], [type="file"]),
+#calc-form select {
+  height: auto;
+}
+
+#calc-form textarea {
+  font-family: var(--font-mono);
+}
+
+/* A file picker that looks like somewhere to drop a file, not a grey system button. */
+/* Pico fixes every input at one text-line's height, which a file picker's button is taller
+   than: it would sit at the top padding and spill out through the bottom border. Letting the
+   box grow to its content keeps the button centred with equal space above and below. */
+#calc-form input[type="file"] {
+  display: block;
+  width: 100%;
+  height: auto;
+  min-height: 0;
+  padding: 0.45rem;
+  line-height: 1.5;
+  background: var(--surface);
+  border: 1.5px dashed var(--line-strong);
+  color: var(--ink-muted);
+  font-size: 0.85rem;
+  cursor: pointer;
+}
+
+#calc-form input[type="file"]:hover {
+  border-color: var(--hue);
+}
+
+#calc-form input[type="file"]::file-selector-button {
+  margin: 0 0.75rem 0 0;
+  padding: 0.35rem 0.8rem;
+  vertical-align: middle;
+  background: var(--hue-tint);
+  border: 1px solid color-mix(in srgb, var(--hue) 35%, transparent);
+  border-radius: var(--radius-small);
+  color: var(--hue-ink);
+  font-family: var(--font-sans);
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
 }
 
 .field-checkbox {
   display: flex;
   align-items: center;
   gap: 0.5rem;
-  font-weight: 600;
+  font-weight: 400;
+}
+
+.field label.field-checkbox {
+  font-weight: 400;
+}
+
+#calc-form .field-checkbox input {
+  margin: 0;
 }
 
 .field-help {
   display: block;
   margin-top: 0.3rem;
   color: var(--ink-muted);
+  font-size: 0.8rem;
   line-height: 1.45;
 }
 
 #calc-form fieldset {
-  margin-bottom: 1.1rem;
-  padding: 0.85rem 1rem 0.15rem;
-  border: 1px solid var(--rule-soft);
-  border-radius: var(--sheet-radius);
+  margin: 0 0 1rem;
+  padding: 0.9rem 0.95rem 0.1rem;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
 }
 
 #calc-form legend {
   padding: 0 0.35rem;
-  font-size: 0.95rem;
-  font-weight: 600;
+  margin-left: -0.35rem;
+  font-size: 0.9rem;
+  font-weight: 700;
 }
 
+#calc-form fieldset > .field-help:first-of-type {
+  margin: 0 0 0.85rem;
+}
+
+/* Secondary buttons inside a form (add or remove a regime) stay small and outlined. */
+#calc-form button[type="button"]:not(.form-actions button) {
+  width: auto;
+  margin: 0 0.4rem 0.85rem 0;
+  padding: 0.35rem 0.8rem;
+  background: var(--surface);
+  border: 1px solid var(--line-strong);
+  color: var(--ink);
+  font-size: 0.85rem;
+}
+
+#calc-form button[type="button"]:not(.form-actions button):hover {
+  border-color: var(--hue);
+  color: var(--hue-ink);
+}
+
+.regime-block {
+  margin-bottom: 0.85rem;
+  padding: 0.75rem 0.8rem 0;
+  background: var(--sunken);
+  border-left: 3px solid var(--hue);
+  border-radius: var(--radius-small);
+}
+
+/* Calculate stays pinned to the foot of the settings column, in the section's colour, at the
+   same place on every page. */
 .form-actions {
+  position: sticky;
+  bottom: 0;
   display: flex;
   flex-direction: column;
-  gap: 0.6rem;
-  margin-top: 1.25rem;
-  padding-top: 1.1rem;
-  border-top: 1px solid var(--rule-soft);
+  gap: 0.5rem;
+  margin: 0.5rem -1.1rem 0;
+  padding: 0.9rem 1.1rem 1.1rem;
+  background: linear-gradient(to bottom, transparent, var(--sunken) 0.9rem);
+  border-radius: 0 0 var(--radius) var(--radius);
 }
 
-#calc-form button[type="submit"] {
+.form-actions button {
   width: 100%;
   margin: 0;
+  padding: 0.65rem 1rem;
+  background: var(--hue-strong);
+  border: 1px solid var(--hue-strong);
+  border-radius: var(--radius);
+  color: #fff;
+  font-size: 0.97rem;
+  font-weight: 700;
+}
+
+.form-actions button:hover {
+  background: var(--hue-press);
+  border-color: var(--hue-press);
+  color: #fff;
 }
 
 /* A page that offers two runs makes the second one visibly the alternative. */
-#calc-form button[type="submit"]:not(:first-of-type) {
-  background: transparent;
-  border-color: var(--accent);
-  color: var(--accent);
+.form-actions button:not(:first-of-type) {
+  background: var(--surface);
+  border-color: var(--line-strong);
+  color: var(--ink);
+  font-weight: 600;
 }
 
-#calc-form button[type="submit"]:not(:first-of-type):hover {
-  background: var(--accent);
-  color: #fff;
+.form-actions button:not(:first-of-type):hover {
+  background: var(--surface);
+  border-color: var(--hue);
+  color: var(--hue-ink);
+}
+
+.form-actions button[disabled],
+.form-actions button[aria-busy="true"] {
+  opacity: 0.6;
 }
 
 /* --- Results -------------------------------------------------------------- */
 
-.htmx-indicator {
+.htmx-indicator,
+.job-progress {
   display: none;
   margin: 0 0 1rem;
-  padding: 0.5rem 0.8rem;
-  background: var(--accent-tint);
-  border-left: 3px solid var(--accent);
+  padding: 0.7rem 0.9rem;
+  background: var(--hue-tint);
+  border-radius: var(--radius);
   color: var(--ink);
-  font-size: 0.92rem;
+  font-size: 0.9rem;
 }
 
 .htmx-request.htmx-indicator,
@@ -635,35 +1182,49 @@ body {
   display: block;
 }
 
-.job-progress {
-  margin: 0 0 1rem;
-  padding: 0.6rem 0.8rem;
-  background: var(--accent-tint);
-  border-left: 3px solid var(--accent);
-  color: var(--ink);
-  font-size: 0.92rem;
+.job-progress:not([hidden]) {
+  display: block;
 }
 
 .job-progress progress {
   display: block;
   width: 100%;
-  height: 0.6rem;
-  margin-bottom: 0.4rem;
-  accent-color: var(--accent);
+  height: 0.4rem;
+  margin-bottom: 0.45rem;
+  border-radius: 999px;
+  accent-color: var(--hue-strong);
+  --pico-progress-color: var(--hue-strong);
+  --pico-progress-background-color: color-mix(in srgb, var(--hue) 18%, transparent);
 }
 
 .job-progress p {
   margin: 0;
 }
 
+/* The empty right-hand column, drawn as the shape of the plot it will hold. */
 .results-empty {
-  max-width: var(--measure);
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  min-height: 15rem;
+  max-width: none;
   margin: 0;
-  padding: 1.1rem 1.25rem;
-  border: 1px dashed var(--rule);
-  border-radius: var(--sheet-radius);
+  padding: 1.25rem 1.4rem;
+  border: 1.5px dashed var(--line-strong);
+  border-radius: var(--radius);
   color: var(--ink-muted);
-  font-size: 0.95rem;
+  font-size: 0.92rem;
+}
+
+.results-empty::before {
+  content: "";
+  flex: 1;
+  min-height: 6rem;
+  margin-bottom: 1rem;
+  /* A mask, so the sketch takes its colour from the theme rather than the SVG. */
+  background: var(--sketch);
+  -webkit-mask: no-repeat center / 100% 100% url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 200 60' preserveAspectRatio='none'%3E%3Cpath d='M0 4 C40 6 60 40 110 50 S180 56 200 57' fill='none' stroke='%23c9d0d7' stroke-width='1.5' stroke-dasharray='4 4' vector-effect='non-scaling-stroke'/%3E%3C/svg%3E");
+  mask: no-repeat center / 100% 100% url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 200 60' preserveAspectRatio='none'%3E%3Cpath d='M0 4 C40 6 60 40 110 50 S180 56 200 57' fill='none' stroke='%23c9d0d7' stroke-width='1.5' stroke-dasharray='4 4' vector-effect='non-scaling-stroke'/%3E%3C/svg%3E");
 }
 
 .result {
@@ -671,43 +1232,58 @@ body {
 }
 
 .result-header h2 {
-  margin: 0 0 0.3rem;
-  font-size: 1.15rem;
-  font-weight: 600;
+  margin: 0 0 0.2rem;
+  font-size: 1.1rem;
+  font-weight: 700;
 }
 
 .result-summary {
   max-width: var(--measure);
   margin: 0;
   color: var(--ink-muted);
-  font-size: 0.92rem;
+  font-size: 0.88rem;
 }
 
 .result-note {
   max-width: var(--measure);
-  margin: 0.75rem 0 0;
-  color: var(--ink-muted);
-  font-size: 0.9rem;
+  margin: 0.6rem 0 0;
+  color: var(--ink-faint);
+  font-size: 0.82rem;
 }
 
 .plot {
   min-height: 340px;
-  margin-top: 1.1rem;
+  margin-top: 0.4rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  overflow: hidden;
 }
 
 .plot-controls {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.5rem 1.25rem;
-  margin-top: 1rem;
+  gap: 0.4rem;
+  margin-top: 0.9rem;
 }
 
+/* Log toggles as small pills: on is filled with the section's wash. */
 .plot-controls label {
-  display: flex;
+  display: inline-flex;
   align-items: center;
   gap: 0.4rem;
   margin: 0;
-  font-size: 0.9rem;
+  padding: 0.2rem 0.7rem 0.2rem 0.5rem;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  font-size: 0.82rem;
+  cursor: pointer;
+}
+
+.plot-controls label:has(input:checked) {
+  background: var(--hue-tint);
+  border-color: color-mix(in srgb, var(--hue) 40%, transparent);
+  color: var(--hue-ink);
+  font-weight: 600;
 }
 
 .plot-controls input {
@@ -715,10 +1291,12 @@ body {
 }
 
 .table-scroll {
-  overflow-x: auto;
+  overflow: auto;
   overscroll-behavior-x: contain;
-  margin-top: 1.25rem;
-  border: 1px solid var(--rule);
+  max-height: 28rem;
+  margin-top: 1rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
 }
 
 .table-scroll:focus-visible {
@@ -727,39 +1305,67 @@ body {
 
 .numbers {
   margin: 0;
-  font-size: 0.92rem;
+  font-family: var(--font-mono);
+  font-size: 0.83rem;
+}
+
+.numbers th,
+.numbers td {
+  padding: 0.35rem 0.85rem;
+  border-color: var(--line);
 }
 
 .numbers th {
-  background: var(--paper);
+  position: sticky;
+  top: 0;
+  background: var(--sunken);
+  color: var(--ink-muted);
+  font-family: var(--font-sans);
+  font-weight: 600;
   text-align: right;
   white-space: nowrap;
 }
 
 .numbers td {
+  background: transparent;
   font-variant-numeric: tabular-nums;
   text-align: right;
   white-space: nowrap;
 }
 
+.numbers tbody tr:nth-child(even) td {
+  background: var(--sunken);
+}
+
 .downloads {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.75rem;
-  margin-top: 1.25rem;
+  gap: 0.6rem;
+  margin-top: 1rem;
 }
 
 .downloads button {
   width: auto;
   margin: 0;
-  background: transparent;
-  border-color: var(--accent);
-  color: var(--accent);
+  padding: 0.5rem 1rem;
+  background: var(--surface);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius);
+  color: var(--ink);
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+
+.downloads button::before {
+  content: "↓";
+  margin-right: 0.45rem;
+  color: var(--hue-ink);
 }
 
 .downloads button:hover {
-  background: var(--accent);
-  color: #fff;
+  background: var(--hue-tint);
+  border-color: var(--hue);
+  color: var(--hue-ink);
 }
 
 /* What a chosen chain-topology data file turned out to contain. It sits under the file input,
@@ -767,9 +1373,10 @@ body {
 .topology-preview {
   margin-top: 0.5rem;
   padding: 0.6rem 0.75rem;
-  background: var(--sheet-sunken, rgba(127, 127, 127, 0.08));
-  border-left: 3px solid var(--rule-soft);
-  border-radius: var(--sheet-radius);
+  background: var(--sunken);
+  border-left: 3px solid var(--hue);
+  border-radius: var(--radius-small);
+  font-size: 0.85rem;
   line-height: 1.45;
 }
 
@@ -783,18 +1390,18 @@ body {
 }
 
 .result-error {
-  padding: 1.1rem 1.25rem;
+  padding: 1rem 1.2rem;
   background: var(--fault-tint);
-  border: 1px solid var(--fault);
-  border-left-width: 3px;
-  border-radius: var(--sheet-radius);
+  border: 1px solid color-mix(in srgb, var(--fault) 30%, transparent);
+  border-left: 3px solid var(--fault);
+  border-radius: var(--radius);
 }
 
 .result-error h1,
 .result-error h2 {
   margin: 0 0 0.35rem;
-  font-size: 1.15rem;
   color: var(--fault);
+  font-size: 1.05rem;
 }
 
 .result-error p {
@@ -803,118 +1410,722 @@ body {
 }
 
 .result-error .result-note {
-  margin-top: 0.9rem;
+  margin-top: 0.8rem;
 }
 
-/* --- Overview listing ----------------------------------------------------- */
+/* --- Overview ------------------------------------------------------------- */
 
-/* Columns rather than a grid: the sections have very different heights, and a grid would
-   line them up row by row and leave tall gaps. Columns let each section start where the
-   one above it ended, while source order and focus order stay as written. */
+.overview {
+  max-width: 76rem;
+}
+
+.content article > .overview-head {
+  margin-bottom: 2rem;
+}
+
+.overview-head h1 {
+  margin: 0 0 1rem;
+  font-size: clamp(1.6rem, 1.2rem + 1.2vw, 2.1rem);
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  line-height: 1.15;
+}
+
+/* The three steps really are a sequence, so they are numbered. */
+.flow {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 0.5rem;
+  margin: 0 0 0.9rem;
+  padding: 0;
+  list-style: none;
+  counter-reset: step;
+}
+
+@media (min-width: 48rem) {
+  .flow {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 0.75rem;
+  }
+}
+
+.flow li {
+  display: flex;
+  align-items: baseline;
+  gap: 0.6rem;
+  margin: 0;
+  padding: 0.7rem 0.9rem;
+  background: var(--ground);
+  border-radius: var(--radius);
+  color: var(--ink-muted);
+  font-size: 0.9rem;
+  list-style: none;
+  counter-increment: step;
+}
+
+.flow li::before {
+  content: counter(step);
+  display: inline-grid;
+  place-items: center;
+  flex: none;
+  width: 1.4rem;
+  height: 1.4rem;
+  background: var(--surface);
+  border: 1px solid var(--line-strong);
+  border-radius: 50%;
+  color: var(--ink);
+  font-size: 0.75rem;
+  font-weight: 700;
+  transform: translateY(-0.05rem);
+}
+
+.flow strong {
+  color: var(--ink);
+}
+
+.overview-note {
+  max-width: var(--measure);
+  margin: 0;
+  color: var(--ink-faint);
+  font-size: 0.82rem;
+}
+
+.overview-workspace {
+  margin: 0 0 0.35rem;
+  color: var(--ink-faint);
+  font-size: 0.85rem;
+}
+
+.overview-workspace a {
+  color: var(--ink-muted);
+  text-decoration: none;
+}
+
+.overview-workspace a:hover {
+  color: var(--ink);
+  text-decoration: underline;
+}
+
+/* The home page: one door per workspace. */
+.doors {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 1rem;
+  max-width: 60rem;
+  margin-bottom: 2rem;
+}
+
+@media (min-width: 48rem) {
+  .doors {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+.door {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  padding: 1.3rem 1.4rem 1.2rem;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  color: var(--ink);
+  text-decoration: none;
+}
+
+.door:hover {
+  border-color: var(--line-strong);
+  background: var(--sunken);
+  color: var(--ink);
+}
+
+.door-title {
+  font-size: 1.35rem;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+
+.door-blurb {
+  color: var(--ink-muted);
+  font-size: 0.93rem;
+  line-height: 1.5;
+}
+
+.door-sections {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem 1rem;
+  margin-top: 0.4rem;
+  padding-top: 0.8rem;
+  border-top: 1px solid var(--line);
+}
+
+.door-section {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  color: var(--ink-muted);
+  font-size: 0.83rem;
+}
+
+/* A rheometer tool that is not built yet. */
+.studio-pending {
+  max-width: 40rem;
+  padding: 1.1rem 1.3rem;
+  background: var(--hue-tint);
+  border-left: 3px solid var(--hue);
+  border-radius: var(--radius-small);
+}
+
+.studio-pending p {
+  margin: 0 0 0.4rem;
+}
+
+.studio-pending p:last-child {
+  margin-bottom: 0;
+}
+
+.studio-pending-title {
+  font-weight: 700;
+}
+
+.recent {
+  margin-bottom: 1.75rem;
+}
+
+.recent h2 {
+  margin: 0 0 0.55rem;
+  font-size: 0.95rem;
+  font-weight: 700;
+}
+
+.recent-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.recent-list li {
+  margin: 0;
+  list-style: none;
+}
+
+.recent-list a {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.4rem 0.85rem 0.4rem 0.7rem;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  color: var(--ink);
+  font-size: 0.88rem;
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.recent-list a:hover {
+  background: var(--hue-tint);
+  border-color: color-mix(in srgb, var(--hue) 40%, transparent);
+}
+
+/* Sections in the sidebar's order, each headed by its bead. */
 .section-grid {
-  margin-top: 1.5rem;
-  padding-top: 1.25rem;
-  border-top: 1px solid var(--rule);
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 1.75rem 2rem;
 }
 
-@media (min-width: 68rem) {
+@media (min-width: 52rem) {
   .section-grid {
-    column-count: 2;
-    column-gap: 3rem;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (min-width: 88rem) {
+  .section-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 }
 
 .section-group {
   min-width: 0;
-  margin: 0 0 1.75rem;
-  /* A section must not be split across the column break. */
-  break-inside: avoid;
-}
-
-.section-group:last-child {
-  margin-bottom: 0;
+  margin: 0;
+  scroll-margin-top: 1rem;
 }
 
 .section-group h2 {
-  margin: 0 0 0.2rem;
-  font-size: 1.1rem;
-  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  margin: 0 0 0.15rem;
+  font-size: 1.02rem;
+  font-weight: 700;
 }
 
 .section-blurb {
-  max-width: 52ch;
-  margin: 0 0 0.65rem;
+  margin: 0 0 0.7rem;
   color: var(--ink-muted);
-  font-size: 0.92rem;
+  font-size: 0.85rem;
 }
 
 .calc-list {
+  display: grid;
+  gap: 0.45rem;
   margin: 0;
   padding: 0;
   list-style: none;
-  border-top: 1px solid var(--rule);
+}
+
+.calc-list li {
+  margin: 0;
+  list-style: none;
 }
 
 .calc-item {
-  margin: 0;
-  padding: 0.7rem 0 0.75rem;
-  border-bottom: 1px solid var(--rule-soft);
+  display: block;
+  padding: 0.7rem 0.85rem;
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--hue);
+  border-radius: var(--radius-small) var(--radius) var(--radius) var(--radius-small);
+  color: var(--ink);
+  text-decoration: none;
+}
+
+.calc-item:hover {
+  background: var(--hue-tint);
+  border-color: color-mix(in srgb, var(--hue) 35%, transparent);
+  border-left-color: var(--hue);
+  color: var(--ink);
 }
 
 .calc-item-head {
   display: flex;
   flex-wrap: wrap;
-  align-items: baseline;
+  align-items: center;
   justify-content: space-between;
-  gap: 0.15rem 1rem;
+  gap: 0.25rem 0.75rem;
 }
 
-.calc-link {
-  font-weight: 600;
-  color: var(--accent);
-  text-decoration: none;
+.calc-title {
+  font-weight: 700;
 }
 
-.calc-link:hover {
-  text-decoration: underline;
+.calc-summary {
+  display: block;
+  margin-top: 0.15rem;
+  color: var(--ink-muted);
+  font-size: 0.86rem;
+  line-height: 1.45;
 }
 
-.calc-input {
+/* --- Rheometer: My data ------------------------------------------------------ */
+
+.mydata {
+  max-width: 64rem;
+}
+
+/* A drop target that is a real file input underneath: click, keyboard and drag all work. */
+.dropzone {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.35rem;
+  margin: 0 0 1.25rem;
+  padding: 1.6rem 1.25rem;
+  background: var(--sunken);
+  border: 1.5px dashed var(--line-strong);
+  border-radius: 12px;
+  text-align: center;
+  cursor: pointer;
+}
+
+.dropzone:hover,
+.dropzone.is-over,
+.dropzone:focus-within {
+  background: var(--hue-tint);
+  border-color: var(--hue);
+}
+
+.dropzone input[type="file"] {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
   margin: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.dropzone-title {
+  color: var(--ink);
+  font-size: 1.05rem;
+  font-weight: 700;
+}
+
+.dropzone-title::before {
+  content: "";
+  display: block;
+  width: 1.6rem;
+  height: 1.9rem;
+  margin: 0 auto 0.55rem;
+  border: 2px solid var(--hue);
+  border-radius: 3px;
+  clip-path: polygon(0 0, 64% 0, 100% 28%, 100% 100%, 0 100%);
+  background: linear-gradient(var(--hue-tint), var(--hue-tint));
+}
+
+.dropzone-help {
+  max-width: 34rem;
+  color: var(--ink-muted);
+  font-size: 0.86rem;
+}
+
+.mydata-status {
+  margin: 0 0 1rem;
+  padding: 0.7rem 0.9rem;
+  background: var(--sunken);
+  border-left: 3px solid var(--line-strong);
+  border-radius: var(--radius-small);
+  font-size: 0.9rem;
+}
+
+.mydata-status p {
+  margin: 0.2rem 0 0;
+}
+
+.mydata-status.is-busy,
+.mydata-status.is-ok {
+  background: var(--hue-tint);
+  border-left-color: var(--hue);
+}
+
+.mydata-status.is-error {
+  background: var(--fault-tint);
+  border-left-color: var(--fault);
+}
+
+.mydata-status.is-error strong,
+.mydata-status.is-partial p {
+  color: var(--fault);
+}
+
+.mydata-status.is-partial {
+  background: var(--sunken);
+  border-left-color: var(--fault);
+}
+
+.mydata-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem 1rem;
+  margin: 0.5rem 0 0.25rem;
+}
+
+.mydata-heading {
+  margin: 0;
+  font-size: 1.1rem;
+  font-weight: 700;
+}
+
+.mydata-count {
+  margin-left: 0.4rem;
+  color: var(--ink-faint);
+  font-size: 0.85rem;
+  font-weight: 400;
+}
+
+.mydata-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+
+/* Small outlined buttons for actions that are not the page's main one. */
+.quiet-button,
+.content button.quiet-button {
+  display: inline-flex;
+  align-items: center;
+  width: auto;
+  margin: 0;
+  padding: 0.35rem 0.8rem;
+  background: var(--surface);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-small);
+  color: var(--ink);
+  font-size: 0.85rem;
+  font-weight: 600;
+  line-height: 1.4;
+  cursor: pointer;
+}
+
+.quiet-button:hover:not(:disabled),
+.content button.quiet-button:hover:not(:disabled) {
+  background: var(--surface);
+  border-color: var(--hue);
+  color: var(--hue-ink);
+}
+
+.quiet-button.danger:hover:not(:disabled) {
+  border-color: var(--fault);
+  color: var(--fault);
+}
+
+.quiet-button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.mydata-note {
+  margin: 0 0 1rem;
+  color: var(--ink-faint);
+  font-size: 0.82rem;
+}
+
+.mydata-note.is-warning {
+  color: var(--fault);
+}
+
+.ds-list {
+  display: grid;
+  gap: 1rem;
+}
+
+.ds-empty {
+  margin: 0;
+  padding: 1.25rem;
+  border: 1px dashed var(--line);
+  border-radius: var(--radius);
+  color: var(--ink-muted);
+  font-size: 0.92rem;
+}
+
+.ds-card {
+  margin: 0;
+  padding: 1rem 1.1rem 0.4rem;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  box-shadow: none;
+}
+
+.ds-card-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  margin: 0 0 0.6rem;
+  padding: 0;
+  background: none;
+  border: 0;
+}
+
+.ds-card-title {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.35rem 0.75rem;
+  min-width: 0;
+}
+
+.ds-card-title h2 {
+  margin: 0;
+  overflow-wrap: anywhere;
+  font-size: 1rem;
+  font-weight: 700;
+}
+
+.ds-warnings {
+  margin: 0 0 0.75rem;
+  padding: 0.55rem 0.8rem 0.55rem 1.8rem;
+  background: var(--sunken);
+  border-radius: var(--radius-small);
   color: var(--ink-muted);
   font-size: 0.82rem;
 }
 
-.calc-summary {
-  max-width: 58ch;
-  margin: 0.15rem 0 0;
-  font-size: 0.92rem;
+.ds-warnings li {
+  margin: 0.15rem 0;
 }
 
-/* --- Footer --------------------------------------------------------------- */
-
-.site-footer {
-  margin-top: 2.5rem;
-  padding-block: 0;
-  background: var(--panel);
+.ds-block {
+  padding: 0.8rem 0 0.75rem;
+  border-top: 1px solid var(--line);
 }
 
-.footer-inner {
+.ds-block-head {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.5rem 1.5rem;
-  padding-block: 0.9rem 1rem;
-  font-size: 0.85rem;
+  align-items: baseline;
+  gap: 0.25rem 0.9rem;
+  margin-bottom: 0.55rem;
 }
 
-.footer-version {
+.ds-block-name {
+  margin: 0;
+  font-size: 0.93rem;
+  font-weight: 700;
+}
+
+.ds-block-facts {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.25rem 0.6rem;
+  margin: 0;
+  font-size: 0.82rem;
+}
+
+.test-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.08rem 0.55rem 0.08rem 0.45rem;
+  background: var(--hue-tint);
+  border-radius: 999px;
+  color: var(--hue-ink);
+  font-weight: 600;
+}
+
+.ds-block-meta {
+  color: var(--ink-faint);
+}
+
+.ds-block-open {
+  margin-left: auto;
+  color: var(--hue-ink);
+  font-size: 0.85rem;
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.ds-block-open:hover {
+  text-decoration: underline;
+}
+
+.col-chips {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.col-chips-label {
+  margin-left: 0.4rem;
+  color: var(--ink-faint);
+  font-size: 0.78rem;
+}
+
+/* One chip per column: recognised ones are solid, unrecognised ones dashed so they invite a
+   click, worked-out ones quiet and not clickable. */
+.content button.col-chip {
+  width: auto;
+  margin: 0;
+  padding: 0.18rem 0.6rem;
+  background: var(--surface);
+  border: 1px solid var(--line-strong);
+  border-radius: 999px;
+  color: var(--ink);
+  font-size: 0.8rem;
+  font-weight: 600;
+  line-height: 1.45;
+}
+
+.content button.col-chip:hover:not(:disabled),
+.content button.col-chip[aria-expanded="true"] {
+  background: var(--hue-tint);
+  border-color: var(--hue);
+  color: var(--hue-ink);
+}
+
+.content button.col-chip.is-unknown {
+  border-style: dashed;
   color: var(--ink-muted);
+  font-weight: 400;
+}
+
+.content button.col-chip.is-index {
+  border-color: var(--line);
+  color: var(--ink-faint);
+  font-weight: 400;
+}
+
+.content button.col-chip.is-derived {
+  background: transparent;
+  border-color: var(--line);
+  color: var(--ink-muted);
+  font-weight: 400;
+  opacity: 1;
+  cursor: default;
+}
+
+.col-editor {
+  margin: 0.7rem 0 0.2rem;
+  padding: 0.8rem 0.9rem;
+  background: var(--sunken);
+  border-left: 3px solid var(--hue);
+  border-radius: var(--radius-small);
+}
+
+.col-editor-title {
+  margin: 0 0 0.55rem;
+  font-size: 0.88rem;
+}
+
+.col-editor-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem 1rem;
+}
+
+.col-editor-row label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  min-width: 12rem;
+  margin: 0;
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+
+.col-editor-row select {
+  margin: 0;
+  padding-block: 0.4rem;
+  font-size: 0.88rem;
+}
+
+.col-editor-actions {
+  display: flex;
+  gap: 0.5rem;
+  margin-top: 0.7rem;
+}
+
+.col-editor-actions button[type="submit"] {
+  width: auto;
+  margin: 0;
+  padding: 0.38rem 1rem;
+  background: var(--hue-strong);
+  border-color: var(--hue-strong);
+  color: #fff;
+  font-size: 0.86rem;
+  font-weight: 700;
+}
+
+.col-editor-actions button[type="submit"]:hover {
+  background: var(--hue-press);
+  border-color: var(--hue-press);
 }
 
 /* --- Quality floor -------------------------------------------------------- */
 
 :focus-visible {
-  outline: 2px solid var(--accent);
+  outline: 2px solid var(--hue-ink);
   outline-offset: 2px;
 }
 

@@ -1,0 +1,47 @@
+{% extends "base.html" %}
+{% block title %}{{ calc.title }}{% endblock %}
+{% block extra_head %}
+<script src="{{ static_url('js/rheometry/store.js') }}" defer></script>
+<script src="{{ static_url('js/rheometry/mydata.js') }}" defer></script>
+{% endblock %}
+{% block content %}
+<article class="calc mydata">
+  <header class="calc-head">
+    <h1>{{ calc.title }}</h1>
+    <p>Bring in the files your rheometer exported. Each one is split into its steps, every
+       column is matched to a rheology quantity and converted to standard units, and missing
+       quantities such as tan δ or |η*| are worked out where the data allows.</p>
+  </header>
+
+  {# A real file input inside a label: works by click, keyboard and drag-and-drop alike, and
+     without scripting it is still an ordinary file picker. #}
+  <label class="dropzone" id="dropzone" for="rheo-files">
+    <input type="file" id="rheo-files" multiple
+           accept=".csv,.txt,.dat,.tsv,.tab,.asc,.prn,.xlsx,.xlsm,.xls">
+    <span class="dropzone-title">Drop files here, or choose files</span>
+    <span class="dropzone-help">CSV, TXT and DAT tables, Excel workbooks, and exports from
+      TA Instruments TRIOS or Anton Paar RheoCompass. Up to 10 files at a time.</span>
+  </label>
+
+  <div class="mydata-status" id="mydata-status" role="status" aria-live="polite" hidden></div>
+
+  <div class="mydata-bar">
+    <h2 class="mydata-heading">Your files <span class="mydata-count" id="mydata-count"></span></h2>
+    <div class="mydata-actions">
+      <button type="button" class="quiet-button" id="project-save" disabled>Save project</button>
+      <label class="quiet-button" for="project-open">Open project
+        <input type="file" id="project-open" accept=".json,application/json" hidden>
+      </label>
+      <button type="button" class="quiet-button danger" id="data-clear" disabled>Clear all</button>
+    </div>
+  </div>
+
+  <p class="mydata-note" id="mydata-note">Your files stay in this browser. The server reads
+     each one and forgets it as soon as it has answered; nothing is uploaded to keep.</p>
+
+  <div class="ds-list" id="ds-list">
+    <p class="ds-empty" id="ds-empty">No files yet. Add rheometer exports above and they will
+       be listed here, ready for every graph in this workspace.</p>
+  </div>
+</article>
+{% endblock %}

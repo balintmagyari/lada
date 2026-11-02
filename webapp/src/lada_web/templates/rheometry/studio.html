@@ -25,9 +25,40 @@
     </section>
 
     <section class="studio-canvas" aria-label="Graph">
+      {# Explore is the interactive view; Figure is the exported figure itself, drawn by the
+         server, so what is checked here is exactly what is downloaded. #}
+      <div class="studio-tabs" role="tablist" aria-label="View">
+        <button type="button" role="tab" id="tab-explore" aria-controls="studio-plot"
+                aria-selected="true">Explore</button>
+        <button type="button" role="tab" id="tab-figure" aria-controls="studio-figure"
+                aria-selected="false" tabindex="-1">Figure</button>
+      </div>
       <div class="studio-message" id="studio-message" role="status" aria-live="polite" hidden></div>
-      <div class="studio-plot" id="studio-plot"></div>
+      <div class="studio-plot" id="studio-plot" role="tabpanel" aria-labelledby="tab-explore"></div>
+      <div class="studio-figure" id="studio-figure" role="tabpanel" aria-labelledby="tab-figure"
+           hidden>
+        <img id="studio-figure-img" alt="The figure as it will be exported">
+        <p class="studio-figure-note" id="studio-figure-note">Drawing the figure…</p>
+      </div>
       <ul class="studio-notes" id="studio-notes" hidden></ul>
+
+      <div class="studio-export" id="studio-export" hidden>
+        <span class="studio-export-label">Export</span>
+        <button type="button" class="quiet-button" data-export="svg">SVG</button>
+        <button type="button" class="quiet-button" data-export="pdf">PDF</button>
+        <span class="studio-export-png">
+          <button type="button" class="quiet-button" data-export="png">PNG</button>
+          <label class="visually-hidden" for="studio-dpi">PNG resolution</label>
+          <select id="studio-dpi">
+            <option value="300">300 dpi</option>
+            <option value="600" selected>600 dpi</option>
+            <option value="1200">1200 dpi</option>
+          </select>
+        </span>
+        <button type="button" class="quiet-button" data-export="pgfplots">pgfplots for LaTeX</button>
+        <span class="studio-export-status" id="studio-export-status" role="status"
+              aria-live="polite"></span>
+      </div>
     </section>
 
     <section class="studio-panel studio-style" aria-labelledby="studio-style-title">

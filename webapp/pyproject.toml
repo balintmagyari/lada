@@ -19,6 +19,8 @@ dependencies = [
   # Rheometer workspace: .xlsx (openpyxl) and legacy .xls (xlrd) spreadsheets.
   "openpyxl>=3.1",
   "xlrd>=2.0",
+  # Rheometer workspace: publication figures (SVG, PDF, PNG), rendered server-side.
+  "matplotlib>=3.8",
 ]
 
 [project.optional-dependencies]

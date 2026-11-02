@@ -24,6 +24,8 @@
   var byQ = {};
   var entries = []; // every table: { dataset, block, id }
   var spec = null;
+  var view = "explore"; // or "figure"
+  var lastResult = null; // the last drawable build(), for export
 
   function $(id) {
     return document.getElementById(id);
@@ -505,14 +507,26 @@
     var reason = emptyReason(result);
     notesList(result.notes);
     if (reason) {
+      lastResult = null;
       message(reason[0], reason[1]);
       target.hidden = true;
+      $("studio-figure").hidden = true;
+      $("studio-export").hidden = true;
       if (window.Plotly) {
         window.Plotly.purge(target);
       }
       return;
     }
     message("");
+    lastResult = result;
+    $("studio-export").hidden = false;
+    if (view === "figure") {
+      target.hidden = true;
+      $("studio-figure").hidden = false;
+      refreshFigureSoon();
+      return;
+    }
+    $("studio-figure").hidden = true;
     target.hidden = false;
     if (!window.Plotly) {
       message("The plotting library could not be loaded. Check the network and reload.");
@@ -599,6 +613,189 @@
       modeBarButtonsToRemove: ["select2d", "lasso2d", "autoScale2d", "toggleSpikelines"],
       toImageButtonOptions: { format: "png", scale: 3, filename: key.replace(/_/g, "-") }
     });
+  }
+
+  // --- Export -------------------------------------------------------------------------
+  // The figure spec sent to the server is built from the same traces the Explore view draws,
+  // already in display units, so the export can only differ from it in typesetting.
+
+  function number(text) {
+    var value = parseFloat(text);
+    return isFinite(value) ? value : null;
+  }
+
+  function axisSpec(axis, idents) {
+    return {
+      title: axisTitle(idents, axis.title),
+      log: !!axis.log,
+      min: number(axis.min),
+      max: number(axis.max)
+    };
+  }
+
+  function figureSpec(result) {
+    var p = result.plan;
+    var size = P.sizes[spec.style.size] || P.sizes.single;
+    var hasY2 = result.traces.some(function (t) {
+      return t.yaxis === "y2";
+    });
+    return {
+      width_mm: size.width,
+      height_mm: size.height,
+      font: spec.style.font,
+      font_size: Number(spec.style.fontSize) || 9,
+      mode: spec.style.mode,
+      marker_size: Number(spec.style.markerSize) || 7,
+      line_width: Number(spec.style.lineWidth) || 1.5,
+      legend: spec.style.legend,
+      grid: !!spec.style.grid,
+      x: axisSpec(spec.axes.x, [p.x]),
+      y: axisSpec(spec.axes.y, p.left),
+      y2: hasY2 ? axisSpec(spec.axes.y2, p.right) : null,
+      filename: key.replace(/_/g, "-"),
+      series: result.traces.map(function (t) {
+        var symbol = t.marker.symbol;
+        var open = /-open$/.test(symbol);
+        return {
+          name: t.name || "",
+          axis: t.yaxis === "y2" ? "y2" : "y",
+          x: t.x,
+          y: t.y,
+          color: t.legendgroup === "key" ? "#6b6b6b" : t.marker.color,
+          marker: symbol.replace(/-open$/, ""),
+          filled: !open,
+          show_legend: t.showlegend !== false,
+          key: t.legendgroup === "key"
+        };
+      })
+    };
+  }
+
+  function errorText(response) {
+    return response.json().then(
+      function (body) {
+        var detail = body && body.detail;
+        if (Array.isArray(detail)) {
+          return detail.map(function (d) {
+            return d.msg;
+          }).join(" ");
+        }
+        return detail || "The figure could not be made.";
+      },
+      function () {
+        return "The figure could not be made.";
+      }
+    );
+  }
+
+  function postFigure(url, payload) {
+    return fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload)
+    }).then(function (response) {
+      if (!response.ok) {
+        return errorText(response).then(function (text) {
+          throw new Error(text);
+        });
+      }
+      var notes = response.headers.get("X-Figure-Notes") || "";
+      return response.blob().then(function (blob) {
+        blob.notes = notes;
+        return blob;
+      });
+    });
+  }
+
+  var figureUrl = null;
+  var figureTimer = null;
+  var figureRequest = 0;
+  function refreshFigure() {
+    if (!lastResult || view !== "figure") {
+      return;
+    }
+    var note = $("studio-figure-note");
+    var img = $("studio-figure-img");
+    var ticket = ++figureRequest;
+    note.hidden = false;
+    note.textContent = "Drawing the figure…";
+    postFigure("/api/rheometry/figure?fmt=svg&preview=true", figureSpec(lastResult))
+      .then(function (blob) {
+        if (ticket !== figureRequest) {
+          return; // a newer change is already being drawn
+        }
+        if (figureUrl) {
+          URL.revokeObjectURL(figureUrl);
+        }
+        figureUrl = URL.createObjectURL(blob);
+        img.src = figureUrl;
+        var size = P.sizes[spec.style.size] || P.sizes.single;
+        note.textContent = "Exactly as exported: " + size.width + " × " +
+          Math.round(size.height) + " mm, " + spec.style.fontSize + " pt " +
+          (spec.style.font === "serif" ? "serif." : "sans-serif.") +
+          (blob.notes ? " " + blob.notes : "");
+        note.classList.toggle("is-advice", !!blob.notes);
+      })
+      .catch(function (error) {
+        if (ticket === figureRequest) {
+          note.textContent = String(error.message || error);
+        }
+      });
+  }
+
+  function refreshFigureSoon() {
+    clearTimeout(figureTimer);
+    figureTimer = setTimeout(refreshFigure, 450);
+  }
+
+  function setView(next) {
+    view = next;
+    ["explore", "figure"].forEach(function (name) {
+      var tab = $("tab-" + name);
+      tab.setAttribute("aria-selected", name === next ? "true" : "false");
+      tab.tabIndex = name === next ? 0 : -1;
+    });
+    draw();
+  }
+
+  function download(blob, filename) {
+    var link = el("a");
+    link.href = URL.createObjectURL(blob);
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    setTimeout(function () {
+      URL.revokeObjectURL(link.href);
+    }, 2000);
+  }
+
+  function exportAs(kind, button) {
+    if (!lastResult) {
+      return;
+    }
+    var status = $("studio-export-status");
+    var payload = figureSpec(lastResult);
+    var dpi = $("studio-dpi").value;
+    var url = kind === "pgfplots"
+      ? "/api/rheometry/pgfplots"
+      : "/api/rheometry/figure?fmt=" + kind + (kind === "png" ? "&dpi=" + dpi : "");
+    var filename = payload.filename + (kind === "pgfplots" ? "-pgfplots.zip" : "." + kind);
+    button.disabled = true;
+    status.className = "studio-export-status";
+    status.textContent = "Preparing " + filename + "…";
+    postFigure(url, payload)
+      .then(function (blob) {
+        download(blob, filename);
+        status.textContent = "Saved " + filename + ".";
+      })
+      .catch(function (error) {
+        status.className = "studio-export-status is-error";
+        status.textContent = String(error.message || error);
+      })
+      .then(function () {
+        button.disabled = false;
+      });
   }
 
   var drawTimer = null;
@@ -1054,6 +1251,27 @@
       .catch(function () {
         message("The page could not reach the server. Check that it is running, then reload.");
       });
+
+    $("tab-explore").addEventListener("click", function () {
+      setView("explore");
+    });
+    $("tab-figure").addEventListener("click", function () {
+      setView("figure");
+    });
+    root.querySelector(".studio-tabs").addEventListener("keydown", function (event) {
+      if (event.key === "ArrowRight" || event.key === "ArrowLeft") {
+        event.preventDefault();
+        var next = view === "explore" ? "figure" : "explore";
+        setView(next);
+        $("tab-" + next).focus();
+      }
+    });
+    $("studio-export").addEventListener("click", function (event) {
+      var button = event.target.closest("[data-export]");
+      if (button) {
+        exportAs(button.dataset.export, button);
+      }
+    });
 
     // A theme switch recolours the axes and text; the series keep their palette colours.
     var previous = window.ladaRepaintPlots;

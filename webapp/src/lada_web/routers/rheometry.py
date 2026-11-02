@@ -6,15 +6,17 @@ what a column is, and returns it with its derived columns and test type recomput
 """
 
 from pathlib import Path
-from typing import Annotated
+from typing import Annotated, Literal
 
-from fastapi import APIRouter, Depends, File, UploadFile
+from fastapi import APIRouter, Depends, File, Query, UploadFile
+from fastapi.responses import Response
 from pydantic import BaseModel
 
 from ..config import Settings, get_settings
 from ..rheometry import quantities as q
 from ..rheometry.derive import derive
 from ..rheometry.detect import block_temperature, detect_test_type
+from ..rheometry.figure import MEDIA_TYPES, FigureSpec, pgfplots_zip, render_with_notes
 from ..rheometry.model import FORMAT_LABELS, TEST_TYPE_LABELS, Block, ParseError, ParseResponse
 from ..rheometry.readers import ACCEPTED, Limits, read_file
 from ..uploads import get_workspace, save_uploads
@@ -114,3 +116,57 @@ def rederive(body: RederiveRequest) -> Block:
     block.test_type = detect_test_type(block)
     block.temperature = block_temperature(block, block.temperature)
     return block
+
+
+# --- Export ---------------------------------------------------------------------------------
+
+FIGURE_RESPONSES = {
+    200: {
+        "description": "The figure, as an attachment (or inline for the studio's preview).",
+        "content": {
+            media: {"schema": {"type": "string", "format": "binary"}}
+            for media in MEDIA_TYPES.values()
+        },
+    }
+}
+
+
+@router.post("/figure", response_class=Response, responses=FIGURE_RESPONSES)
+def figure(
+    spec: FigureSpec,
+    fmt: Annotated[Literal["svg", "pdf", "png"], Query()] = "svg",
+    dpi: Annotated[int, Query(ge=72, le=1200)] = 600,
+    preview: Annotated[bool, Query()] = False,
+) -> Response:
+    """The studio's figure drawn for print: the same series, sizes and style the browser shows,
+    rendered with matplotlib. `preview=true` returns it inline for the Figure tab."""
+    data, notes = render_with_notes(spec, fmt, dpi)
+    disposition = "inline" if preview else f'attachment; filename="{spec.filename}.{fmt}"'
+    headers = {"Content-Disposition": disposition, "Cache-Control": "no-store"}
+    if notes:
+        # Advice for the studio to show under the preview; plain ASCII, as headers must be.
+        headers["X-Figure-Notes"] = " ".join(notes)
+    return Response(content=data, media_type=MEDIA_TYPES[fmt], headers=headers)
+
+
+@router.post(
+    "/pgfplots",
+    response_class=Response,
+    responses={
+        200: {
+            "description": "figure.tex and its data tables, zipped.",
+            "content": {"application/zip": {"schema": {"type": "string", "format": "binary"}}},
+        }
+    },
+)
+def pgfplots(spec: FigureSpec, ws: WorkspaceDep) -> Response:
+    """The same figure as a pgfplots source: figure.tex plus one data table per series."""
+    data = pgfplots_zip(spec, ws)
+    return Response(
+        content=data,
+        media_type="application/zip",
+        headers={
+            "Content-Disposition": f'attachment; filename="{spec.filename}-pgfplots.zip"',
+            "Cache-Control": "no-store",
+        },
+    )

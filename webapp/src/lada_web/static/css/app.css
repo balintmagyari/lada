@@ -2122,6 +2122,316 @@ dialog.jump {
   border-color: var(--hue-press);
 }
 
+/* --- Rheometer: graph studio ------------------------------------------------- */
+
+/* Which tables, the graph, how it looks. Wide screens: three columns, graph in the middle.
+   Medium: the graph on top, the two panels side by side under it. Narrow: one column. */
+.studio-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-areas: "canvas" "data" "style";
+  gap: 1.25rem;
+  align-items: start;
+}
+
+/* Medium and wide: the graph keeps most of the width and stays in view while the controls
+   beside it scroll, so every change is seen as it is made. */
+@media (min-width: 64rem) {
+  .studio-grid {
+    grid-template-columns: minmax(0, 1fr) 18rem;
+    grid-template-areas: "canvas data" "canvas style";
+  }
+
+  .studio-canvas {
+    position: sticky;
+    top: 1rem;
+    grid-row: span 2;
+  }
+}
+
+/* Very wide: data on the left, graph in the middle, controls on the right. */
+@media (min-width: 110rem) {
+  .studio-grid {
+    grid-template-columns: 16.5rem minmax(0, 1fr) 18rem;
+    grid-template-areas: "data canvas style";
+  }
+
+  .studio-canvas {
+    grid-row: auto;
+  }
+
+  .studio-panel {
+    position: sticky;
+    top: 1rem;
+    max-height: calc(100vh - 2rem);
+    overflow-y: auto;
+    scrollbar-width: thin;
+    scrollbar-color: var(--line-strong) transparent;
+  }
+}
+
+.studio-data {
+  grid-area: data;
+}
+
+.studio-canvas {
+  grid-area: canvas;
+  min-width: 0;
+}
+
+.studio-style {
+  grid-area: style;
+}
+
+.studio-panel {
+  padding: 0.9rem 0.95rem 1rem;
+  background: var(--sunken);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+}
+
+.studio-panel-title {
+  margin: 0 0 0.6rem;
+  font-size: 0.95rem;
+  font-weight: 700;
+}
+
+.studio-hint {
+  margin: 0 0 0.6rem;
+  color: var(--ink-muted);
+  font-size: 0.85rem;
+}
+
+.studio-add {
+  display: inline-block;
+  margin-top: 0.6rem;
+  color: var(--hue-ink);
+  font-size: 0.85rem;
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.studio-add:hover {
+  text-decoration: underline;
+}
+
+/* One row per table: tick it, see its colour, rename it for the legend. */
+.block-row {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: start;
+  gap: 0.15rem 0.55rem;
+  padding: 0.45rem 0.4rem;
+  border-radius: var(--radius-small);
+}
+
+.block-row + .block-row {
+  border-top: 1px solid var(--line);
+}
+
+.block-row.is-on {
+  background: var(--surface);
+}
+
+.block-row input[type="checkbox"] {
+  margin: 0.2rem 0 0;
+}
+
+.studio .block-row-label {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+  margin: 0;
+  cursor: pointer;
+}
+
+.studio .block-swatch {
+  display: inline-block;
+  flex: none;
+  width: 0.7rem;
+  height: 0.7rem;
+  margin-top: 0.3rem;
+  border: 1.5px solid var(--line-strong);
+  border-radius: 50%;
+}
+
+.block-row-text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.block-row-name {
+  overflow-wrap: anywhere;
+  font-size: 0.86rem;
+  font-weight: 600;
+}
+
+.block-row-meta {
+  color: var(--ink-faint);
+  font-size: 0.76rem;
+}
+
+.content input.block-row-legend {
+  grid-column: 2;
+  height: auto;
+  margin: 0.25rem 0 0;
+  padding: 0.28rem 0.5rem;
+  font-size: 0.8rem;
+}
+
+.block-more {
+  margin-top: 0.5rem;
+}
+
+.block-more summary {
+  color: var(--ink-muted);
+  font-size: 0.83rem;
+  cursor: pointer;
+}
+
+.studio-message {
+  padding: 1.1rem 1.25rem;
+  border: 1.5px dashed var(--line-strong);
+  border-radius: var(--radius);
+  color: var(--ink-muted);
+  font-size: 0.93rem;
+}
+
+.studio-message a {
+  color: var(--hue-ink);
+  font-weight: 600;
+}
+
+.studio-plot {
+  width: 100%;
+  min-height: 260px;
+  padding: 0.25rem;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+}
+
+.studio-notes {
+  margin: 0.6rem 0 0;
+  padding-left: 1.2rem;
+  color: var(--ink-muted);
+  font-size: 0.82rem;
+}
+
+/* The graph's controls. */
+.studio-form {
+  display: grid;
+  gap: 0.9rem;
+  margin: 0;
+}
+
+.studio-group {
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.studio-group > legend {
+  margin: 0 0 0.45rem;
+  padding: 0;
+  color: var(--ink-muted);
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+}
+
+.studio-group + .studio-group {
+  padding-top: 0.8rem;
+  border-top: 1px solid var(--line);
+}
+
+.studio-field {
+  margin: 0 0 0.55rem;
+}
+
+.studio-field label {
+  margin: 0 0 0.2rem;
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+
+.studio-form select,
+.studio-form input[type="text"],
+.studio-form input[type="number"] {
+  height: auto;
+  margin: 0;
+  padding: 0.32rem 0.5rem;
+  font-size: 0.85rem;
+}
+
+.studio-form select {
+  padding-right: 2rem;
+}
+
+.studio-field-hint {
+  display: block;
+  margin-top: 0.2rem;
+  color: var(--ink-faint);
+  font-size: 0.74rem;
+}
+
+.studio-pair {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0 0.5rem;
+}
+
+.studio-check {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  margin: 0 0 0.35rem;
+  font-size: 0.85rem;
+  cursor: pointer;
+}
+
+.studio-check input {
+  margin: 0;
+}
+
+.studio-checklist {
+  margin: 0.3rem 0 0.6rem;
+}
+
+.studio-checklist-title {
+  display: block;
+  margin-bottom: 0.3rem;
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+
+.studio-axis + .studio-axis {
+  margin-top: 0.6rem;
+  padding-top: 0.6rem;
+  border-top: 1px dashed var(--line);
+}
+
+.studio-axis-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 0.35rem;
+}
+
+.studio-axis-name {
+  font-size: 0.85rem;
+  font-weight: 700;
+}
+
+.studio-axis-head .studio-check {
+  margin: 0;
+}
+
+.content .studio-reset {
+  justify-self: start;
+}
+
 /* --- Quality floor -------------------------------------------------------- */
 
 :focus-visible {

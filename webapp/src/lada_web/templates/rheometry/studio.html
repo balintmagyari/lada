@@ -1,19 +1,43 @@
 {% extends "base.html" %}
+{% set preset_key = 'custom' if calc.slug == 'custom-plot' else calc.slug | replace('-', '_') %}
 {% block title %}{{ calc.title }}{% endblock %}
+{% block extra_head %}
+<script src="{{ static_url('js/rheometry/store.js') }}" defer></script>
+<script src="{{ static_url('js/rheometry/presets.js') }}" defer></script>
+<script src="{{ static_url('js/rheometry/studio.js') }}" defer></script>
+{% endblock %}
 {% block content %}
-{# Every rheometer page shares this template; the graph studio fills it in a later step of the
-   build. Until then the page says plainly what it will do and that it is not ready yet. #}
-<article class="calc">
+{# The graph studio: which tables (left), the graph (middle), how it looks (right). Every
+   graph page of the Rheometer workspace is this one template with a different preset. #}
+<article class="calc studio" data-preset="{{ preset_key }}">
   <header class="calc-head">
     <h1>{{ calc.title }}</h1>
     <p>{{ calc.summary }}</p>
   </header>
-  <div class="studio-pending">
-    <p class="studio-pending-title">This tool is not ready yet.</p>
-    <p>The Rheometer workspace is being built in steps. You can already import your files on
-       <a href="/rheometer/my-data">My data</a>; the graphs come next, then figure export and
-       master curves. Simulation tools are all available now in the
-       <a href="/simulations">Simulations</a> workspace.</p>
+
+  <div class="studio-grid">
+    <section class="studio-panel studio-data" aria-labelledby="studio-data-title">
+      <h2 id="studio-data-title" class="studio-panel-title">Data</h2>
+      <div id="studio-data">
+        <p class="studio-hint">Loading your files…</p>
+      </div>
+      <a class="studio-add" href="/rheometer/my-data">Import more files</a>
+    </section>
+
+    <section class="studio-canvas" aria-label="Graph">
+      <div class="studio-message" id="studio-message" role="status" aria-live="polite" hidden></div>
+      <div class="studio-plot" id="studio-plot"></div>
+      <ul class="studio-notes" id="studio-notes" hidden></ul>
+    </section>
+
+    <section class="studio-panel studio-style" aria-labelledby="studio-style-title">
+      <h2 id="studio-style-title" class="studio-panel-title">Graph</h2>
+      <form id="studio-form" class="studio-form" novalidate></form>
+    </section>
   </div>
+
+  <noscript>
+    <p class="studio-message">Graphs are drawn in your browser, so this page needs JavaScript.</p>
+  </noscript>
 </article>
 {% endblock %}

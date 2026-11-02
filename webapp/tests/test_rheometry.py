@@ -388,3 +388,58 @@ def test_the_my_data_page_offers_a_real_file_input_and_loads_its_scripts(client)
         assert re.search(rf'src="/static/{re.escape(script)}\?v=[0-9a-f]{{10}}"', r.text)
         assert client.get(f"/static/{script}").status_code == 200
     assert "This tool is not ready yet." not in r.text
+
+
+# --- Graph studio ----------------------------------------------------------------------------
+
+GRAPH_PAGES = {
+    "frequency-sweep": "frequency_sweep",
+    "amplitude-sweep": "amplitude_sweep",
+    "temperature-sweep": "temperature_sweep",
+    "flow-curve": "flow_curve",
+    "creep": "creep",
+    "stress-relaxation": "stress_relaxation",
+    "custom-plot": "custom",
+}
+
+
+@pytest.mark.parametrize(("slug", "preset"), GRAPH_PAGES.items())
+def test_every_graph_page_is_the_studio_with_its_own_preset(client, slug, preset):
+    r = client.get(f"/rheometer/{slug}")
+    assert r.status_code == 200
+    assert f'<article class="calc studio" data-preset="{preset}">' in r.text
+    for part in ('id="studio-data"', 'id="studio-plot"', 'id="studio-form"'):
+        assert part in r.text
+    for script in ("store.js", "presets.js", "studio.js"):
+        assert re.search(rf'src="/static/js/rheometry/{script}\?v=[0-9a-f]{{10}}"', r.text)
+    assert "This tool is not ready yet." not in r.text
+
+
+def test_every_page_preset_is_defined_in_the_presets_script(client):
+    js = client.get("/static/js/rheometry/presets.js").text
+    block = js[js.index("var PRESETS = {") : js.index("var PALETTES")]
+    defined = set(re.findall(r"^    ([a-z_]+): \{", block, re.M))
+    assert set(GRAPH_PAGES.values()) == defined
+
+
+def test_preset_quantities_exist_in_the_registry(client):
+    """A preset that names a quantity the importer never produces would plot nothing."""
+    js = client.get("/static/js/rheometry/presets.js").text
+    block = js[js.index("var PRESETS = {") : js.index("var PALETTES")]
+    named = set(re.findall(r'"([a-z_]+)"', block)) - {
+        "",
+        "frequency_sweep",
+        "amplitude_sweep",
+        "temperature_sweep",
+        "flow_curve",
+        "creep",
+        "stress_relaxation",
+    }
+    assert named <= set(q.QUANTITY_BY_KEY), named - set(q.QUANTITY_BY_KEY)
+
+
+def test_the_studio_keeps_its_choices_but_never_the_data_in_local_storage(client):
+    js = client.get("/static/js/rheometry/studio.js").text
+    assert '"lada-rheo-spec:"' in js
+    # The datasets are only ever read from the IndexedDB store.
+    assert "store.all()" in js and "localStorage.setItem(SPEC_KEY" in js

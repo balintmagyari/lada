@@ -1,0 +1,19 @@
+{% extends "base.html" %}
+{% block title %}{{ calc.title }}{% endblock %}
+{% block content %}
+{# Every rheometer page shares this template; the graph studio fills it in a later step of the
+   build. Until then the page says plainly what it will do and that it is not ready yet. #}
+<article class="calc">
+  <header class="calc-head">
+    <h1>{{ calc.title }}</h1>
+    <p>{{ calc.summary }}</p>
+  </header>
+  <div class="studio-pending">
+    <p class="studio-pending-title">This tool is not ready yet.</p>
+    <p>Master curves are the last part of the Rheometer workspace to be built. Until then,
+       import your sweeps on <a href="/rheometer/my-data">My data</a> and draw them with
+       <a href="/rheometer/frequency-sweep">Frequency sweep</a>, which overlays every
+       temperature on one graph.</p>
+  </div>
+</article>
+{% endblock %}

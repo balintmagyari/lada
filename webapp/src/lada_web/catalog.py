@@ -306,6 +306,7 @@ RHEOMETER_CALCULATIONS: list[Calculation] = [
         "Master curve",
         "Shift sweeps at several temperatures into one curve, with aT and a WLF fit.",
         "rheo-data",
+        template="rheometry/pending.html",
     ),
     _rheometer(
         "custom",

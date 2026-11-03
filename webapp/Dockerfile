@@ -13,6 +13,9 @@ COPY webapp/src ./webapp/src
 RUN pip install --upgrade pip && pip install ./lada ./webapp && rm -rf /build
 WORKDIR /app
 USER lada
+# matplotlib builds its font cache the first time it draws; build it now, as the user that will
+# run the app, so the first exported figure in a fresh container is as quick as the rest.
+RUN python -c "import matplotlib.font_manager"
 EXPOSE 8000
 
 # The index page is the cheapest route that proves the app is wired up: it renders a template

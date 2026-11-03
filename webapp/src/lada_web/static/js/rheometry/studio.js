@@ -1434,6 +1434,13 @@
       : null;
     fieldCount = 0;
     form.textContent = "";
+    if (!entries.length) {
+      // Nothing imported: controls with nothing to act on would only puzzle, so say what
+      // comes first instead.
+      form.appendChild(el("p", "studio-hint",
+        "The graph's settings appear here once there is something to draw."));
+      return;
+    }
     var p = plan();
 
     // What to plot

@@ -1,10 +1,18 @@
 # lada-web
 
-Browser front-end for the `lada` package: a calculation tool, not a 3D trajectory/molecule
-viewer. Upload a LAMMPS output file, pick a calculation, see the result as a table (and a chart
-where one applies), download it as CSV or a pgfplots-ready `.dat` file. Every calculation is a
-thin web layer over the functions already documented in the repository root `README.md` — this
-document only covers the parts specific to running that functionality as a service.
+Browser front-end for the `lada` package, in two workspaces that share one sidebar:
+
+- **Simulations** — upload a LAMMPS output file, pick a calculation, see the result as a table
+  (and a chart where one applies), download it as CSV or a pgfplots-ready `.dat` file. Every
+  calculation is a thin web layer over the functions documented in the repository root
+  `README.md`.
+- **Rheometer** — import the files a rheometer exports (or any table of rheology data), draw them
+  as the standard rheology plots or any column against any other, build master curves by
+  time–temperature superposition, and export publication figures (SVG, PDF, PNG) or pgfplots
+  sources for LaTeX.
+
+It is a calculation and plotting tool, not a 3D trajectory/molecule viewer. This document covers
+what is specific to running it as a service.
 
 > **Install `lada` from this repository.** `webapp/pyproject.toml` depends on `lada>=1.2.0,<2.0.0`,
 > and the app relies on functions only this repository's `lada` has (`*_from_trajectory`, and the
@@ -27,6 +35,13 @@ automatically.
 
 ## Pages
 
+`/` is a home page with one door per workspace; `/simulations` and `/rheometer` are their
+overviews. The sidebar lists every tool of the current workspace, always in the same order, and
+a two-part switch under the search box flips it to the other workspace without leaving the page.
+`/` or ⌘K / Ctrl+K opens a search box over the tools of both workspaces.
+
+### Simulations workspace
+
 Thirteen calculations across five sections, each a single page with one upload form. The file
 column names the multipart field the page's form (and the matching `/api/...` route) expects.
 
@@ -42,7 +57,7 @@ spacing): each regime is computed separately and the curves are joined by
 lag-time ranges overlap. For dynamic moduli, the regimes' G(t) curves are merged first and fitted
 once (`POST /api/rheology/dynamic-moduli/from-regimes`).
 
-### Read files (`/parsers/...`)
+#### Read files (`/parsers/...`)
 
 | Page | Route | File it needs |
 |---|---|---|
@@ -57,7 +72,7 @@ never materializes the full trajectory — no download route) alongside the full
 (`Atoms`, `Bonds`, `Masses`, `Velocities`, `Angles`, `Dihedrals`, `Impropers`, or one of the
 `* Coeffs` sections; default `Atoms`).
 
-### Chain conformations (`/conformations/...`)
+#### Chain conformations (`/conformations/...`)
 
 | Page | Route | File it needs |
 |---|---|---|
@@ -69,7 +84,7 @@ All three take `coord_cols` (default `xu,yu,zu`, three comma-separated column na
 `molecule_col` (default `mol`); Rg² additionally takes an optional `mass_col`, and the end-to-end
 pages take `atom_id_col` (default `id`) to identify each chain's terminal atoms.
 
-### Dynamics (`/dynamics/...`)
+#### Dynamics (`/dynamics/...`)
 
 | Page | Route | File it needs |
 |---|---|---|
@@ -95,7 +110,7 @@ the non-decaying center-of-mass mode, `p=1` the whole-chain relaxation mode); th
 `q_magnitude` and `n_vectors` (isotropic averaging directions, default 50). See
 [Limits and timeouts](#limits-and-timeouts) — these are the CPU-heavy pages.
 
-### Rheology (`/rheology/...`)
+#### Rheology (`/rheology/...`)
 
 | Page | Route | File it needs |
 |---|---|---|
@@ -107,7 +122,7 @@ you supply your own `kB`-equivalent data). Dynamic moduli additionally takes the
 parameters `method` (`GK`, `FSR`, or `both`; default `GK`), `t_min` (default 1.0), optional
 `t_cutoff`, `n_modes` (default 50), `n_omega` (default 200), and optional `omega_min`/`omega_max`.
 
-### Topology tools (`/modifiers/...`)
+#### Topology tools (`/modifiers/...`)
 
 | Page | Route | File it needs |
 |---|---|---|
@@ -115,6 +130,60 @@ parameters `method` (`GK`, `FSR`, or `both`; default `GK`), `t_min` (default 1.0
 
 Takes `new_end_type` and `base_type` (default 1). This page is download-only — there is no
 on-screen "view" step, since the result is a modified data file, not a table.
+
+### Rheometer workspace
+
+| Section | Page | What it draws |
+|---|---|---|
+| My data | `/rheometer/my-data` | Import files; check and correct how every column was read |
+| Oscillation | `/rheometer/frequency-sweep` | G′, G″ (and optionally tan δ, \|η*\|, δ) against ω |
+| Oscillation | `/rheometer/amplitude-sweep` | G′, G″ against strain or stress amplitude |
+| Oscillation | `/rheometer/temperature-sweep` | G′, G″ and tan δ against temperature |
+| Flow & transient | `/rheometer/flow-curve` | Viscosity (and optionally shear stress) against shear rate |
+| Flow & transient | `/rheometer/creep` | Creep compliance J(t) against time |
+| Flow & transient | `/rheometer/stress-relaxation` | Relaxation modulus G(t) against time |
+| Superposition | `/rheometer/master-curve` | Master curve by time–temperature superposition, with aT, WLF and Arrhenius fits |
+| Custom plot | `/rheometer/custom-plot` | Any column of any file on either axis |
+
+**Import.** `/rheometer/my-data` takes up to `LADA_WEB_MAX_FILES_PER_REQUEST` files at once:
+`.csv`, `.txt`, `.dat`, `.tsv` (any delimiter, decimal commas, units in a row under the header or
+in the header itself), Excel `.xlsx`/`.xls` (every sheet), and exports from **TA Instruments
+TRIOS** (split into its `[step]` sections) and **Anton Paar RheoCompass** (split into its
+intervals). The format is recognised from the content, not the extension. Every column is matched
+to a rheology quantity by its header (English and common German names), converted to canonical
+units (Pa, Pa·s, rad/s, 1/s, s, °C, %), and missing quantities that follow exactly from the
+measured ones are added: tan δ, |G*|, |η*|, δ, and ω ↔ f. Each table is labelled with the kind of
+test it looks like and the temperature it was measured at. A column that was not recognised, or
+recognised wrongly, can be corrected on the page (`POST /api/rheometry/rederive`).
+
+> **The TRIOS and RheoCompass readers have not been tested against real exports.** They follow
+> those programs' commonly documented layouts, and the fixtures in
+> `webapp/tests/data/rheometry/` are synthetic. Because the format-specific code only splits a
+> file into blocks and every block then goes through the same tolerant table finder
+> (`rheometry/tabular.py`), a layout that differs a little should still import, with less
+> metadata at worst. Add real exports as fixtures when you have them.
+
+**Where the data lives.** Imported files are kept in the browser (IndexedDB), never on the
+server: the server reads each upload into JSON and forgets it. Every rheometer page in that browser
+sees the same files, a reload loses nothing, and *Save project* / *Open project* move them between
+browsers as one JSON file. Each graph page remembers its settings (not its data) in
+`localStorage`.
+
+**Graphs and export.** Each graph page is the same studio with a different preset: it ticks the
+tables that match its kind of test, overlays samples with one colour each (G′ filled, G″ open),
+offers unit, axis, size and style controls, and has two views — *Explore* (interactive Plotly) and
+*Figure*, which shows the exported figure itself, rendered by the server. Export gives SVG, PDF
+(fonts embedded) or PNG at 300/600/1200 dpi, at exactly the chosen size (single column 85 mm,
+double column 175 mm, slide, square), always in print style whatever the site's theme; or a
+pgfplots zip with `figure.tex` and one data table per series, which compiles as is
+(`\input{figure}` with `pgfplots`, `compat=1.18`).
+
+**Master curves.** The server finds each sweep's horizontal shift by overlap of log G′ and log G″
+with its already-placed neighbour, working outwards from the reference temperature; a shift only
+counts when the sweeps then really lie on one curve. Any shift can be typed in by hand. The WLF
+and Arrhenius fits follow the shifts actually applied; an optional vertical correction uses
+bT = T / T_ref. Tested against a known answer: a 13-mode Maxwell material at five temperatures
+with 1 % noise gives aT within 2 % and C1, C2 within 5 %.
 
 ## JSON API
 
@@ -176,6 +245,17 @@ curl -F files=@tests/data/sample_stress_acf.txt \
 `lada` errors (bad columns, wrong ACF schema, `p >= beads_per_chain`, and similar) come back as
 HTTP 422 with the original message unchanged. Oversized uploads come back as HTTP 413.
 
+The Rheometer workspace's routes take and return JSON (except `parse`, which takes the files):
+
+| Route | Does |
+|---|---|
+| `POST /api/rheometry/parse` | Files (repeated `files` field) → datasets; a file that cannot be read is listed in `errors` by name and does not stop the others |
+| `GET /api/rheometry/quantities` | The quantity registry (names, symbols, units with conversion factors), format and test-type labels, accepted file types |
+| `POST /api/rheometry/rederive` | A block plus column corrections → the block with values reconverted and derived columns and test type recomputed |
+| `POST /api/rheometry/figure?fmt=svg\|pdf\|png&dpi=` | A figure spec → the figure as an attachment (`preview=true` for inline) |
+| `POST /api/rheometry/pgfplots` | A figure spec → `figure.tex` and its data tables, zipped |
+| `POST /api/rheometry/tts` | Frequency sweeps with temperatures → shift factors, WLF and Arrhenius fits |
+
 ## Configuration
 
 Every setting is a `LADA_WEB_`-prefixed environment variable (`lada_web/config.py:Settings`):
@@ -191,6 +271,8 @@ Every setting is a `LADA_WEB_`-prefixed environment variable (`lada_web/config.p
 | `LADA_WEB_MAX_FILES_PER_REQUEST` | `10` | Most files one calculation (or one regime) may average |
 | `LADA_WEB_MAX_CONCURRENT_JOBS` | `4` | Background calculations running at once; further starts answer HTTP 429 |
 | `LADA_WEB_JOB_TTL_SECONDS` | `600` | How long a job's result stays fetchable from `/api/jobs/{job_id}` |
+| `LADA_WEB_MAX_RHEOMETRY_ROWS` | `200000` | Most data points one imported rheometer file may hold, across all its steps |
+| `LADA_WEB_MAX_XLSX_UNCOMPRESSED_MB` | `200` | Refuses an `.xlsx` that would unpack to more than this, checked from the archive's directory before the workbook is opened |
 | `LADA_WEB_TEMP_ROOT` | unset (system temp directory) | Where per-request upload workspaces are created; set this to point uploads at a specific volume |
 
 ## Limits and timeouts
@@ -264,6 +346,11 @@ container runs as a non-root user. What the files set beyond that:
   `LADA_WEB_MAX_TRAJECTORY_MEMORY_MB` (lowered to 1024 in the compose file) each, plus the
   interpreter and NumPy. Those numbers move together: raising any of them means raising this.
 
+- **The Rheometer workspace adds `matplotlib`, `openpyxl` and `xlrd`** to the image, about
+  75 MB installed (measured on macOS; a Linux image will be similar). matplotlib builds its font cache while the image is built, as the `lada` user, so the
+  first exported figure is as quick as the rest. Figures are drawn one at a time (matplotlib's
+  style settings are process-wide), each in well under a second at the default caps.
+
 **Not yet verified end to end.** Docker was not available on the machine this was written on, so
 the image build and `docker compose up` have not been run. Build and exercise it once locally before
 relying on it.
@@ -280,8 +367,11 @@ relying on it.
 ```
 
 Tests use `starlette.testclient.TestClient` against `create_app()` with lowered limits (so
-oversized-upload and frame-count rejection paths are reachable without huge fixtures), and reuse
-the fixtures in the root `tests/data/` rather than duplicating any under `webapp/`.
+oversized-upload and frame-count rejection paths are reachable without huge fixtures). The
+Simulations tests reuse the fixtures in the root `tests/data/`; the Rheometer tests use the
+synthetic files in `webapp/tests/data/rheometry/`, written by `generate_fixtures.py` there. The
+superposition tests build their own sweeps from a known WLF law. One test compiles an exported
+pgfplots figure with `pdflatex`; it is skipped where LaTeX is not installed (as in CI).
 
 ## Design notes
 
@@ -307,17 +397,15 @@ the fixtures in the root `tests/data/` rather than duplicating any under `webapp
   5xx bodies is one way to close that off without touching the app.
 - **No 3D viewer.** This app produces tables, downloads, and 2D plots (Plotly.js) of scalar/vector
   results. Trajectory/molecule visualization is out of scope by design — OVITO/VMD already cover it.
-- **One web font, and what happens without it.** `base.html` pulls a single UI typeface — IBM Plex
-  Sans, weights 400 and 600, `display=swap` — from Google Fonts, so the app looks the same on every
-  machine instead of rendering in whatever the OS calls a UI face. `--font-sans` in `app.css` keeps
-  the full fallback stack (`"Source Sans 3", "Segoe UI", system-ui, -apple-system, …`) behind it, so
-  a machine with no network paints immediately in a system face with the layout unchanged; nothing
-  is hidden while the font loads, and no text shifts position, only its shape. Monospace is a system
-  stack only (`ui-monospace, "SF Mono", Menlo, …`) — the `<code>` spans in the page copy are not
-  worth a second download. The numeric tables rely on `font-variant-numeric: tabular-nums`, which
-  both IBM Plex Sans and every face in the fallback stack support, so columns stay aligned either
-  way. The same page also loads Pico, htmx, Alpine and Plotly from CDNs; offline, those are the
-  things that actually stop working (no plot, no htmx results swap), not the typeface. The section
-  menus in the top bar are deliberately plain DOM in `static/js/app.js` rather than Alpine, so
-  navigation survives a blocked CDN, and with scripting off entirely every menu renders open in the
-  normal flow and all the links stay reachable.
+- **Fonts, and what happens without them.** `base.html` loads one family from Google Fonts —
+  Atkinson Hyperlegible Next for text and its Mono for numbers in tables — with `display=swap`.
+  `--font-sans` and `--font-mono` in `app.css` keep system stacks behind it, so an offline machine
+  paints at once in a system face with the layout unchanged. Pico, htmx, Alpine and Plotly come
+  from CDNs; offline, those are what stop working (no plots, no htmx results), not the typeface.
+  Navigation is plain DOM in `static/js/app.js`, so it survives a blocked CDN, and with scripting
+  off every tool of both workspaces is listed in the sidebar.
+- **Rheometer data stays in the browser.** The server parses an upload and forgets it, like every
+  other route; the datasets live in the browser's IndexedDB. There is no account, no sharing and
+  nothing to back up on the server — and nothing to lose there either. The figure spec the
+  browser sends for export already holds the plotted numbers in display units, so the server
+  renders exactly what the Explore view shows.

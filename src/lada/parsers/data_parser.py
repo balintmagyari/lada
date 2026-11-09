@@ -11,17 +11,9 @@ ATOM_STYLE_COLUMNS = {
     "atomic": ["id", "type", "x", "y", "z", "nx", "ny", "nz"],
     "charge": ["id", "type", "q", "x", "y", "z", "nx", "ny", "nz"],
     "bond": ["id", "molecule", "type", "x", "y", "z", "nx", "ny", "nz"],
-    "angle": ["id", "molecule", "type", "x", "y", "z", "nx", "ny", "nz"],
     "molecular": ["id", "molecule", "type", "x", "y", "z", "nx", "ny", "nz"],
     "full": ["id", "molecule", "type", "q", "x", "y", "z", "nx", "ny", "nz"],
 }
-
-# The styles whose second column is the molecule id. Anything that groups atoms into chains --
-# the end-bead modifier, the chain topology reader -- asks this rather than keeping its own copy,
-# so adding a style above cannot leave those callers rejecting a file this parser understands.
-STYLES_WITH_MOLECULE = frozenset(
-    style for style, columns in ATOM_STYLE_COLUMNS.items() if "molecule" in columns
-)
 ALLOWED_SECTIONS = (
     "Masses",
     "Atoms",
@@ -30,8 +22,6 @@ ALLOWED_SECTIONS = (
     "Angles",
     "Dihedrals",
     "Impropers",
-    "Pair Coeffs",
-    "PairIJ Coeffs",
     "Nonbond Coeffs",
     "Bond Coeffs",
     "Angle Coeffs",
@@ -94,8 +84,6 @@ class LammpsData:
             "Angles",
             "Dihedrals",
             "Impropers",
-            "Pair Coeffs",
-            "PairIJ Coeffs",
             "Nonbond Coeffs",
             "Bond Coeffs",
             "Angle Coeffs",
@@ -113,7 +101,7 @@ class LammpsData:
           style was not detected.
         * ``'Bonds'``      — ``bond_id``, ``bond_type``, ``atom1_id``, ``atom2_id``
         * ``'Velocities'`` — ``atom_id``, ``vx``, ``vy``, ``vz``
-        * ``'Masses'``     — ``type``, ``mass`` (one row per atom type)
+        * ``'Masses'``     — ``atom_id``, ``mass``
         * all others       — generic ``col_0``, ``col_1`` … with a warning.
 
         Parameters
@@ -121,8 +109,7 @@ class LammpsData:
         section : str, optional
             Name of the section to convert (default: ``'Atoms'``). Must be one of
             ``Masses``, ``Atoms``, ``Bonds``, ``Velocities``, ``Angles``,
-            ``Dihedrals``, ``Impropers``, ``Pair Coeffs``, ``PairIJ Coeffs``,
-            ``Nonbond Coeffs``, ``Bond Coeffs``,
+            ``Dihedrals``, ``Impropers``, ``Nonbond Coeffs``, ``Bond Coeffs``,
             ``Angle Coeffs``, ``Dihedral Coeffs``, ``Improper Coeffs``.
 
         Returns
@@ -149,19 +136,6 @@ class LammpsData:
             try:
                 atom_style = self.metadata["atom style"]
                 columns = ATOM_STYLE_COLUMNS[atom_style]
-                # The trailing image flags are optional in a LAMMPS data file, so rows that stop
-                # before them are normal. Anything shorter than that is not: truncating the
-                # style's names to fit would label the data wrongly rather than merely
-                # incompletely — with one column missing, every name after it sits over the
-                # wrong values (x read as q, and so on) and the table looks perfectly ordinary.
-                required = [c for c in columns if c not in ("nx", "ny", "nz")]
-                if data_array.shape[1] < len(required):
-                    raise ValueError(
-                        f"The Atoms section declares style '{atom_style}', whose columns are "
-                        f"{', '.join(columns)} (the image flags nx, ny, nz may be omitted), but "
-                        f"its rows hold only {data_array.shape[1]} values. Fix the "
-                        f"'Atoms # {atom_style}' comment or the rows so they agree."
-                    )
                 valid_columns = columns[: data_array.shape[1]]
                 return pd.DataFrame(data_array, columns=valid_columns)
             except KeyError:
@@ -182,8 +156,7 @@ class LammpsData:
             return pd.DataFrame(data_array, columns=["atom_id", "vx", "vy", "vz"])
 
         elif section == "Masses":
-            # A Masses row is "<atom type> <mass>"; the first column is a type, not an atom.
-            return pd.DataFrame(data_array, columns=["type", "mass"])
+            return pd.DataFrame(data_array, columns=["atom_id", "mass"])
 
         else:
             warnings.warn(
@@ -193,27 +166,6 @@ class LammpsData:
             return pd.DataFrame(
                 data_array, columns=[f"col_{i}" for i in range(data_array.shape[1])]
             )
-
-
-def _section_array(name: str, rows: list[str]) -> np.ndarray:
-    """Parse one section's lines into a 2-D float array.
-
-    `ndmin=2` keeps a one-row section (a single mass, a single bond) two-dimensional; without it
-    numpy drops it to 1-D and every caller indexing `[:, col]` fails on the smallest possible
-    file. An absent section stays the empty 1-D array it has always been, so test it with `.size`
-    rather than for a second axis.
-    """
-    if not rows:
-        return np.array([])
-    try:
-        return np.loadtxt(rows, ndmin=2)
-    except ValueError as exc:
-        # numpy's own wording here names a line number in a file it never opened, which reads as
-        # nonsense to someone looking at their data file.
-        raise ValueError(
-            f"The '{name}' section has rows of differing lengths, so it cannot be read as a "
-            "table. Every row of a section must hold the same number of values."
-        ) from exc
 
 
 def read_data_file(filepath: str) -> LammpsData:
@@ -248,9 +200,6 @@ def read_data_file(filepath: str) -> LammpsData:
     """
     with open(filepath) as f:
         lines = f.readlines()
-
-    if not lines:
-        raise ValueError("The data file is empty.")
 
     metadata = {}
 
@@ -314,7 +263,9 @@ def read_data_file(filepath: str) -> LammpsData:
             else:
                 sections_raw[current_section].append(clean_line)
 
-    sections = {name: _section_array(name, data) for name, data in sections_raw.items()}
+    sections = {
+        name: np.loadtxt(data) if data else np.array([]) for name, data in sections_raw.items()
+    }
 
     return LammpsData(
         metadata=metadata,
@@ -391,14 +342,7 @@ def read_lammps_acf(filepath: str | Path, lag_col: str = "lag_time") -> pd.DataF
     # ------------------------------------------------------------------
     # 1.  Parse column names from line 1 (comma-separated)
     # ------------------------------------------------------------------
-    if not lines:
-        raise ValueError("The ACF file is empty.")
     acf_columns = [c.strip() for c in lines[0].strip().split(",") if c.strip()]
-    if not acf_columns:
-        raise ValueError(
-            "The first line of an ACF file must list its column names, comma-separated "
-            "(for example 'ACF_Sxy,ACF_Sxz,ACF_Syz,ACF_Nxy,ACF_Nxz,ACF_Nyz')."
-        )
 
     # ------------------------------------------------------------------
     # 2.  Locate the last timestep block

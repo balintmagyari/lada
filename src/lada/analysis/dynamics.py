@@ -1,5 +1,4 @@
 import warnings
-from collections.abc import Callable
 
 import numpy as np
 from numpy.typing import NDArray
@@ -7,10 +6,7 @@ from tqdm import tqdm
 
 
 def calculate_segment_acf_from_trajectory(
-    trajectory_file: str,
-    segment_pairs: np.ndarray,
-    time_per_frame: float,
-    progress_callback: Callable[[int, int], None] | None = None,
+    trajectory_file: str, segment_pairs: np.ndarray, time_per_frame: float
 ) -> NDArray[np.float64]:
     """
     Calculates the normalized end-to-end vector autocorrelation function (ACF)
@@ -36,12 +32,6 @@ def calculate_segment_acf_from_trajectory(
     time_per_frame : float
         The physical simulation time elapsed between consecutive saved frames
         in the trajectory (e.g., MD_timestep * steps_between_saves).
-    progress_callback : Callable[[int, int], None] | None, optional
-        If given, called as ``progress_callback(current, total)`` once per lag
-        processed, with ``current`` 1-based, so the final call is always
-        ``(total, total)``. Called on every iteration with no throttling;
-        a caller wanting cheaper UI updates should throttle in the callback
-        itself. Default is None (no progress reporting).
 
     Returns
     -------
@@ -80,8 +70,6 @@ def calculate_segment_acf_from_trajectory(
         # Calculate the dot product and average
         dot_products = np.sum(R_start * R_lag, axis=2)
         acf[lag] = np.mean(dot_products)
-        if progress_callback is not None:
-            progress_callback(lag + 1, n_frames)
 
     # Normalize the function
     acf_normalized = acf / acf[0]
@@ -97,11 +85,7 @@ def calculate_segment_acf_from_trajectory(
 
 
 def calculate_rouse_mode_acf_from_trajectory(
-    trajectory_file: str,
-    chain_indices: np.ndarray,
-    p: int,
-    time_per_frame: float,
-    progress_callback: Callable[[int, int], None] | None = None,
+    trajectory_file: str, chain_indices: np.ndarray, p: int, time_per_frame: float
 ) -> NDArray[np.float64]:
     """
     Calculates the normalized autocorrelation function (ACF) for a specific
@@ -133,11 +117,6 @@ def calculate_rouse_mode_acf_from_trajectory(
     time_per_frame : float
         The physical simulation time elapsed between consecutive saved frames
         in the trajectory.
-    progress_callback : Callable[[int, int], None] | None, optional
-        If given, called as ``progress_callback(current, total)`` once per lag
-        processed, with ``current`` 1-based, so the final call is always
-        ``(total, total)``. Called on every iteration with no throttling.
-        Default is None (no progress reporting).
 
     Returns
     -------
@@ -174,8 +153,9 @@ def calculate_rouse_mode_acf_from_trajectory(
     # ---------------------------------------------------------
     if not (0 <= p < N):
         raise ValueError(
-            f"Rouse mode p={p} is out of range: for chains of N={N} beads, p must be an "
-            f"integer from 0 to {N - 1} inclusive (0 <= p < N)."
+            f"Mathematical constraint violated! You requested mode p={p}. "
+            f"For a chain containing N={N} beads, the Rouse mode number 'p' "
+            f"must be an integer strictly between 0 and {N - 1}."
         )
     # ---------------------------------------------------------
 
@@ -203,8 +183,6 @@ def calculate_rouse_mode_acf_from_trajectory(
 
         dot_products = np.sum(X_start * X_lag, axis=2)
         acf[lag] = np.mean(dot_products)
-        if progress_callback is not None:
-            progress_callback(lag + 1, n_frames)
 
     # 5. Normalize and Format
     acf_normalized = acf / acf[0]
@@ -233,13 +211,6 @@ def _generate_q_vectors(q_magnitude: float, n_vectors: int = 50) -> np.ndarray:
     numpy.ndarray
         A 2D array of shape (n_vectors, 3) containing the [qx, qy, qz] components.
     """
-    # Spreading points over a sphere needs at least two of them; one divides by zero below and
-    # hands back an all-NaN ISF without raising anything.
-    if n_vectors < 2:
-        raise ValueError(
-            f"n_vectors must be at least 2 to average over directions; got {n_vectors}."
-        )
-
     # The golden angle in radians
     phi = np.pi * (3.0 - np.sqrt(5.0))
 
@@ -268,11 +239,7 @@ def _generate_q_vectors(q_magnitude: float, n_vectors: int = 50) -> np.ndarray:
 
 
 def calculate_isf_from_trajectory(
-    trajectory_file: str,
-    time_per_frame: float,
-    q_magnitude: float,
-    n_vectors: int = 50,
-    progress_callback: Callable[[int, int], None] | None = None,
+    trajectory_file: str, time_per_frame: float, q_magnitude: float, n_vectors: int = 50
 ) -> NDArray[np.float64]:
     """
     Calculates the coherent Intermediate Scattering Function, F(q,t),
@@ -295,13 +262,6 @@ def calculate_isf_from_trajectory(
         The number of vectors to dynamically generate for isotropic averaging
         using a Fibonacci lattice. Default is 50. Higher numbers give smoother
         averages but linearly increase computational time.
-    progress_callback : Callable[[int, int], None] | None, optional
-        If given, called as ``progress_callback(current, total)`` once per
-        (q-vector, lag) pair processed, with ``current`` 1-based and
-        ``total = n_vectors * n_frames`` — this is the loop that carries
-        ISF's true cost, not just the outer q-vector loop, so granularity
-        matches where the time is actually spent. Called on every iteration
-        with no throttling. Default is None (no progress reporting).
 
     Returns
     -------
@@ -317,7 +277,6 @@ def calculate_isf_from_trajectory(
 
     n_frames, n_atoms, _ = coords.shape
     n_q = q_vectors.shape[0]
-    total_steps = n_q * n_frames
 
     # We will accumulate the ACF for all q-vectors to average at the end
     avg_acf = np.zeros(n_frames)
@@ -338,8 +297,6 @@ def calculate_isf_from_trajectory(
         # 3. Calculate the autocorrelation of rho using the sliding window
         acf_q = np.zeros(n_frames, dtype=np.complex128)
 
-        # This inner loop, not the outer tqdm above, is where ISF's true O(n_q * n_frames^2)
-        # cost lives, so the progress callback is called here for real per-step granularity.
         for lag in range(n_frames):
             rho_start = rho[: n_frames - lag]
             rho_lag = rho[lag:]
@@ -347,8 +304,6 @@ def calculate_isf_from_trajectory(
             # Multiply rho(t+lag) by the complex conjugate of rho(t)
             correlations = rho_lag * np.conj(rho_start)
             acf_q[lag] = np.mean(correlations)
-            if progress_callback is not None:
-                progress_callback(q_idx * n_frames + lag + 1, total_steps)
 
         # The true physical ISF should be purely real. Any imaginary component
         # is numerical noise that vanishes upon averaging. We take the real part.

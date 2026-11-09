@@ -1,40 +1,6 @@
-from collections.abc import Callable
-
 import numpy as np
 import pandas as pd
 from tqdm import tqdm
-
-
-def _require_columns(cols: list, required: list[str], calculation: str) -> None:
-    """Raise a ValueError naming every required column the data lacks."""
-    missing = [c for c in required if c not in cols]
-    if missing:
-        raise ValueError(
-            f"Missing a required column for {calculation} calculation: {', '.join(missing)}. "
-            f"The data has: {', '.join(str(c) for c in cols)}."
-        )
-
-
-def _chain_mask(frame_mols: np.ndarray) -> np.ndarray:
-    """Atoms of one frame that belong to a real chain.
-
-    Molecule ID 0 is what LAMMPS gives atoms that belong to no molecule (solvent, ions,
-    walls), and a one-atom molecule has no conformation to speak of: its Rg is 0 and its two
-    "ends" are the same atom. Counting either would drag the chain average towards zero, so
-    only molecules with a non-zero ID and at least two atoms are kept.
-    """
-    unique_mols, inverse, counts = np.unique(frame_mols, return_inverse=True, return_counts=True)
-    keep = (unique_mols != 0) & (counts >= 2)
-    return keep[inverse]
-
-
-def _no_chains_error(ts, has_timesteps: bool, molecule_col: str) -> ValueError:
-    where = f" at timestep {ts}" if has_timesteps else ""
-    return ValueError(
-        f"No polymer chains were found{where}: every atom has molecule ID 0 or is the only "
-        f"atom of its molecule in column '{molecule_col}'. Rg and Ree are computed only for "
-        "molecules with a non-zero ID and at least two atoms."
-    )
 
 
 def calculate_avg_rg_sq(
@@ -44,14 +10,10 @@ def calculate_avg_rg_sq(
     molecule_col: str = "mol",
     timestep_col: str = "timestep",
     mass_col: str | None = None,
-    progress_callback: Callable[[int, int], None] | None = None,
 ) -> float | dict[float, float]:
     """
     Compute the ensemble-average squared radius of gyration using fast vectorization.
     Dynamically handles both single frames and massive multi-timestep trajectories.
-
-    Only real chains are averaged: atoms with molecule ID 0 (no molecule) and molecules
-    of a single atom are left out. A ValueError is raised if a frame has no chain left.
 
     Parameters
     ----------
@@ -74,10 +36,6 @@ def calculate_avg_rg_sq(
         Column header specifying atom masses. When given, the mass of each atom is
         accounted for when calculating Rg^2. If None, the mass of all atoms is
         considered equal.
-    progress_callback: Callable[[int, int], None] | None, default=None
-        If given, called as ``progress_callback(current, total)`` once per
-        timestep processed, with ``current`` 1-based, so the final call is
-        always ``(total, total)``. Default is None (no progress reporting).
 
     Returns
     -------
@@ -103,9 +61,11 @@ def calculate_avg_rg_sq(
         raise TypeError("Data must be a pandas.DataFrame or numpy.ndarray.")
 
     # Extract column indices
-    _require_columns(cols, [molecule_col, *coord_cols], "Rg")
-    mol_idx = cols.index(molecule_col)
-    x_idx, y_idx, z_idx = [cols.index(c) for c in coord_cols]
+    try:
+        mol_idx = cols.index(molecule_col)
+        x_idx, y_idx, z_idx = [cols.index(c) for c in coord_cols]
+    except ValueError as e:
+        raise ValueError(f"Missing a required column for Rg calculation: {e}") from e
 
     # Extract targeting arrays and force float typing for math
     mols = arr[:, mol_idx]
@@ -127,26 +87,15 @@ def calculate_avg_rg_sq(
         timesteps = np.zeros(len(arr))
 
     unique_timesteps = np.unique(timesteps)
-    total_timesteps = len(unique_timesteps)
     rg_sq_by_timestep = {}
 
     # 3. Compute Rg^2 per frame using tqdm
-    for i, ts in enumerate(
-        tqdm(unique_timesteps, disable=total_timesteps <= 1, desc="Calculating Rg^2")
-    ):
+    for ts in tqdm(unique_timesteps, disable=len(unique_timesteps) <= 1, desc="Calculating Rg^2"):
         # Isolate the frame
         ts_mask = timesteps == ts
         ts_mols = mols[ts_mask]
         ts_coords = coords[ts_mask]
         ts_masses = masses[ts_mask]
-
-        # Keep only real chains (mol != 0, at least two atoms)
-        chains = _chain_mask(ts_mols)
-        if not chains.any():
-            raise _no_chains_error(ts, has_timesteps, molecule_col)
-        ts_mols = ts_mols[chains]
-        ts_coords = ts_coords[chains]
-        ts_masses = ts_masses[chains]
 
         # Vectorized Rg^2 Calculation
         _, mol_indices = np.unique(ts_mols, return_inverse=True)
@@ -169,14 +118,9 @@ def calculate_avg_rg_sq(
 
         rg_sq_per_mol = np.bincount(mol_indices, weights=ts_masses * sq_distances) / mol_masses
         rg_sq_by_timestep[ts] = float(np.mean(rg_sq_per_mol))
-        if progress_callback is not None:
-            progress_callback(i + 1, total_timesteps)
 
     # 4. Dynamic Return
-    # Keyed by timestep whenever the data carried a timestep column, even for a single frame:
-    # collapsing that case to a bare float threw away which timestep it was, and callers that
-    # rebuild a table then had to invent one (they used 0).
-    if not has_timesteps:
+    if not has_timesteps or len(unique_timesteps) == 1:
         return list(rg_sq_by_timestep.values())[0]
     else:
         return rg_sq_by_timestep
@@ -189,14 +133,10 @@ def calculate_avg_ree_sq(
     molecule_col: str = "mol",
     timestep_col: str = "timestep",
     atom_id_col: str = "id",
-    progress_callback: Callable[[int, int], None] | None = None,
 ) -> float | dict[float, float]:
     """
     Compute the ensemble-average squared end-to-end distance using fast vectorization.
     Dynamically handles both single frames and multi-timestep trajectories.
-
-    Only real chains are averaged: atoms with molecule ID 0 (no molecule) and molecules
-    of a single atom are left out. A ValueError is raised if a frame has no chain left.
 
     Chain ends are identified as the minimum and maximum atom ID within each molecule,
     so unwrapped coordinates (``xu``, ``yu``, ``zu``) should be used to avoid
@@ -219,10 +159,6 @@ def calculate_avg_ree_sq(
     atom_id_col : str, default='id'
         Column header specifying atom IDs. Used to identify the first and last
         atom in each chain (by minimum and maximum ID within a molecule).
-    progress_callback : Callable[[int, int], None] | None, default=None
-        If given, called as ``progress_callback(current, total)`` once per
-        timestep processed, with ``current`` 1-based, so the final call is
-        always ``(total, total)``. Default is None (no progress reporting).
 
     Returns
     -------
@@ -247,10 +183,12 @@ def calculate_avg_ree_sq(
         raise TypeError("Data must be a pandas.DataFrame or numpy.ndarray.")
 
     # Extract column indices
-    _require_columns(cols, [molecule_col, atom_id_col, *coord_cols], "Ree")
-    mol_idx = cols.index(molecule_col)
-    id_idx = cols.index(atom_id_col)
-    x_idx, y_idx, z_idx = [cols.index(c) for c in coord_cols]
+    try:
+        mol_idx = cols.index(molecule_col)
+        id_idx = cols.index(atom_id_col)
+        x_idx, y_idx, z_idx = [cols.index(c) for c in coord_cols]
+    except ValueError as e:
+        raise ValueError(f"Missing a required column for Ree calculation: {e}") from e
 
     # Extract targeting arrays
     mols = arr[:, mol_idx]
@@ -265,26 +203,15 @@ def calculate_avg_ree_sq(
         timesteps = np.zeros(len(arr))
 
     unique_timesteps = np.unique(timesteps)
-    total_timesteps = len(unique_timesteps)
     ree_sq_by_timestep = {}
 
     # 3. Compute Ree^2 per frame using tqdm
-    for i, ts in enumerate(
-        tqdm(unique_timesteps, disable=total_timesteps <= 1, desc="Calculating Ree^2")
-    ):
+    for ts in tqdm(unique_timesteps, disable=len(unique_timesteps) <= 1, desc="Calculating Ree^2"):
         # Isolate the frame
         ts_mask = timesteps == ts
         ts_mols = mols[ts_mask]
         ts_atom_ids = atom_ids[ts_mask]
         ts_coords = coords[ts_mask]
-
-        # Keep only real chains (mol != 0, at least two atoms)
-        chains = _chain_mask(ts_mols)
-        if not chains.any():
-            raise _no_chains_error(ts, has_timesteps, molecule_col)
-        ts_mols = ts_mols[chains]
-        ts_atom_ids = ts_atom_ids[chains]
-        ts_coords = ts_coords[chains]
 
         # Sort atoms first by molecule ID, then by atom ID
         # This ensures the first and last indices correspond to the chain ends
@@ -308,11 +235,9 @@ def calculate_avg_ree_sq(
 
         # Store the ensemble average for this timestep
         ree_sq_by_timestep[ts] = float(np.mean(sq_distances))
-        if progress_callback is not None:
-            progress_callback(i + 1, total_timesteps)
 
-    # 4. Dynamic Return (keyed by timestep whenever one was present; see calculate_avg_rg_sq)
-    if not has_timesteps:
+    # 4. Dynamic Return
+    if not has_timesteps or len(unique_timesteps) == 1:
         return list(ree_sq_by_timestep.values())[0]
     else:
         return ree_sq_by_timestep
@@ -325,13 +250,9 @@ def calculate_ree_vectors(
     molecule_col: str = "mol",
     timestep_col: str = "timestep",
     atom_id_col: str = "id",
-    progress_callback: Callable[[int, int], None] | None = None,
 ) -> pd.DataFrame:
     """
     Compute the end-to-end vector for each molecule at each timestep.
-
-    Only real chains are averaged: atoms with molecule ID 0 (no molecule) and molecules
-    of a single atom are left out. A ValueError is raised if a frame has no chain left.
 
     Parameters
     ----------
@@ -350,10 +271,6 @@ def calculate_ree_vectors(
     atom_id_col : str, default='id'
         Column header specifying atom IDs. Used to identify the first and last
         atom in each chain (by minimum and maximum ID within a molecule).
-    progress_callback : Callable[[int, int], None] | None, default=None
-        If given, called as ``progress_callback(current, total)`` once per
-        timestep processed, with ``current`` 1-based, so the final call is
-        always ``(total, total)``. Default is None (no progress reporting).
 
     Returns
     -------
@@ -379,10 +296,12 @@ def calculate_ree_vectors(
         raise TypeError("Data must be a pandas.DataFrame or numpy.ndarray.")
 
     # Extract column indices
-    _require_columns(cols, [molecule_col, atom_id_col, *coord_cols], "Ree vector")
-    mol_idx = cols.index(molecule_col)
-    id_idx = cols.index(atom_id_col)
-    x_idx, y_idx, z_idx = [cols.index(c) for c in coord_cols]
+    try:
+        mol_idx = cols.index(molecule_col)
+        id_idx = cols.index(atom_id_col)
+        x_idx, y_idx, z_idx = [cols.index(c) for c in coord_cols]
+    except ValueError as e:
+        raise ValueError(f"Missing a required column for Ree vector calculation: {e}") from e
 
     # Extract targeting arrays
     mols = arr[:, mol_idx]
@@ -397,26 +316,17 @@ def calculate_ree_vectors(
         timesteps = np.zeros(len(arr))
 
     unique_timesteps = np.unique(timesteps)
-    total_timesteps = len(unique_timesteps)
     all_frames_data = []
 
     # 3. Compute Ree vectors per frame using tqdm
-    for i, ts in enumerate(
-        tqdm(unique_timesteps, disable=total_timesteps <= 1, desc="Calculating Ree vectors")
+    for ts in tqdm(
+        unique_timesteps, disable=len(unique_timesteps) <= 1, desc="Calculating Ree vectors"
     ):
         # Isolate the frame
         ts_mask = timesteps == ts
         ts_mols = mols[ts_mask]
         ts_atom_ids = atom_ids[ts_mask]
         ts_coords = coords[ts_mask]
-
-        # Keep only real chains (mol != 0, at least two atoms)
-        chains = _chain_mask(ts_mols)
-        if not chains.any():
-            raise _no_chains_error(ts, has_timesteps, molecule_col)
-        ts_mols = ts_mols[chains]
-        ts_atom_ids = ts_atom_ids[chains]
-        ts_coords = ts_coords[chains]
 
         # Sort atoms first by molecule ID, then by atom ID
         sort_keys = np.lexsort((ts_atom_ids, ts_mols))
@@ -443,8 +353,6 @@ def calculate_ree_vectors(
         # Stack everything together into a 2D array for this frame
         frame_data = np.column_stack((ts_array, unique_mol_ids, ree_vectors))
         all_frames_data.append(frame_data)
-        if progress_callback is not None:
-            progress_callback(i + 1, total_timesteps)
 
     # 4. Compile and Return Data
     # Vertically stack all the frame data blocks

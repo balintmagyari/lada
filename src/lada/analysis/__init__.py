@@ -15,11 +15,8 @@ from .dynamics import (
     calculate_segment_acf_from_trajectory,
 )
 from .rheology import calc_dynamic_moduli_prony, calc_stress_relaxation
-from .topology import ChainTopology, chains_from_data_file
 
 __all__ = [
-    "ChainTopology",
-    "chains_from_data_file",
     "calculate_avg_rg_sq",
     "calculate_avg_ree_sq",
     "calculate_ree_vectors",

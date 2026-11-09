@@ -13,7 +13,6 @@ Core modules:
 # Parsers
 # Analysis
 from .analysis import (
-    ChainTopology,
     calc_dynamic_moduli_prony,
     calc_stress_relaxation,
     calculate_avg_ree_sq,
@@ -25,7 +24,6 @@ from .analysis import (
     calculate_rouse_mode_acf_from_trajectory,
     calculate_segment_acf,  # deprecated alias
     calculate_segment_acf_from_trajectory,
-    chains_from_data_file,
 )
 
 # Exporters
@@ -62,8 +60,6 @@ __all__ = [
     "calculate_isf",
     "calc_stress_relaxation",
     "calc_dynamic_moduli_prony",
-    "chains_from_data_file",
-    "ChainTopology",
     # Modifiers
     "rewrite_end_beads",
     # Exporters

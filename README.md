@@ -48,18 +48,6 @@ write_pgfplots_table(G, "G_t.dat", comment="Stress relaxation modulus, T=1.0")
 
 ---
 
-## Web front-end
-
-`webapp/` is a separate installable project (`lada-web`) that puts a browser front-end over these
-same functions: upload a LAMMPS output file, pick a calculation, see the result as a table (and a
-chart where one applies), download it as CSV or a pgfplots-ready file. It depends on `lada` rather
-than the other way around, so `pip install lada` stays exactly as lightweight as it is today.
-
-See [`webapp/README.md`](webapp/README.md) for the quick start, the full page and API route list,
-configuration, and Docker deployment.
-
----
-
 ## 1) Parsers
 
 ### 1a) Dump files — `dump_frames` / `read_dump`
@@ -172,7 +160,7 @@ The ACF column names are read from the **comma-separated header on line 1** of t
 
 ## 2) Analysis
 
-All DataFrame-based functions accept either a `pd.DataFrame` or a `np.ndarray` (pass `columns=list_of_names` for arrays). Data with no timestep column returns a `float`; data that has one returns `dict[timestep, float]`, including when it holds a single frame — so a one-frame dump keeps its own timestep rather than being reported as 0.
+All DataFrame-based functions accept either a `pd.DataFrame` or a `np.ndarray` (pass `columns=list_of_names` for arrays). Single-frame data returns a `float`; multi-frame trajectories return `dict[timestep, float]`.
 
 Functions that operate on `.npz` trajectory files expect the archive to contain a `'coords'` key with shape `(n_frames, n_atoms, 3)` and return a `np.ndarray` of shape `(n_frames, 2)` with columns `[lag_time, value]`.
 
@@ -267,40 +255,6 @@ result = calculate_rouse_mode_acf_from_trajectory(
 Raises `ValueError` if `p >= beads_per_chain`.
 
 > **Deprecated alias:** `calculate_rouse_mode_acf` behaves the same but emits a `DeprecationWarning` and will be removed in lada 2.0.0. Use `calculate_rouse_mode_acf_from_trajectory` in new code.
-
----
-
-### 2e-bis) Chain topology from a data file — `chains_from_data_file`
-
-`segment_pairs` and `chain_indices` above are 0-indexed positions into the `.npz` `coords` array, which carries no atom ids — so writing them by hand means counting chains and trusting that the beads sit where you think. If you still have the LAMMPS data file for the same system, read them from it instead.
-
-```python
-from lada import calculate_rouse_mode_acf_from_trajectory, chains_from_data_file
-
-topology = chains_from_data_file("system.data")
-print(topology.source)   # 'molecule' or 'bonds' — which section the chains came from
-print(topology.lengths)  # beads in each chain
-for note in topology.notes:
-    print(note)          # anything the reader had to decide for itself
-
-result = calculate_rouse_mode_acf_from_trajectory(
-    "trajectory.npz", topology.chain_indices(), p=1, time_per_frame=0.5
-)
-```
-
-- `.segment_pairs()` → `(n_chains, 2)` for `calculate_segment_acf_from_trajectory`. Chains of unequal length are fine: an end-to-end vector needs only the two ends.
-- `.chain_indices()` → `(n_chains, beads_per_chain)` for `calculate_rouse_mode_acf_from_trajectory`. Raises `ValueError` if the chains differ in length, since a Rouse mode has no meaning without a common N.
-- `.n_atoms` is the data file's atom count. The two files are lined up by ranking atom ids — position `i` is the `i`-th smallest id — so a data file describing a different number of atoms cannot be used with that trajectory.
-
-How the chains are found:
-
-1. **Molecule ids**, for the atom styles that carry one (`bond`, `angle`, `molecular`, `full`): atoms sharing a molecule id form a chain. Where the file also has a `Bonds` section, the bonds decide the order of the beads along the backbone; without one, ascending atom id is assumed and a note says so.
-2. **The bond graph**, when there is no molecule column: each connected component is a chain, walked end to end. A ring or a branch is refused by name, because neither has two ends to correlate.
-3. Otherwise a `ValueError` naming what is missing.
-
-Molecules with fewer than two beads — solvent, ions, free beads — are left out, and the count appears in `.notes`.
-
-> Bead order matters more than it looks. A Rouse amplitude weights bead *n* by cos(pπ(n−½)/N), so a chain held in the wrong order returns a curve that is wrong but entirely plausible.
 
 ---
 

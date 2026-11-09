@@ -1,9 +1,10 @@
 """The declarative registry of every tool the app offers.
 
-Three levels: a `Workspace` (simulation analysis, or rheometer data), its `Section`s, and the
-`Calculation`s in each section. The catalog drives the navigation, the overview pages and the
-page router, so a new tool becomes reachable by adding one `Calculation` entry and, for a
-simulation tool, the matching template.
+Three levels: a `Workspace`, its `Section`s, and the `Calculation`s (tools) in each section. The
+catalog drives the navigation, the overview page and the page router, so a new tool becomes
+reachable by adding one `Calculation` entry. Version 1 has one workspace, the rheometer; the
+simulation tools live on the `webapp-simulations` branch and slot back in as a second
+`Workspace` with its own sections.
 """
 
 from dataclasses import dataclass, field
@@ -25,7 +26,7 @@ class Section:
     key: str
     title: str
     blurb: str
-    workspace: str = "simulations"
+    workspace: str = "rheometer"
 
 
 @dataclass(frozen=True)
@@ -35,8 +36,8 @@ class Calculation:
     title: str
     summary: str
     input_kind: str  # a key of INPUT_KINDS
-    # Rheometer pages share one template and live under /rheometer/<slug>; simulation pages
-    # keep their own template and the /<section>/<slug> address they have always had.
+    # Rheometer pages share one template and live under /rheometer/<slug>. A tool without a
+    # prefix is served at /<section>/<slug> from its own template.
     template_name: str = ""
     path_prefix: str = ""
 
@@ -52,19 +53,6 @@ class Calculation:
 
 
 WORKSPACES: list[Workspace] = [
-    Workspace(
-        "simulations",
-        "Simulations",
-        "Read and analyse LAMMPS output: conformations, dynamics and rheology of polymer chains.",
-        "/simulations",
-        steps=(
-            ("Upload", "a simulation file and set the parameters."),
-            ("Calculate", "and read the table and plot."),
-            ("Download", "as CSV or as a pgfplots table for LaTeX."),
-        ),
-        note="Uploads are processed in a temporary folder and deleted as soon as the response is "
-        "sent. Nothing is stored on the server.",
-    ),
     Workspace(
         "rheometer",
         "Rheometer",
@@ -82,31 +70,6 @@ WORKSPACES: list[Workspace] = [
 
 
 SECTIONS: list[Section] = [
-    Section(
-        "parsers",
-        "Read files",
-        "Turn LAMMPS output files into tables you can inspect and download.",
-    ),
-    Section(
-        "conformations",
-        "Chain conformations",
-        "Size and shape of polymer chains from a dump trajectory.",
-    ),
-    Section(
-        "dynamics",
-        "Dynamics",
-        "Time correlation functions from a NumPy .npz trajectory.",
-    ),
-    Section(
-        "rheology",
-        "Rheology",
-        "Relaxation modulus and dynamic moduli from a stress autocorrelation file.",
-    ),
-    Section(
-        "modifiers",
-        "Topology tools",
-        "Rewrite a LAMMPS data file and download the result.",
-    ),
     Section(
         "mydata",
         "My data",
@@ -139,102 +102,6 @@ SECTIONS: list[Section] = [
     ),
 ]
 
-CALCULATIONS: list[Calculation] = [
-    Calculation(
-        "parsers",
-        "dump",
-        "Dump trajectory",
-        "Preview the frames of a dump file or load the full atom table.",
-        "dump",
-    ),
-    Calculation(
-        "parsers",
-        "log",
-        "Thermo log",
-        "Extract the thermodynamic output table from a LAMMPS log file.",
-        "log",
-    ),
-    Calculation(
-        "parsers",
-        "data",
-        "Data file",
-        "Read one section of a LAMMPS data file, for example Atoms, Bonds or Masses.",
-        "data",
-    ),
-    Calculation(
-        "parsers",
-        "acf",
-        "Stress ACF file",
-        "Read the last timestep block of a fix ave/correlate output file as a table.",
-        "acf",
-    ),
-    Calculation(
-        "conformations",
-        "rg",
-        "Radius of gyration",
-        "Ensemble-average Rg² of the chains at every timestep.",
-        "dump",
-    ),
-    Calculation(
-        "conformations",
-        "ree",
-        "End-to-end distance",
-        "Ensemble-average Ree² of the chains at every timestep.",
-        "dump",
-    ),
-    Calculation(
-        "conformations",
-        "ree-vectors",
-        "End-to-end vectors",
-        "The end-to-end vector of every chain at every timestep.",
-        "dump",
-    ),
-    Calculation(
-        "dynamics",
-        "segment-acf",
-        "End-to-end vector autocorrelation",
-        "Normalized autocorrelation of the chain end-to-end vectors.",
-        "npz",
-    ),
-    Calculation(
-        "dynamics",
-        "rouse-mode",
-        "Rouse mode autocorrelation",
-        "Normalized autocorrelation of the amplitude of one Rouse mode.",
-        "npz",
-    ),
-    Calculation(
-        "dynamics",
-        "isf",
-        "Intermediate scattering function",
-        "Coherent F(q,t) / F(q,0) at one scattering vector magnitude.",
-        "npz",
-    ),
-    Calculation(
-        "rheology",
-        "stress-relaxation",
-        "Stress relaxation modulus",
-        "G(t) by the Green-Kubo and full stress relaxation methods.",
-        "acf",
-    ),
-    Calculation(
-        "rheology",
-        "dynamic-moduli",
-        "Dynamic moduli",
-        "G'(ω) and G''(ω) from a Prony-series fit of G(t).",
-        "acf",
-    ),
-    Calculation(
-        "modifiers",
-        "rewrite-end-beads",
-        "Rewrite end beads",
-        "Give every chain end a new atom type and download the modified data file.",
-        "data",
-    ),
-]
-
-SIMULATION_CALCULATIONS: list[Calculation] = list(CALCULATIONS)
-
 
 def _rheometer(
     section: str,
@@ -249,7 +116,7 @@ def _rheometer(
     )
 
 
-RHEOMETER_CALCULATIONS: list[Calculation] = [
+CALCULATIONS: list[Calculation] = [
     _rheometer(
         "mydata",
         "my-data",
@@ -323,21 +190,14 @@ RHEOMETER_CALCULATIONS: list[Calculation] = [
     ),
 ]
 
-CALCULATIONS.extend(RHEOMETER_CALCULATIONS)
-
 
 # What each input kind is called: `short` labels the chip on a tool's page and in the
 # overview, `needs` is the full sentence a screen reader hears beside it.
 INPUT_KINDS: dict[str, dict[str, str]] = {
-    "dump": {"short": "Dump file", "needs": "Needs a LAMMPS dump file"},
-    "log": {"short": "Log file", "needs": "Needs a LAMMPS log file"},
-    "data": {"short": "Data file", "needs": "Needs a LAMMPS data file"},
-    "acf": {"short": "Stress ACF", "needs": "Needs a stress autocorrelation file"},
-    "npz": {"short": ".npz trajectory", "needs": "Needs a NumPy .npz trajectory"},
     "rheo-file": {
         "short": "Rheometer export",
-        "needs": "Takes rheometer exports and spreadsheets: CSV, TXT, DAT, Excel, TRIOS or "
-        "RheoCompass",
+        "needs": "Takes rheometer exports and spreadsheets: CSV, TXT, DAT, Excel, TRIOS, "
+        "RheoCompass or TA Orchestrator",
     },
     "rheo-data": {"short": "Imported data", "needs": "Uses the files you imported on My data"},
 }
@@ -348,7 +208,7 @@ WORKSPACE_BY_KEY: dict[str, Workspace] = {workspace.key: workspace for workspace
 
 
 def get_calculation_by_path(path: str) -> Calculation | None:
-    """The catalog entry served at `path` (e.g. "/parsers/log" or "/rheometer/creep")."""
+    """The catalog entry served at `path` (e.g. "/rheometer/creep")."""
     wanted = "/" + path.strip("/")
     for calc in CALCULATIONS:
         if calc.path == wanted:

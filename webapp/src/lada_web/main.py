@@ -1,7 +1,5 @@
 """Application factory."""
 
-import threading
-import time
 from collections.abc import Awaitable, Callable
 
 from fastapi import FastAPI, Request
@@ -11,63 +9,17 @@ from fastapi.staticfiles import StaticFiles
 from . import __version__
 from .config import Settings
 from .errors import error_response, register_error_handlers
-from .jobs import JobStore
 from .rendering import STATIC_DIR
-from .routers import (
-    conformations,
-    dynamics,
-    jobs,
-    modifiers,
-    pages,
-    parsers,
-    rheology,
-    rheometry,
-    topology,
-)
-
-# How often the background sweep thread prunes jobs older than settings.job_ttl_seconds. Capped
-# at a quarter of the TTL so a short TTL is actually honoured: at a fixed minute, a 10-second TTL
-# would leave finished jobs fetchable for up to a minute, with nothing swept at all until the
-# first tick. Floored so a tiny TTL cannot spin the thread.
-JOB_SWEEP_INTERVAL_SECONDS = 60
-MIN_JOB_SWEEP_INTERVAL_SECONDS = 1.0
-
-
-def sweep_interval(ttl_seconds: float) -> float:
-    return max(MIN_JOB_SWEEP_INTERVAL_SECONDS, min(JOB_SWEEP_INTERVAL_SECONDS, ttl_seconds / 4))
-
+from .routers import pages, rheometry
 
 # Headroom over the largest accepted upload for the multipart envelope and the other fields.
 BODY_OVERHEAD_BYTES = 1024 * 1024
 
-# Only these routes take an .npz trajectory; everything else takes a text upload, and must be
-# held to the much smaller text budget rather than to the trajectory one.
-TRAJECTORY_PREFIX = "/api/dynamics/"
+# The import route takes files; every other /api/ route takes a JSON document.
+UPLOAD_PATHS = frozenset({"/api/rheometry/parse"})
 
-# These routes accept several files (repeat seeds, or regime files) to average into one
-# calculation; parsers/modifiers stay single-file, so they keep the tighter one-file ceiling.
-MULTI_FILE_TEXT_PREFIXES = ("/api/conformations/", "/api/rheology/", "/api/rheometry/")
-
-# Routes whose body is a JSON document rather than an upload. They are held to max_json_bytes
-# whatever Content-Type the request claims: FastAPI reads such a body into memory in one piece
-# before it can find out the type was wrong.
-JSON_PATHS = frozenset(
-    {
-        "/api/dynamics/merge-regimes",
-        "/api/dynamics/merge-regimes/download",
-        "/api/rheology/merge-regimes",
-        "/api/rheology/merge-regimes/download",
-        "/api/rheology/dynamic-moduli/from-regimes",
-        "/api/rheology/dynamic-moduli/from-regimes/download",
-        "/api/rheometry/rederive",
-        "/api/rheometry/figure",
-        "/api/rheometry/pgfplots",
-        "/api/rheometry/tts",
-    }
-)
-
-# Content types an upload (or a plain form) arrives as. Anything else sent to /api/ is a JSON
-# document or nothing the routes can use, and gets the JSON ceiling.
+# Content types an upload (or a plain form) arrives as. Anything else is held to the JSON
+# ceiling, whatever route it is sent to.
 FORM_CONTENT_TYPES = ("multipart/form-data", "application/x-www-form-urlencoded")
 
 TOO_LARGE_MESSAGE = "The request body is larger than this server accepts."
@@ -88,46 +40,17 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     resolved = settings or Settings()
     app.state.settings = resolved
 
-    app.state.job_store = JobStore()
-    app.state.job_semaphore = threading.Semaphore(resolved.max_concurrent_jobs)
-
-    def sweep_loop() -> None:
-        while True:
-            time.sleep(sweep_interval(resolved.job_ttl_seconds))
-            app.state.job_store.sweep(resolved.job_ttl_seconds)
-
-    threading.Thread(target=sweep_loop, daemon=True).start()
-
-    # Dynamics and the multi-file text routes may carry up to max_files_per_request uploads in
-    # one body; parsers/modifiers stay single-file, so they keep the tighter one-file ceiling.
-    upload_ceiling = resolved.max_upload_bytes + BODY_OVERHEAD_BYTES
-    multi_upload_ceiling = (
+    # An import may carry up to max_files_per_request files in one body.
+    upload_ceiling = (
         resolved.max_upload_bytes * resolved.max_files_per_request + BODY_OVERHEAD_BYTES
     )
-    # The segment-ACF and Rouse-mode routes may also carry one data file to read the chain
-    # topology from, so its budget belongs in their body, not in the general headroom.
-    trajectory_ceiling = (
-        resolved.max_trajectory_bytes * resolved.max_files_per_request
-        + resolved.max_topology_bytes
-        + BODY_OVERHEAD_BYTES
-    )
-
     json_ceiling = resolved.max_json_bytes
 
-    def upload_body_ceiling(path: str) -> int:
-        if path.startswith(TRAJECTORY_PREFIX):
-            return trajectory_ceiling
-        if path.startswith(MULTI_FILE_TEXT_PREFIXES):
-            return multi_upload_ceiling
-        return upload_ceiling
-
     def body_ceiling(path: str, content_type: str) -> int:
-        if path in JSON_PATHS:
-            return json_ceiling
-        ceiling = upload_body_ceiling(path)
-        if content_type.split(";", 1)[0].strip().lower() not in FORM_CONTENT_TYPES:
-            return min(ceiling, json_ceiling)
-        return ceiling
+        is_form = content_type.split(";", 1)[0].strip().lower() in FORM_CONTENT_TYPES
+        if path in UPLOAD_PATHS and is_form:
+            return upload_ceiling
+        return json_ceiling
 
     @app.middleware("http")
     async def limit_body_size(
@@ -137,9 +60,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
         This is the only limit that runs before the body is read: by the time a route (and
         `uploads.save_upload` with it) can see the upload, Starlette has already parsed the
-        multipart form and spooled the file part to disk. The ceiling is the one belonging
-        to the route family being addressed, since the text routes accept far less than the
-        trajectory routes do.
+        multipart form and spooled the file part to disk.
 
         A declared length is the only thing that can be checked this early, so it is not a
         guarantee: a body that declares none — a chunked upload, say — cannot be measured
@@ -158,18 +79,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
     register_error_handlers(app)
-    for router in (
-        parsers.router,
-        conformations.router,
-        dynamics.router,
-        rheology.router,
-        rheometry.router,
-        modifiers.router,
-        topology.router,
-        jobs.router,
-        pages.router,  # last: it owns the catch-all /{section}/{slug}
-    ):
-        app.include_router(router)
+    app.include_router(rheometry.router)
+    app.include_router(pages.router)  # last: it owns the catch-all /{first}/{second}
     return app
 
 

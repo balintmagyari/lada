@@ -11,30 +11,17 @@ class Settings(BaseSettings):
 
     model_config = SettingsConfigDict(env_prefix="LADA_WEB_", extra="ignore")
 
+    # One imported file. Rheometer exports are small: a long frequency sweep is a few hundred
+    # kilobytes, a multi-sheet workbook a few megabytes.
     max_upload_mb: float = 50
-    # A JSON body (regime merges, rheometer re-derivations, figures, TTS) carries already-computed
-    # series, never a raw file, so it gets its own small ceiling instead of inheriting the
-    # multi-file upload budget, which would let one request make the server parse gigabytes.
+    # A JSON body (re-derivations, figures, superposition) carries already-parsed series, never
+    # a raw file, so it gets its own small ceiling instead of inheriting the upload budget,
+    # which would let one request make the server parse gigabytes.
     max_json_mb: float = 5
-    max_trajectory_mb: float = 500
-    max_trajectory_frames: int = 3000
-    # A compressed .npz says nothing about its decompressed size: a few megabytes on the wire
-    # can declare an array of hundreds of gigabytes. This caps what the shape is allowed to
-    # ask for once loaded, independently of the upload size and the frame count.
-    max_trajectory_memory_mb: float = 2048
-    # A data file read for its chain topology. Far below max_upload_mb on purpose: the parser
-    # reads the whole file into a list of strings and then parses that list, so peak memory is
-    # several times the file size and it is all spent on a request thread.
-    max_topology_mb: float = 20
-    max_table_rows: int = 500
-    # Repeat-seed files or regime files averaged/merged into one calculation.
+    # Files one import request may carry.
     max_files_per_request: int = 10
-    # Background jobs: how long a finished/abandoned job's result stays fetchable, and how many
-    # calculations may run on background threads at once.
-    job_ttl_seconds: float = 600
-    max_concurrent_jobs: int = 4
-    # Rheometer imports: data points across all blocks of one file, and how large an .xlsx may
-    # unpack to (a workbook is a zip archive, so its upload size says little about its contents).
+    # Data points across all blocks of one file, and how large an .xlsx may unpack to (a
+    # workbook is a zip archive, so its upload size says little about its contents).
     max_rheometry_rows: int = 200_000
     max_xlsx_uncompressed_mb: float = 200
     temp_root: Path | None = None
@@ -50,18 +37,6 @@ class Settings(BaseSettings):
     @property
     def max_xlsx_uncompressed_bytes(self) -> int:
         return int(self.max_xlsx_uncompressed_mb * 1024 * 1024)
-
-    @property
-    def max_topology_bytes(self) -> int:
-        return int(self.max_topology_mb * 1024 * 1024)
-
-    @property
-    def max_trajectory_bytes(self) -> int:
-        return int(self.max_trajectory_mb * 1024 * 1024)
-
-    @property
-    def max_trajectory_memory_bytes(self) -> int:
-        return int(self.max_trajectory_memory_mb * 1024 * 1024)
 
 
 def get_settings(request: Request) -> Settings:

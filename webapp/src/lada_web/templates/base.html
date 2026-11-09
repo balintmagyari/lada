@@ -32,8 +32,6 @@
         href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible+Mono:wght@400;500&family=Atkinson+Hyperlegible+Next:wght@400;600;700&display=swap">
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@2.1.1/css/pico.min.css">
   <link rel="stylesheet" href="{{ static_url('css/app.css') }}">
-  <script src="https://cdn.jsdelivr.net/npm/htmx.org@2.0.4/dist/htmx.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/alpinejs@3.14.8/dist/cdn.min.js" defer></script>
   <script src="https://cdn.plot.ly/plotly-basic-3.0.1.min.js" defer></script>
   <script src="{{ static_url('js/app.js') }}" defer></script>
   {% block extra_head %}{% endblock %}
@@ -45,7 +43,7 @@
     <aside class="sidebar">
       <div class="sidebar-head">
         <a class="brand" href="/" aria-label="LaDa, all tools">
-          {# The simulation sections as beads on one chain, in the order the sidebar lists them. #}
+          {# The sections as beads on one chain, in the order the sidebar lists them. #}
           <svg class="brand-chain" viewBox="0 0 76 16" aria-hidden="true" focusable="false">
             <path d="M8 8 H68" />
             {% for section, _ in nav[0][1] %}
@@ -70,8 +68,9 @@
         <span>Find a tool</span><kbd>/</kbd>
       </button>
 
-      {# Two workspaces, always in this place and this order. Switching only changes which tools
-         the list below shows; it does not leave the page. #}
+      {# With more than one workspace, a switch in this place flips which tools the list below
+         shows, without leaving the page. Version 1 has only the rheometer, so it is not drawn. #}
+      {% if nav | length > 1 %}
       <div class="workspace-switch" role="group" aria-label="Workspace">
         {% for workspace, _ in nav %}
         <button type="button" data-workspace-switch="{{ workspace.key }}"
@@ -79,6 +78,7 @@
                 aria-pressed="{{ 'true' if workspace.key == open_workspace else 'false' }}">{{ workspace.title }}</button>
         {% endfor %}
       </div>
+      {% endif %}
 
       <nav id="site-nav" class="site-nav" aria-label="Tools">
         {% for workspace, groups in nav %}

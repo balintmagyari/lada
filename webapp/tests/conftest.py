@@ -6,14 +6,12 @@ from starlette.testclient import TestClient
 from lada_web.config import Settings
 from lada_web.main import create_app
 
-REPO_ROOT = Path(__file__).resolve().parents[2]
-DATA_DIR = REPO_ROOT / "tests" / "data"
+RHEO_DATA = Path(__file__).resolve().parent / "data" / "rheometry"
 
 
 @pytest.fixture
-def data_dir() -> Path:
-    assert DATA_DIR.is_dir(), f"Root fixtures directory missing: {DATA_DIR}"
-    return DATA_DIR
+def rheo_data() -> Path:
+    return RHEO_DATA
 
 
 @pytest.fixture
@@ -23,14 +21,7 @@ def temp_root(tmp_path: Path) -> Path:
 
 @pytest.fixture
 def settings(temp_root: Path) -> Settings:
-    return Settings(
-        max_upload_mb=1,
-        max_trajectory_mb=1,
-        max_trajectory_frames=100,
-        max_trajectory_memory_mb=8,
-        max_table_rows=20,
-        temp_root=temp_root,
-    )
+    return Settings(max_upload_mb=1, temp_root=temp_root)
 
 
 @pytest.fixture
@@ -43,24 +34,7 @@ def client(app) -> TestClient:
     return TestClient(app, raise_server_exceptions=False)
 
 
-@pytest.fixture
-def htmx() -> dict[str, str]:
-    return {"HX-Request": "true"}
-
-
-def upload(path: Path) -> dict:
-    """files= argument for TestClient.post: a single file under the legacy 'file' key.
-
-    Still used by the parsers/modifiers routes, which take exactly one file.
-    """
-    return {"file": (path.name, path.read_bytes())}
-
-
 def files_upload(*paths: Path) -> list:
-    """files= argument for TestClient.post: one or more files under the 'files' key.
-
-    Used by the conformations/dynamics/rheology routes, which accept multiple files to
-    average. httpx/TestClient's `files=` parameter accepts a list of (name, file-tuple) pairs
-    to represent several values for the same form field.
-    """
+    """files= argument for TestClient.post: one or more files under the 'files' key, the
+    field the import route reads."""
     return [("files", (p.name, p.read_bytes())) for p in paths]

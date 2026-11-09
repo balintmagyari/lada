@@ -432,11 +432,11 @@ kbd {
   transform: translateY(1.5px);
 }
 
-.bead-parsers { fill: var(--parsers); }
-.bead-conformations { fill: var(--conformations); }
-.bead-dynamics { fill: var(--dynamics); }
-.bead-rheology { fill: var(--rheology); }
-.bead-modifiers { fill: var(--modifiers); }
+.bead-mydata { fill: var(--graphite); }
+.bead-oscillation { fill: var(--oscillation); }
+.bead-flow { fill: var(--flow); }
+.bead-superposition { fill: var(--superposition); }
+.bead-custom { fill: var(--graphite-ink); }
 
 .brand-name {
   font-size: 1.3rem;

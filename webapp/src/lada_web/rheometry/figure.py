@@ -19,7 +19,7 @@ from typing import Literal
 import pandas as pd
 from pydantic import BaseModel, Field, field_validator
 
-from ..errors import TooManyJobs
+from ..errors import ServerBusy
 
 MM_PER_INCH = 25.4
 MAX_POINTS = 500_000
@@ -447,11 +447,11 @@ MEDIA_TYPES = {"svg": "image/svg+xml", "pdf": "application/pdf", "png": "image/p
 _STYLE_LOCK = threading.Lock()
 
 
-class FigureBusy(TooManyJobs):
+class FigureBusy(ServerBusy):
     """Another figure is being drawn and did not finish in time; answered with 429."""
 
     def __init__(self) -> None:
-        Exception.__init__(self, "Another figure is being drawn. Try again in a moment.")
+        super().__init__("Another figure is being drawn. Try again in a moment.")
 
 
 def render(spec: FigureSpec, fmt: Literal["svg", "pdf", "png"], dpi: int = 600) -> bytes:

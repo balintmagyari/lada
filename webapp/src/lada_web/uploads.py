@@ -8,13 +8,10 @@ import re
 import shutil
 import tempfile
 from collections.abc import Iterator
-from contextlib import contextmanager
 from pathlib import Path
 from typing import Annotated
 
 from fastapi import Depends, UploadFile
-from fastapi.responses import FileResponse
-from starlette.background import BackgroundTask
 
 from .config import Settings, get_settings
 from .errors import UploadTooLarge
@@ -68,8 +65,8 @@ def save_uploads(
 ) -> list[Path]:
     """Save each upload into its own numbered subdirectory, preserving every original filename.
 
-    A shared directory would let two uploads with the same sanitized basename (two seed-repeat
-    files both literally named "trajectory.npz") silently collide; a subdirectory per file avoids
+    A shared directory would let two uploads with the same sanitized basename (two exports
+    both literally named "export.csv") silently collide; a subdirectory per file avoids
     that without renaming anything, so `path.name`/`path.stem` still read exactly as a single
     upload's would.
     """
@@ -88,29 +85,9 @@ def save_uploads(
 
 
 def get_workspace(settings: Annotated[Settings, Depends(get_settings)]) -> Iterator[Path]:
-    """Per-request temp directory for view routes; removed when the request finishes."""
+    """Per-request temp directory; removed when the request finishes."""
     ws = new_workspace(settings)
     try:
         yield ws
     finally:
         cleanup_workspace(ws)
-
-
-@contextmanager
-def download_workspace(settings: Settings) -> Iterator[Path]:
-    """Temp directory for download routes: removed on error here, otherwise by file_download."""
-    ws = new_workspace(settings)
-    try:
-        yield ws
-    except BaseException:
-        cleanup_workspace(ws)
-        raise
-
-
-def file_download(path: Path, workspace: Path, media_type: str) -> FileResponse:
-    return FileResponse(
-        path,
-        media_type=media_type,
-        filename=path.name,
-        background=BackgroundTask(cleanup_workspace, workspace),
-    )

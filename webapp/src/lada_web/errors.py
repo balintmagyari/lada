@@ -1,4 +1,4 @@
-"""Application errors and the handlers that turn them into partials, pages or JSON."""
+"""Application errors and the handlers that turn them into pages or JSON."""
 
 import logging
 from urllib.parse import urlsplit
@@ -10,7 +10,7 @@ from fastapi.responses import JSONResponse, Response
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from .catalog import Calculation, get_calculation_by_path
-from .rendering import is_htmx, templates, wants_html
+from .rendering import templates, wants_html
 
 _log = logging.getLogger(__name__)
 
@@ -20,43 +20,11 @@ class UploadTooLarge(Exception):
         super().__init__(f"'{filename}' is larger than the {limit_mb:g} MiB upload limit.")
 
 
-class TrajectoryTooLarge(Exception):
-    def __init__(self, n_frames: int, limit: int) -> None:
-        super().__init__(
-            f"The trajectory has {n_frames} frames; this server accepts at most {limit}. "
-            "Save fewer frames or increase LADA_WEB_MAX_TRAJECTORY_FRAMES."
-        )
+class ServerBusy(Exception):
+    """The server cannot take this request right now; answered with 429."""
 
 
-class TooManyJobs(Exception):
-    """Raised when the background-job concurrency cap is already exhausted."""
-
-    def __init__(self, limit: int) -> None:
-        super().__init__(
-            f"Too many calculations are running at once (limit {limit}). Try again shortly."
-        )
-
-
-class TrajectoryTooLargeInMemory(Exception):
-    """A small compressed archive can still declare an array too big to load."""
-
-    def __init__(self, needed_bytes: int, limit_bytes: int) -> None:
-        mb = 1024 * 1024
-        super().__init__(
-            f"The trajectory needs {needed_bytes / mb:,.0f} MiB in memory once decompressed; "
-            f"this server allows {limit_bytes / mb:g} MiB. Save fewer frames or fewer atoms, "
-            "or increase LADA_WEB_MAX_TRAJECTORY_MEMORY_MB."
-        )
-
-
-_SAFE_ERRORS = (
-    ValueError,
-    KeyError,
-    UploadTooLarge,
-    TrajectoryTooLarge,
-    TrajectoryTooLargeInMemory,
-    TooManyJobs,
-)
+_SAFE_ERRORS = (ValueError, KeyError, UploadTooLarge, ServerBusy)
 
 
 def _message(exc: Exception) -> str:
@@ -64,8 +32,8 @@ def _message(exc: Exception) -> str:
     # tells a user nothing about what went wrong.
     if isinstance(exc, UnicodeDecodeError):
         return (
-            "The file could not be read as text — it looks binary. Check that this is the "
-            "plain-text file this page asks for."
+            "The file could not be read as text — it looks binary. Check that this is a "
+            "rheometer export or a spreadsheet."
         )
     return str(exc.args[0]) if exc.args else str(exc)
 
@@ -75,23 +43,21 @@ def client_safe_message(exc: Exception) -> str:
 
     Errors raised deliberately by this app carry messages written for the user, so they pass
     through unchanged. Anything else — a full disk, a permission problem, a bug — arrives with
-    text that routinely embeds server paths (`/private/tmp/lada-web-.../000/upload.npz`), and an
-    instance meant to be reachable by other people should not hand out its filesystem layout.
-    Those get a fixed message instead; the real one goes to the server log.
+    text that routinely embeds server paths (`/private/tmp/lada-web-.../000/export.csv`), and
+    an instance meant to be reachable by other people should not hand out its filesystem
+    layout. Those get a fixed message instead; the real one goes to the server log.
     """
     if isinstance(exc, _SAFE_ERRORS):
         return _message(exc)
     return (
-        "The calculation stopped because of an unexpected server error. The details were "
+        "The request stopped because of an unexpected server error. The details were "
         "written to the server log."
     )
 
 
 def _page_came_from(request: Request) -> Calculation | None:
-    """The calculation page this request was submitted from, if the referer names one of ours.
+    """The tool page this request came from, if the referer names one of ours.
 
-    Download buttons are native form submits, so an error replaces the whole page and takes
-    the rendered table and the filled-in form with it. Offering the way back costs nothing.
     Only a same-origin path that matches a real catalog entry is used — the referer itself is
     never reflected into the page.
     """
@@ -117,19 +83,16 @@ def error_response(
     title: str = "That didn't work",
     headers: dict[str, str] | None = None,
 ) -> Response:
-    context = {"title": title, "message": message}
-    if is_htmx(request):
-        return templates.TemplateResponse(
-            request, "partials/error.html", context, status_code=status_code, headers=headers
-        )
     if wants_html(request):
         back = _page_came_from(request)
-        page_context = context | {
+        context = {
+            "title": title,
+            "message": message,
             "back_path": back.path if back else None,
             "back_title": back.title if back else None,
         }
         return templates.TemplateResponse(
-            request, "error_page.html", page_context, status_code=status_code, headers=headers
+            request, "error_page.html", context, status_code=status_code, headers=headers
         )
     return JSONResponse({"detail": message}, status_code=status_code, headers=headers)
 
@@ -143,18 +106,16 @@ def register_error_handlers(app: FastAPI) -> None:
         )
 
     @app.exception_handler(UploadTooLarge)
-    @app.exception_handler(TrajectoryTooLarge)
-    @app.exception_handler(TrajectoryTooLargeInMemory)
     async def too_large(request: Request, exc: Exception) -> Response:
         return error_response(request, 413, _message(exc), title="Too large")
 
-    @app.exception_handler(TooManyJobs)
-    async def too_many_jobs(request: Request, exc: Exception) -> Response:
+    @app.exception_handler(ServerBusy)
+    async def server_busy(request: Request, exc: Exception) -> Response:
         return error_response(request, 429, _message(exc), title="Server busy")
 
     @app.exception_handler(RequestValidationError)
     async def validation_error(request: Request, exc: RequestValidationError) -> Response:
-        if is_htmx(request) or wants_html(request):
+        if wants_html(request):
             problems = [
                 f"{'.'.join(str(p) for p in e['loc'] if p != 'body')}: {e['msg']}"
                 for e in exc.errors()
@@ -176,8 +137,7 @@ def register_error_handlers(app: FastAPI) -> None:
 
     @app.exception_handler(Exception)
     async def unexpected(request: Request, exc: Exception) -> Response:
-        # Logged in full server-side; the response says only that it happened. The message used
-        # to interpolate str(exc), which handed every client the server's temp paths.
+        # Logged in full server-side; the response says only that it happened.
         _log.exception("Unhandled error for %s %s", request.method, request.url.path)
         return error_response(
             request,

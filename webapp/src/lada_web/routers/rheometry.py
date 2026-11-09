@@ -5,6 +5,7 @@ holds the datasets from then on. `rederive` takes a block back after the user ha
 what a column is, and returns it with its derived columns and test type recomputed.
 """
 
+import csv
 from pathlib import Path
 from typing import Annotated, Literal
 
@@ -15,7 +16,7 @@ from pydantic import BaseModel
 from ..config import Settings, get_settings
 from ..rheometry import quantities as q
 from ..rheometry.derive import derive
-from ..rheometry.detect import block_temperature, detect_test_type
+from ..rheometry.detect import block_temperature, detect_test_type, metadata_temperature
 from ..rheometry.figure import MEDIA_TYPES, FigureSpec, pgfplots_zip, render_with_notes
 from ..rheometry.model import FORMAT_LABELS, TEST_TYPE_LABELS, Block, ParseError, ParseResponse
 from ..rheometry.readers import ACCEPTED, Limits, read_file
@@ -43,7 +44,7 @@ def parse(files: FilesDep, settings: SettingsDep, ws: WorkspaceDep) -> ParseResp
         name = Path(upload.filename or path.name).name
         try:
             response.datasets.append(read_file(path, name, limits))
-        except ValueError as exc:
+        except (ValueError, csv.Error) as exc:
             response.errors.append(ParseError(filename=name, message=str(exc)))
     return response
 
@@ -75,6 +76,10 @@ def _source_unit(column) -> q.Unit | None:
     if column.quantity is None:
         return None
     spec = q.QUANTITY_BY_KEY[column.quantity]
+    # An empty source unit means the file gave none and the canonical unit was assumed; it
+    # never means the unit spelt "" (a strain read as a fraction records "1" instead).
+    if not column.source_unit:
+        return spec.canonical
     return q.parse_unit(column.source_unit, column.quantity) or spec.canonical
 
 
@@ -102,7 +107,13 @@ def rederive(body: RederiveRequest) -> Block:
             column.quantity, column.unit, column.values = None, unit_text, raw
         else:
             spec = q.QUANTITY_BY_KEY[override.quantity]
-            unit = q.parse_unit(unit_text, override.quantity) if unit_text else spec.canonical
+            if unit_text or override.unit is not None:
+                # Named by the user, "" included: for a strain that is the fraction.
+                unit = q.parse_unit(unit_text, override.quantity)
+                if unit is None and not unit_text:
+                    unit = spec.canonical
+            else:
+                unit = spec.canonical
             if unit is None:
                 choices = ", ".join(u.symbol or "no unit" for u in spec.units)
                 raise ValueError(
@@ -111,11 +122,15 @@ def rederive(body: RederiveRequest) -> Block:
             column.quantity = override.quantity
             column.unit = spec.canonical.symbol
             column.values = q.to_canonical(raw, unit)
+            if not unit_text and unit != spec.canonical:
+                unit_text = unit.aliases[0]
         column.source_unit = unit_text or ""
         column.is_index = False
     derive(block)
     block.test_type = detect_test_type(block)
-    block.temperature = block_temperature(block, block.temperature)
+    # From the columns as they are now, else from the block's metadata, as on import: never
+    # the old value, which may have come from a column that is no longer a temperature.
+    block.temperature = block_temperature(block, metadata_temperature(block.metadata))
     return block
 
 

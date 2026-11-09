@@ -4,6 +4,8 @@ from typing import Annotated, Literal
 
 from fastapi import Form
 
+from .regimes import MAX_PRONY_MODES
+
 
 class ThermoState:
     """System volume and temperature (LJ units), both required and strictly positive."""
@@ -25,7 +27,7 @@ class PronyParams:
         method: Annotated[Literal["GK", "FSR", "both"], Form()] = "GK",
         t_min: Annotated[float, Form(gt=0)] = 1.0,
         t_cutoff: Annotated[float | None, Form()] = None,
-        n_modes: Annotated[int, Form(ge=1)] = 50,
+        n_modes: Annotated[int, Form(ge=1, le=MAX_PRONY_MODES)] = 50,
         n_omega: Annotated[int, Form(ge=2, le=5000)] = 200,
         omega_min: Annotated[float | None, Form(gt=0)] = None,
         omega_max: Annotated[float | None, Form(gt=0)] = None,

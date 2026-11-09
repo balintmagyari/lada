@@ -37,6 +37,14 @@ def parse_custom_lines(text: str) -> list[list[int]]:
             raise ValueError(f"Line {number}: a chain needs at least two bead indices.")
         if min(values) < 0:
             raise ValueError(f"Line {number}: bead indices must be zero or positive.")
+        # "0,0" is not a chain but a zero-length vector, whose autocorrelation is 0/0: without
+        # this check every row of the result came back empty, with nothing saying why.
+        repeated = sorted({v for v in values if values.count(v) > 1})
+        if repeated:
+            raise ValueError(
+                f"Line {number}: bead {repeated[0]} is listed more than once. Every bead of a "
+                "chain must be a different atom; for head,tail the two ends must differ."
+            )
         chains.append(values)
     if not chains:
         raise ValueError("Custom topology is empty: enter one chain per line.")
@@ -146,6 +154,16 @@ def topology_stats(topology: ChainTopology) -> dict:
     }
 
 
+def _example_chain(pair: list[int]) -> str:
+    """A full bead list spelling out a head,tail pair, shortened when the chain is long."""
+    head, tail = pair
+    step = 1 if tail > head else -1
+    beads = list(range(head, tail + step, step))
+    if len(beads) > 6:
+        return f"{beads[0]} {beads[1]} {beads[2]} ... {beads[-1]}"
+    return " ".join(str(b) for b in beads)
+
+
 def resolve_chain_indices(
     mode, *, n_chains, beads_per_chain, first_index, custom, n_atoms, topology=None
 ) -> np.ndarray:
@@ -155,6 +173,18 @@ def resolve_chain_indices(
     if mode == "data_file":
         return _checked_topology(topology, n_atoms).chain_indices()
     chains_list = parse_custom_lines(custom)
+    # Rouse modes are sums over every bead of a chain, so a line naming only the two ends
+    # ("0,7") would be analysed as a two-bead chain: p = 1 of that is the end-to-end vector, and
+    # the page returned the segment ACF under a Rouse-mode title. Two indices are only a chain
+    # here when they are neighbours, i.e. a genuine two-bead dumbbell.
+    for number, chain in enumerate(chains_list, start=1):
+        if len(chain) == 2 and abs(chain[1] - chain[0]) != 1:
+            raise ValueError(
+                f"Chain {number} is given as head,tail ({chain[0]},{chain[1]}), but Rouse modes "
+                "need every bead of each chain, listed in backbone order "
+                f"(for example {_example_chain(chain)}). Head,tail pairs only describe the "
+                "end-to-end vector; list all beads, or use the equal-length chains mode."
+            )
     if len({len(c) for c in chains_list}) != 1:
         raise ValueError(
             "Every chain must list the same number of beads for a Rouse-mode analysis."

@@ -41,6 +41,16 @@
       logX: false,
       logY: true
     },
+    time_sweep: {
+      title: "Time sweep",
+      testTypes: ["time_sweep"],
+      x: ["time"],
+      y: ["storage_modulus", "loss_modulus"],
+      right: ["tan_delta", "complex_viscosity", "phase_angle"],
+      defaultRight: "tan_delta",
+      logX: false,
+      logY: true
+    },
     flow_curve: {
       title: "Flow curve",
       testTypes: ["flow_curve"],
@@ -129,6 +139,17 @@
   };
   var CYCLE = ["circle", "square", "triangle-up", "diamond", "triangle-down", "cross"];
 
+  // The marker shapes every renderer can draw alike: Plotly here, matplotlib and pgfplots in
+  // the exported figure.
+  var SHAPES = [
+    ["circle", "Circle"],
+    ["square", "Square"],
+    ["diamond", "Diamond"],
+    ["triangle-up", "Triangle, up"],
+    ["triangle-down", "Triangle, down"],
+    ["cross", "Cross"]
+  ];
+
   function markerFor(quantity, index) {
     return MARKERS[quantity] || { symbol: CYCLE[(index || 0) % CYCLE.length], filled: true };
   }
@@ -138,7 +159,9 @@
     single: { name: "Single column, 85 mm", width: 85, height: 65 },
     double: { name: "Double column, 175 mm", width: 175, height: 100 },
     slide: { name: "Slide, 16:9", width: 254, height: 142.9 },
-    square: { name: "Square, 85 mm", width: 85, height: 85 }
+    square: { name: "Square, 85 mm", width: 85, height: 85 },
+    // Width and height typed in (style.widthMm, style.heightMm).
+    custom: { name: "Custom size", width: 85, height: 65 }
   };
 
   function axis(log) {
@@ -153,6 +176,12 @@
       blocks: {}, // blockId -> { on: bool, label: string }
       right: preset.defaultRight,
       custom: { x: "", left: [], right: [] },
+      // A graph page's own choice of what goes on each axis, once the user changes it: until
+      // then (on: false) the page's preset decides.
+      override: { on: false, x: "", left: [], right: [] },
+      // Per-sample colours (block id -> #rrggbb) and per-quantity marker styles (column
+      // identifier -> { symbol, filled, size, color }); anything unset follows the defaults.
+      styles: { samples: {}, series: {} },
       units: {}, // canonical unit -> display unit symbol
       // Master curve only: reference temperature (°C, "" for the middle sweep), which moduli
       // the overlap uses, the bT correction, and shifts set by hand (block id -> log aT).
@@ -166,8 +195,12 @@
         font: "sans",
         fontSize: 9,
         legend: "above",
+        legendX: 0.02, // a dragged legend's top left corner, as fractions of the plot area
+        legendY: 0.98,
         grid: false,
-        size: "single"
+        size: "single",
+        widthMm: 85,
+        heightMm: 65
       }
     };
   }
@@ -177,6 +210,7 @@
     palettes: PALETTES,
     sizes: SIZES,
     markerFor: markerFor,
+    shapes: SHAPES,
     defaultSpec: defaultSpec
   };
 })();

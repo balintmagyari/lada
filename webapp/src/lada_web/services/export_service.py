@@ -35,8 +35,17 @@ def output_filename(stem: str, fmt: Format) -> str:
 
 
 def write_table(df: pd.DataFrame, directory: Path, stem: str, fmt: Format) -> Path:
-    """One code path for both formats: write_pgfplots_table with ',' (csv) or ' ' (pgfplots)."""
+    """One code path for both formats: write_pgfplots_table with ',' (csv) or ' ' (pgfplots).
+
+    `stem` can come from a JSON body, and `directory / "/abs/x"` is "/abs/x" while ".." walks
+    out of the workspace, so the file is written only once its resolved path is known to sit
+    directly inside `directory`. The schemas sanitise the stem first; this is the backstop.
+    """
     path = directory / output_filename(stem, fmt)
+    if path.resolve().parent != directory.resolve():
+        raise ValueError(
+            "The download name may only use letters, digits, '.', '_' and '-'."
+        )
     write_pgfplots_table(df, str(path), delimiter=_FORMATS[fmt][0], fmt=FLOAT_FORMAT)
     return path
 

@@ -12,6 +12,10 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_prefix="LADA_WEB_", extra="ignore")
 
     max_upload_mb: float = 50
+    # A JSON body (regime merges, rheometer re-derivations, figures, TTS) carries already-computed
+    # series, never a raw file, so it gets its own small ceiling instead of inheriting the
+    # multi-file upload budget, which would let one request make the server parse gigabytes.
+    max_json_mb: float = 5
     max_trajectory_mb: float = 500
     max_trajectory_frames: int = 3000
     # A compressed .npz says nothing about its decompressed size: a few megabytes on the wire
@@ -38,6 +42,10 @@ class Settings(BaseSettings):
     @property
     def max_upload_bytes(self) -> int:
         return int(self.max_upload_mb * 1024 * 1024)
+
+    @property
+    def max_json_bytes(self) -> int:
+        return int(self.max_json_mb * 1024 * 1024)
 
     @property
     def max_xlsx_uncompressed_bytes(self) -> int:

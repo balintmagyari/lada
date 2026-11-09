@@ -5,7 +5,8 @@
    the datasets in memory for this page instead and says so through `persistent`.
 
    window.ladaRheoStore: all(), get(id), put(dataset), putMany(list), remove(id), clear(),
-   updateBlock(datasetId, block), persistent (boolean, settled once ready resolves), ready. */
+   updateBlock(datasetId, block), validDataset(dataset, knownQuantity), persistent (boolean,
+   settled once ready resolves), ready. */
 
 (function () {
   "use strict";
@@ -63,8 +64,54 @@
     });
   }
 
+  // --- What a stored dataset must look like ----------------------------------------------
+  // Shared by My data and every graph page: one malformed entry in IndexedDB (from an old
+  // version, or a damaged project file) must be skipped, never break the page that reads it.
+  // `knownQuantity(key)`, when given, says whether a quantity key is in the server's registry.
+
+  function isText(value) {
+    return typeof value === "string";
+  }
+
+  function validColumn(column, points, knownQuantity) {
+    return !!column && typeof column === "object" && isText(column.key) &&
+      isText(column.label) && Array.isArray(column.values) &&
+      column.values.length === points &&
+      column.values.every(function (v) {
+        return v === null || (typeof v === "number" && isFinite(v));
+      }) &&
+      (column.quantity === null || column.quantity === undefined ||
+        (isText(column.quantity) && (!knownQuantity || !!knownQuantity(column.quantity)))) &&
+      (column.unit === undefined || isText(column.unit)) &&
+      (column.source_unit === undefined || isText(column.source_unit));
+  }
+
+  function validBlock(block, knownQuantity) {
+    return !!block && typeof block === "object" && isText(block.id) && isText(block.name) &&
+      typeof block.n_points === "number" && block.n_points >= 0 &&
+      Array.isArray(block.columns) &&
+      block.columns.every(function (c) {
+        return validColumn(c, block.n_points, knownQuantity);
+      }) &&
+      (block.temperature === null || block.temperature === undefined ||
+        typeof block.temperature === "number") &&
+      (block.metadata === undefined || (!!block.metadata && typeof block.metadata === "object"));
+  }
+
+  function validDataset(dataset, knownQuantity) {
+    return !!dataset && typeof dataset === "object" && isText(dataset.id) && dataset.id !== "" &&
+      isText(dataset.filename) && isText(dataset.format_label) &&
+      Array.isArray(dataset.blocks) &&
+      dataset.blocks.every(function (b) {
+        return validBlock(b, knownQuantity);
+      }) &&
+      (dataset.warnings === undefined ||
+        (Array.isArray(dataset.warnings) && dataset.warnings.every(isText)));
+  }
+
   var api = {
     persistent: false,
+    validDataset: validDataset,
     ready: openDb().then(function (opened) {
       db = opened;
       api.persistent = !!opened;

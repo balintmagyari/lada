@@ -110,12 +110,17 @@ def _page_came_from(request: Request) -> Calculation | None:
 
 
 def error_response(
-    request: Request, status_code: int, message: str, *, title: str = "That didn't work"
+    request: Request,
+    status_code: int,
+    message: str,
+    *,
+    title: str = "That didn't work",
+    headers: dict[str, str] | None = None,
 ) -> Response:
     context = {"title": title, "message": message}
     if is_htmx(request):
         return templates.TemplateResponse(
-            request, "partials/error.html", context, status_code=status_code
+            request, "partials/error.html", context, status_code=status_code, headers=headers
         )
     if wants_html(request):
         back = _page_came_from(request)
@@ -124,9 +129,9 @@ def error_response(
             "back_title": back.title if back else None,
         }
         return templates.TemplateResponse(
-            request, "error_page.html", page_context, status_code=status_code
+            request, "error_page.html", page_context, status_code=status_code, headers=headers
         )
-    return JSONResponse({"detail": message}, status_code=status_code)
+    return JSONResponse({"detail": message}, status_code=status_code, headers=headers)
 
 
 def register_error_handlers(app: FastAPI) -> None:
@@ -159,7 +164,15 @@ def register_error_handlers(app: FastAPI) -> None:
 
     @app.exception_handler(StarletteHTTPException)
     async def http_error(request: Request, exc: StarletteHTTPException) -> Response:
-        return error_response(request, exc.status_code, str(exc.detail), title="Not available")
+        # The exception's headers carry what the status code promises: a 405 must say which
+        # methods are allowed (`Allow`), and dropping them breaks well-behaved clients.
+        return error_response(
+            request,
+            exc.status_code,
+            str(exc.detail),
+            title="Not available",
+            headers=getattr(exc, "headers", None),
+        )
 
     @app.exception_handler(Exception)
     async def unexpected(request: Request, exc: Exception) -> Response:

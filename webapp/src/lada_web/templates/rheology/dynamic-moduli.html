@@ -34,8 +34,8 @@
           {{ f.number_field('t_cutoff', 'Fit end time', none, step='any', min=f.POSITIVE,
                             required=False,
                             help='Upper bound of the fitting window. Leave empty to use the full range.') }}
-          {{ f.number_field('n_modes', 'Number of modes', 50, step=1, min=1,
-                            help='Number of Maxwell modes, log-spaced between the fit start time and the last lag time.') }}
+          {{ f.number_field('n_modes', 'Number of modes', 50, step=1, min=1, max=200,
+                            help='Number of Maxwell modes, 1 to 200, log-spaced between the fit start time and the last lag time.') }}
           {{ f.number_field('n_omega', 'Number of frequency points', 200, step=1, min=2, max=5000,
                             help='Number of angular frequency points in the output, 2 to 5000.') }}
           {{ f.number_field('omega_min', 'Minimum frequency', none, step='any', min=f.POSITIVE,

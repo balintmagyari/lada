@@ -60,7 +60,8 @@ def test_set_error_marks_error_and_keeps_the_message():
 def test_sweep_drops_jobs_older_than_the_ttl():
     store = JobStore()
     job = store.create()
-    job.created_at -= 1000  # simulate an old job without sleeping in the test
+    store.set_result(job.id, {"ok": True})
+    job.finished_at -= 1000  # simulate an old job without sleeping in the test
     store.sweep(ttl_seconds=1)
     assert store.get(job.id) is None
 

@@ -164,7 +164,7 @@ def test_dump_table_is_capped_on_screen_but_full_on_download(client, data_dir):
 
 
 @pytest.mark.parametrize(
-    "section,first_col", [("Atoms", "id"), ("Bonds", "bond_id"), ("Masses", "atom_id")]
+    "section,first_col", [("Atoms", "id"), ("Bonds", "bond_id"), ("Masses", "type")]
 )
 def test_data_table_sections(client, data_dir, section, first_col):
     r = client.post(

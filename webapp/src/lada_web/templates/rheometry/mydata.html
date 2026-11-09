@@ -17,10 +17,11 @@
      without scripting it is still an ordinary file picker. #}
   <label class="dropzone" id="dropzone" for="rheo-files">
     <input type="file" id="rheo-files" multiple
-           accept=".csv,.txt,.dat,.tsv,.tab,.asc,.prn,.xlsx,.xlsm,.xls">
+           accept=".csv,.txt,.dat,.tsv,.tab,.asc,.prn,.xlsx,.xlsm,.xls{% for n in range(100) %},.rsd{{ '%02d' % n }}{% endfor %}">
     <span class="dropzone-title">Drop files here, or choose files</span>
     <span class="dropzone-help">CSV, TXT and DAT tables, Excel workbooks, and exports from
-      TA Instruments TRIOS or Anton Paar RheoCompass. Up to 10 files at a time.</span>
+      TA Instruments TRIOS or Anton Paar RheoCompass, and TA Orchestrator data files
+      (.RSD01, .RSD02 …). Up to 10 files at a time.</span>
   </label>
 
   <div class="mydata-status" id="mydata-status" role="status" aria-live="polite" hidden></div>

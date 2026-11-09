@@ -3,7 +3,9 @@
 Only what follows exactly from the definitions is added, never anything fitted:
 
     tan δ = G″ / G′          |G*| = √(G′² + G″²)          |η*| = |G*| / ω
-    ω = 2π f                  f = ω / 2π                   δ = atan(tan δ)  (in degrees)
+    ω = 2π f                  f = ω / 2π                   δ = atan2(G″, G′)  (in degrees)
+
+δ comes from tan δ only when the moduli are missing.
 
 A derived column is flagged `derived=True`, so the interface can say so, and is dropped and
 recomputed whenever the block is re-derived (after the user corrects a column's quantity).
@@ -76,8 +78,13 @@ def derive(block: Block) -> Block:
             _add(block, "complex_modulus", _combine(math.hypot, g1.values, g2.values))
 
     tan = _first(block, "tan_delta")
-    if tan and _first(block, "phase_angle") is None:
-        _add(block, "phase_angle", _combine(lambda t: math.degrees(math.atan(t)), tan.values))
+    if _first(block, "phase_angle") is None:
+        if g1 and g2:
+            # From the moduli, so δ lands in the right quadrant: above 90° when G′ < 0.
+            phase = _combine(lambda a, b: math.degrees(math.atan2(b, a)), g1.values, g2.values)
+            _add(block, "phase_angle", phase)
+        elif tan:
+            _add(block, "phase_angle", _combine(lambda t: math.degrees(math.atan(t)), tan.values))
 
     gstar = _first(block, "complex_modulus")
     if gstar and omega and _first(block, "complex_viscosity") is None:

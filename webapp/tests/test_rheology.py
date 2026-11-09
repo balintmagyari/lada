@@ -138,7 +138,7 @@ def test_dynamic_moduli_n_modes_too_large_is_422_with_library_message(client, da
     r = client.post(
         MODULI_URL,
         files=files_upload(data_dir / "sample_stress_acf.txt"),
-        data={"volume": "1000", "temperature": "1", "n_modes": "500"},
+        data={"volume": "1000", "temperature": "1", "n_modes": "200"},
     )
     assert r.status_code == 422
     assert "Reduce n_modes" in r.json()["detail"]

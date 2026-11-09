@@ -13,15 +13,17 @@ units row and numbers on its own, so a layout that differs from the one assumed 
 imports.
 """
 
+import datetime
 import hashlib
-import re
+import math
 import zipfile
 from dataclasses import dataclass
 from pathlib import Path
 
-from . import tabular
+from . import orchestrator, tabular
+from . import quantities as q
 from .derive import derive
-from .detect import block_temperature, detect_test_type
+from .detect import block_temperature, detect_test_type, metadata_temperature
 from .model import FORMAT_LABELS, Block, Dataset
 
 Rows = tabular.Rows
@@ -29,7 +31,8 @@ Rows = tabular.Rows
 TEXT_SUFFIXES = {".csv", ".txt", ".dat", ".tsv", ".tab", ".asc", ".prn"}
 EXCEL_SUFFIXES = {".xlsx", ".xlsm"}
 LEGACY_EXCEL_SUFFIXES = {".xls"}
-ACCEPTED = sorted(TEXT_SUFFIXES | EXCEL_SUFFIXES | LEGACY_EXCEL_SUFFIXES)
+ORCHESTRATOR_SUFFIXES = set(orchestrator.SUFFIXES)  # .rsd00 … .rsd99
+ACCEPTED = sorted(TEXT_SUFFIXES | EXCEL_SUFFIXES | LEGACY_EXCEL_SUFFIXES | ORCHESTRATOR_SUFFIXES)
 
 
 @dataclass(frozen=True)
@@ -95,8 +98,9 @@ def _key_value(row: list[str]) -> tuple[str, str] | None:
         cells = [rest] if rest else []
     if not cells or len(cells) > 3:
         return None
-    if len(cells) == 1 and ":" in cells[0]:
-        key, _, value = cells[0].partition(":")
+    if len(cells) == 1 and (":" in cells[0] or "=" in cells[0]):
+        # "Key: value", or "Key = value" as some comment headers write it.
+        key, _, value = cells[0].partition(":" if ":" in cells[0] else "=")
         return (key.strip(), value.strip()) if key.strip() and value.strip() else None
     if len(cells) >= 2 and tabular.parse_number(cells[0]) is None:
         return cells[0].rstrip(":").strip(), " ".join(cells[1:])
@@ -110,15 +114,6 @@ def _metadata(rows: Rows) -> dict[str, str]:
         if pair and pair[0] and pair[0] not in out and len(out) < 60:
             out[pair[0][:80]] = pair[1][:200]
     return out
-
-
-def _temperature_from(metadata: dict[str, str]) -> float | None:
-    for key, value in metadata.items():
-        if "temperature" in key.lower() or key.lower() == "temp":
-            match = re.search(r"[+-]?\d+(?:[.,]\d+)?", value)
-            if match:
-                return float(match.group(0).replace(",", "."))
-    return None
 
 
 # --- Splitting a file into segments ------------------------------------------------------
@@ -153,11 +148,12 @@ def _trios_segments(rows: Rows) -> tuple[dict[str, str], list[Segment]]:
 
 
 def _anton_paar_segments(rows: Rows) -> tuple[dict[str, str], list[Segment]]:
-    marks = [
-        i
-        for i, r in enumerate(rows)
-        if _first_cell(r).lower().startswith(("interval and data points", "meas. pts."))
-    ]
+    heads = [_first_cell(r).lower() for r in rows]
+    marks = [i for i, h in enumerate(heads) if h.startswith("interval and data points")]
+    if not marks:
+        # Older exports mark each interval only by its "Meas. Pts." header. Where both appear,
+        # the header sits inside an interval and must not start (and number) one of its own.
+        marks = [i for i, h in enumerate(heads) if h.startswith("meas. pts.")]
     if not marks:
         return _metadata(rows[:50]), [Segment("", rows)]
     header = _metadata(rows[: marks[0]])
@@ -181,7 +177,9 @@ def _anton_paar_segments(rows: Rows) -> tuple[dict[str, str], list[Segment]]:
 # --- Building a dataset ------------------------------------------------------------------
 
 
-def _blocks_from(segments: list[Segment], decimal_comma: bool, prefix: str) -> list[Block]:
+def _blocks_from(
+    segments: list[Segment], decimal_comma: bool, prefix: str, notes: list[str]
+) -> list[Block]:
     blocks: list[Block] = []
     for segment in segments:
         tables = tabular.find_tables(segment.rows, decimal_comma)
@@ -189,7 +187,10 @@ def _blocks_from(segments: list[Segment], decimal_comma: bool, prefix: str) -> l
             columns = tabular.build_columns(table, decimal_comma)
             if not columns:
                 continue
-            local = _metadata(segment.rows[: table.start])
+            # Only the lines since the previous table describe this one: a second table in a
+            # step must not take the first table's rows as its metadata.
+            since = tables[t_index - 1].end if t_index else 0
+            local = _metadata(segment.rows[since : table.start])
             name = segment.name
             if len(tables) > 1:
                 name = f"{name} ({t_index + 1})" if name else f"Table {t_index + 1}"
@@ -201,12 +202,19 @@ def _blocks_from(segments: list[Segment], decimal_comma: bool, prefix: str) -> l
             )
             derive(block)
             block.test_type = detect_test_type(block)
-            block.temperature = block_temperature(block, _temperature_from(local))
+            block.temperature = block_temperature(block, metadata_temperature(local))
+            if not table.header:
+                notes.append(
+                    f"{block.name}: no header row was found above the numbers, so its columns "
+                    "are numbered. If the first row holds names, check it was not read as data."
+                )
             blocks.append(block)
     return blocks
 
 
-def _rows_to_blocks(rows: Rows, prefix: str) -> tuple[str, dict[str, str], list[Block], bool]:
+def _rows_to_blocks(
+    rows: Rows, prefix: str, notes: list[str]
+) -> tuple[str, dict[str, str], list[Block], bool]:
     decimal_comma = tabular.detect_decimal_comma(rows)
     if is_trios(rows):
         fmt = "trios"
@@ -219,7 +227,7 @@ def _rows_to_blocks(rows: Rows, prefix: str) -> tuple[str, dict[str, str], list[
         tables = tabular.find_tables(rows, decimal_comma)
         first = tables[0].start if tables else len(rows)
         metadata, segments = _metadata(rows[:first]), [Segment("", rows)]
-    return fmt, metadata, _blocks_from(segments, decimal_comma, prefix), decimal_comma
+    return fmt, metadata, _blocks_from(segments, decimal_comma, prefix, notes), decimal_comma
 
 
 def _cell_text(value) -> str:
@@ -227,6 +235,12 @@ def _cell_text(value) -> str:
         return ""
     if isinstance(value, float):
         return repr(value)
+    # A cell formatted as a time or a duration is read in seconds, as a time column is.
+    if isinstance(value, datetime.timedelta):
+        return repr(value.total_seconds())
+    if isinstance(value, datetime.time):
+        seconds = value.hour * 3600 + value.minute * 60 + value.second
+        return repr(seconds + value.microsecond / 1e6)
     return str(value).strip()
 
 
@@ -250,12 +264,16 @@ def _xlsx_sheets(path: Path, limits: Limits) -> list[tuple[str, Rows]]:
         raise ValueError("This file is not a readable .xlsx workbook.") from exc
     try:
         sheets: list[tuple[str, Rows]] = []
-        cells = 0
+        cells = numeric = 0
         for sheet in book.worksheets:
             rows = []
             for row in sheet.iter_rows(values_only=True):
                 rows.append([_cell_text(v) for v in row])
                 cells += len(row)
+                if tabular.starts_with_number(rows[-1]):
+                    numeric += 1
+                    if numeric > limits.max_rows:
+                        raise tabular.too_many_points(limits.max_rows)
                 if cells > limits.max_rows * 40:
                     raise ValueError(
                         "This workbook holds more cells than this server reads at once. "
@@ -267,7 +285,7 @@ def _xlsx_sheets(path: Path, limits: Limits) -> list[tuple[str, Rows]]:
         book.close()
 
 
-def _xls_sheets(path: Path) -> list[tuple[str, Rows]]:
+def _xls_sheets(path: Path, limits: Limits) -> list[tuple[str, Rows]]:
     import xlrd
 
     try:
@@ -275,6 +293,8 @@ def _xls_sheets(path: Path) -> list[tuple[str, Rows]]:
     except Exception as exc:  # xlrd raises XLRDError and others for a damaged file
         raise ValueError("This file is not a readable .xls workbook.") from exc
     try:
+        if sum(sheet.nrows for sheet in book.sheets()) > limits.max_rows * 2:
+            raise tabular.too_many_points(limits.max_rows)
         return [
             (sheet.name, [[_cell_text(v) for v in sheet.row_values(r)] for r in range(sheet.nrows)])
             for sheet in book.sheets()
@@ -283,24 +303,65 @@ def _xls_sheets(path: Path) -> list[tuple[str, Rows]]:
         book.release_resources()
 
 
+def _orchestrator_dataset(raw: bytes, filename: str, limits: Limits) -> Dataset:
+    """A TA Orchestrator file: its table is rebuilt from the raw signals, then read exactly as
+    Orchestrator's text export of it would be."""
+    found = orchestrator.read(raw)
+    n = len(found.values[0]) if found.values else 0
+    if n > limits.max_rows:
+        raise tabular.too_many_points(limits.max_rows, n)
+    rows = [
+        ["" if math.isnan(column[i]) else repr(column[i]) for column in found.values]
+        for i in range(n)
+    ]
+    table = tabular.Table(header=found.labels, units=found.units, data=rows, start=0, end=n)
+    columns = tabular.build_columns(table, decimal_comma=False)
+    if not columns:
+        raise ValueError("This TA Orchestrator file holds no measured points.")
+    block = Block(id="", name=(found.name or "Test")[:120], n_points=n, columns=columns)
+    derive(block)
+    block.test_type = detect_test_type(block)
+    block.temperature = block_temperature(block)
+    digest = hashlib.sha1(filename.encode() + raw).hexdigest()[:12]
+    block.id = f"{digest}-0"
+    return Dataset(
+        id=digest,
+        filename=filename,
+        format="orchestrator",
+        format_label=FORMAT_LABELS["orchestrator"],
+        metadata=found.metadata,
+        warnings=found.warnings,
+        blocks=[block],
+    )
+
+
 def read_file(path: Path, filename: str, limits: Limits | None = None) -> Dataset:
     limits = limits or Limits()
     suffix = Path(filename).suffix.lower()
     raw = path.read_bytes()
 
+    if orchestrator.is_orchestrator(raw):
+        return _orchestrator_dataset(raw, filename, limits)
+    if suffix in ORCHESTRATOR_SUFFIXES:
+        raise ValueError(
+            "This file is named like a TA Orchestrator data file but does not start like one. "
+            "Export it as text from Orchestrator (File > Export) and import that instead."
+        )
     if suffix in EXCEL_SUFFIXES or raw[:4] == b"PK\x03\x04":
         sheets, spreadsheet = _xlsx_sheets(path, limits), True
     elif suffix in LEGACY_EXCEL_SUFFIXES or raw[:8] == b"\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1":
-        sheets, spreadsheet = _xls_sheets(path), True
+        sheets, spreadsheet = _xls_sheets(path, limits), True
     else:
-        sheets, spreadsheet = [("", tabular.split_rows(decode(raw)))], False
+        sheets, spreadsheet = [("", tabular.split_rows(decode(raw), limits.max_rows))], False
 
     blocks: list[Block] = []
     metadata: dict[str, str] = {}
     formats: list[str] = []
     decimal_comma = False
+    notes: list[str] = []
     for title, rows in sheets:
-        fmt, meta, sheet_blocks, comma = _rows_to_blocks(rows, title if len(sheets) > 1 else "")
+        prefix = title if len(sheets) > 1 else ""
+        fmt, meta, sheet_blocks, comma = _rows_to_blocks(rows, prefix, notes)
         if sheet_blocks:
             formats.append(fmt)
         decimal_comma |= comma
@@ -315,10 +376,7 @@ def read_file(path: Path, filename: str, limits: Limits | None = None) -> Datase
         )
     total = sum(b.n_points for b in blocks)
     if total > limits.max_rows:
-        raise ValueError(
-            f"This file holds {total:,} data points, more than the {limits.max_rows:,} this "
-            "server reads at once. Export a shorter range or fewer steps."
-        )
+        raise tabular.too_many_points(limits.max_rows, total)
 
     warnings: list[str] = []
     instrument = [f for f in formats if f in ("trios", "anton_paar")]
@@ -328,8 +386,22 @@ def read_file(path: Path, filename: str, limits: Limits | None = None) -> Datase
         warnings.append(f"This spreadsheet holds a {label} export; it was split the same way.")
     if decimal_comma:
         warnings.append("Numbers were written with decimal commas and were read as such.")
+    warnings.extend(notes)
     for block in blocks:
-        unknown = [c.label for c in block.columns if c.quantity is None and not c.is_index]
+        unknown = []
+        for c in block.columns:
+            if c.quantity is not None or c.is_index:
+                continue
+            named = q.recognise(c.label) if c.source_unit else None
+            if named is None:
+                unknown.append(c.label)
+                continue
+            # Named like a known quantity but in a unit the registry does not know.
+            warnings.append(
+                f"{block.name}: “{c.label}” is given in “{c.source_unit}”, which is not a unit "
+                f"of {q.QUANTITY_BY_KEY[named].name.lower()} this app knows, so it was left "
+                "unconverted. Set it on the column if you know what the unit is."
+            )
         if unknown:
             names = ", ".join(f"“{u}”" for u in unknown[:6])
             more = f" and {len(unknown) - 6} more" if len(unknown) > 6 else ""

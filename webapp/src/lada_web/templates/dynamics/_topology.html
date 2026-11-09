@@ -98,11 +98,20 @@
   <div x-show="mode === 'custom'" x-cloak>
     <div class="field">
       <label for="custom">Chains</label>
-      <textarea id="custom" name="custom" rows="6" placeholder="0,7&#10;8,15"
+      <textarea id="custom" name="custom" rows="6" placeholder="{% if rouse_mode_field %}0 1 2 3 4 5 6 7&#10;8 9 10 11 12 13 14 15{% else %}0,7&#10;8,15{% endif %}"
                 aria-describedby="custom-help" :disabled="mode !== 'custom'"></textarea>
-      <small class="field-help" id="custom-help">One chain per line: <code>head,tail</code> or the
-        full bead list. Separate the indices with commas or spaces. Lines starting with
-        <code>#</code> are ignored.</small>
+      <small class="field-help" id="custom-help">
+        {% if rouse_mode_field %}
+        One chain per line, listing <strong>every bead</strong> of the chain in backbone order
+        (for example <code>0 1 2 3 4 5 6 7</code>). Rouse modes are computed from all the beads,
+        so <code>head,tail</code> pairs are refused here. Every chain needs the same number of
+        beads.
+        {% else %}
+        One chain per line: <code>head,tail</code> or the full bead list (only the first and
+        last bead are used).
+        {% endif %}
+        Separate the indices with commas or spaces. Lines starting with <code>#</code> are
+        ignored.</small>
     </div>
   </div>
 

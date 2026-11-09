@@ -561,8 +561,9 @@
   //
   // A page opts in by including partials/_regimes.html, whose "Calculate all regimes" button
   // carries the endpoints and field names to use as data-* attributes (see that file's header
-  // comment). Regime 0 is the page's own fields; extra regimes are indexed 1, 2, ... with
-  // `regime_<i>_<field>` names. Each regime is still one ordinary synchronous request to the
+  // comment). Regime 0 is the page's own fields; each extra regime's inputs are named
+  // `regime_<key>_<field>`, where <key> is the stable key the partial gave that block (its
+  // data-regime-key), not its position: removing a middle regime leaves a gap in the keys. Each regime is still one ordinary synchronous request to the
   // page's per-regime endpoint — no background job/polling is involved here — followed by one
   // request to a merge endpoint that combines the resulting series.
 
@@ -589,10 +590,23 @@
     });
   }
 
-  function regimeFormData(form, regimeIndex, regimeFields, sharedFields) {
+  // The field-name keys of every regime, in page order: null for the page's own fields, then
+  // each extra block's data-regime-key. Counting blocks and numbering them 1..n broke as soon
+  // as a middle regime was removed, because the remaining blocks keep their original keys.
+  function regimeKeys(button) {
+    var fieldset = button.closest("fieldset.regimes");
+    var blocks = fieldset ? fieldset.querySelectorAll("[data-regime-key]") : [];
+    return [null].concat(
+      Array.prototype.map.call(blocks, function (block) {
+        return block.dataset.regimeKey;
+      })
+    );
+  }
+
+  function regimeFormData(form, regimeKey, regimeFields, sharedFields) {
     var data = new FormData();
     regimeFields.forEach(function (field) {
-      var sourceName = regimeIndex === 0 ? field : "regime_" + regimeIndex + "_" + field;
+      var sourceName = regimeKey === null ? field : "regime_" + regimeKey + "_" + field;
       var temp = new FormData();
       copyNamedValue(form, sourceName, temp);
       temp.getAll(sourceName).forEach(function (value) {
@@ -968,7 +982,8 @@
 
   window.ladaRunRegimes = async function (button) {
     var form = button.closest("form");
-    var count = parseInt(button.dataset.regimeCount, 10) || 1;
+    var keys = regimeKeys(button);
+    var count = keys.length;
     var regimeFields = button.dataset.regimeFields.split(",");
     var sharedFields = button.dataset.sharedFields
       ? button.dataset.sharedFields.split(",")
@@ -982,7 +997,7 @@
     try {
       var regimeResults = [];
       for (var i = 0; i < count; i++) {
-        var data = regimeFormData(form, i, regimeFields, sharedFields);
+        var data = regimeFormData(form, keys[i], regimeFields, sharedFields);
         var result = await pollJob(
           await startJob(viewUrl + "/start", data),
           function (fraction, message) {
@@ -1086,5 +1101,7 @@
     escapeHtml: escapeHtml,
     detailMessage: detailMessage,
     readTopology: readTopology,
+    regimeKeys: regimeKeys,
+    regimeFormData: regimeFormData,
   };
 })();

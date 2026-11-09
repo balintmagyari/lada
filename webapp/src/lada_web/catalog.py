@@ -280,6 +280,13 @@ RHEOMETER_CALCULATIONS: list[Calculation] = [
         "rheo-data",
     ),
     _rheometer(
+        "oscillation",
+        "time-sweep",
+        "Time sweep",
+        "G′, G″ and tan δ against time, at one frequency and temperature.",
+        "rheo-data",
+    ),
+    _rheometer(
         "flow",
         "flow-curve",
         "Flow curve",

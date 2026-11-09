@@ -8,9 +8,11 @@ values converted to that quantity's canonical unit.
 
 from typing import Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
-Format = Literal["trios", "anton_paar", "excel", "delimited"]
+from .quantities import QUANTITY_BY_KEY
+
+Format = Literal["trios", "anton_paar", "orchestrator", "excel", "delimited"]
 TestType = Literal[
     "frequency_sweep",
     "amplitude_sweep",
@@ -25,6 +27,7 @@ TestType = Literal[
 FORMAT_LABELS: dict[str, str] = {
     "trios": "TA Instruments TRIOS export",
     "anton_paar": "Anton Paar RheoCompass export",
+    "orchestrator": "TA Orchestrator data file",
     "excel": "Spreadsheet",
     "delimited": "Text table",
 }
@@ -60,6 +63,23 @@ class Block(BaseModel):
     n_points: int
     metadata: dict[str, str] = Field(default_factory=dict)
     columns: list[Column]
+
+    @model_validator(mode="after")
+    def _columns_fit(self) -> "Block":
+        """Every column names a known quantity (or none) and holds one value per point: a
+        block sent back by the browser is checked before anything is computed from it."""
+        for column in self.columns:
+            if column.quantity is not None and column.quantity not in QUANTITY_BY_KEY:
+                raise ValueError(
+                    f"Column “{column.key}” names “{column.quantity}”, which is not a "
+                    "quantity this app knows."
+                )
+            if len(column.values) != self.n_points:
+                raise ValueError(
+                    f"Column “{column.key}” holds {len(column.values)} values but the block "
+                    f"has {self.n_points} points."
+                )
+        return self
 
 
 class Dataset(BaseModel):

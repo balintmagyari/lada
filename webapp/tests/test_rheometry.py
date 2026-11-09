@@ -90,7 +90,9 @@ def test_the_registry_the_browser_gets_converts_the_same_way():
     for entry in q.registry_json():
         spec = q.QUANTITY_BY_KEY[entry["key"]]
         assert entry["unit"] == spec.canonical.symbol
-        assert entry["units"][0] == {"symbol": spec.canonical.symbol, "factor": 1.0, "offset": 0.0}
+        first = {k: entry["units"][0][k] for k in ("symbol", "factor", "offset")}
+        assert first == {"symbol": spec.canonical.symbol, "factor": 1.0, "offset": 0.0}
+        assert entry["units"][0]["aliases"] == list(spec.canonical.aliases)
 
 
 # --- Table finding ---------------------------------------------------------------------------
@@ -396,6 +398,7 @@ GRAPH_PAGES = {
     "frequency-sweep": "frequency_sweep",
     "amplitude-sweep": "amplitude_sweep",
     "temperature-sweep": "temperature_sweep",
+    "time-sweep": "time_sweep",
     "flow-curve": "flow_curve",
     "creep": "creep",
     "stress-relaxation": "stress_relaxation",
@@ -432,6 +435,7 @@ def test_preset_quantities_exist_in_the_registry(client):
         "frequency_sweep",
         "amplitude_sweep",
         "temperature_sweep",
+        "time_sweep",
         "flow_curve",
         "creep",
         "stress_relaxation",

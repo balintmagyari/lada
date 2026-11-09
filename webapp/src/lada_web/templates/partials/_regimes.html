@@ -26,7 +26,10 @@
     regime.</p>
 
   <template x-for="regime in extra" :key="regime">
-    <div class="regime-block">
+    {# data-regime-key, not the block's position, is what app.js reads to find each regime's
+       inputs: removing a middle regime leaves the keys with a gap (1, 3), and the names below
+       are built from the key. #}
+    <div class="regime-block" :data-regime-key="regime">
       <div class="field">
         <label :for="'regime_' + regime + '_files'">
           Files, regime <span x-text="extra.indexOf(regime) + 2"></span>
@@ -51,8 +54,6 @@
   <button type="button" @click="extra.push(nextKey++)">Add another regime</button>
 
   <button type="button" x-show="extra.length"
-          data-regime-count="1"
-          :data-regime-count="extra.length + 1"
           data-regime-fields="{{ regime_fields }}"
           data-shared-fields="{{ regime_shared_fields }}"
           data-view-url="{{ regime_view_url }}"

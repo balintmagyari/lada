@@ -14,6 +14,7 @@
   }
   var P = window.ladaRheoPresets;
   var store = window.ladaRheoStore;
+  var skippedDatasets = 0; // stored datasets that failed store.validDataset
   var key = root.dataset.preset;
   var preset = P.presets[key] || P.presets.custom;
   var SPEC_KEY = "lada-rheo-spec:" + key;
@@ -27,6 +28,8 @@
   var view = "explore"; // or "figure"
   var tts = null; // the last shift factors from /api/rheometry/tts (Master curve only)
   var ttsSent = ""; // the request they answer, to skip asking twice
+  var ttsPending = false; // whether that request is still waiting for its answer
+  var ttsError = ""; // why the last request failed, until one succeeds
   var lastResult = null; // the last drawable build(), for export
 
   function $(id) {
@@ -54,8 +57,14 @@
   function merge(base, saved) {
     Object.keys(saved || {}).forEach(function (k) {
       var value = saved[k];
-      if (value && typeof value === "object" && !Array.isArray(value) &&
-          base[k] && typeof base[k] === "object" && !Array.isArray(base[k])) {
+      var plain = function (v) {
+        return v && typeof v === "object" && !Array.isArray(v);
+      };
+      if (plain(value) && plain(base[k]) && !Object.keys(base[k]).length) {
+        // An open map (tables ticked, units, styles, shifts set by hand): its keys are the
+        // user's, not the defaults', so it comes back whole.
+        base[k] = JSON.parse(JSON.stringify(value));
+      } else if (plain(value) && plain(base[k])) {
         merge(base[k], value);
       } else if (k in base) {
         base[k] = value;
@@ -208,6 +217,92 @@
     return out;
   }
 
+  // --- Markers and colours -------------------------------------------------------------
+
+  var HEX = /^#[0-9a-fA-F]{6}$/;
+
+  function hex(value) {
+    return typeof value === "string" && HEX.test(value) ? value.toLowerCase() : null;
+  }
+
+  function knownShape(symbol) {
+    return P.shapes.some(function (s) {
+      return s[0] === symbol;
+    });
+  }
+
+  // How a quantity is drawn: the rheology convention (G′ filled, G″ open …) unless the user
+  // chose otherwise. `color` is null when the quantity takes each sample's colour.
+  function seriesStyle(ident, index) {
+    var base = P.markerFor(quantityOf(ident), index);
+    var own = (spec.styles.series || {})[ident] || {};
+    var size = parseFloat(own.size);
+    return {
+      symbol: knownShape(own.symbol) ? own.symbol : base.symbol,
+      filled: typeof own.filled === "boolean" ? own.filled : base.filled,
+      size: isFinite(size) && size >= 1 && size <= 30 ? size : Number(spec.style.markerSize) || 7,
+      color: hex(own.color)
+    };
+  }
+
+  // A sample's colour: the one picked for it, else its place in the palette.
+  function sampleColor(entry, n) {
+    var palette = (P.palettes[spec.style.palette] || P.palettes.lada).colors;
+    return hex((spec.styles.samples || {})[entry.id]) || palette[n % palette.length];
+  }
+
+  // A series' colour. One sample: each quantity in its own colour, so G′ and G″ never look
+  // alike. Several samples: colour tells the samples apart and the marker the quantities.
+  function seriesPaint(style, entry, n, index, single) {
+    if (style.color) {
+      return style.color;
+    }
+    if (single) {
+      var palette = (P.palettes[spec.style.palette] || P.palettes.lada).colors;
+      return palette[index % palette.length];
+    }
+    return sampleColor(entry, n);
+  }
+
+  var SVG_NS = "http://www.w3.org/2000/svg";
+  var SHAPE_POINTS = {
+    diamond: "8,1.5 14.5,8 8,14.5 1.5,8",
+    "triangle-up": "8,2 14.5,13.5 1.5,13.5",
+    "triangle-down": "1.5,2.5 14.5,2.5 8,14",
+    cross: "6,1.5 10,1.5 10,6 14.5,6 14.5,10 10,10 10,14.5 6,14.5 6,10 1.5,10 1.5,6 6,6"
+  };
+
+  // A small drawing of a series' marker, exactly as the graph draws it.
+  function markerPreview(symbol, filled, color) {
+    var svg = document.createElementNS(SVG_NS, "svg");
+    svg.setAttribute("viewBox", "0 0 16 16");
+    svg.setAttribute("width", "18");
+    svg.setAttribute("height", "18");
+    svg.setAttribute("aria-hidden", "true");
+    svg.setAttribute("class", "series-preview");
+    var shape;
+    if (symbol === "square") {
+      shape = document.createElementNS(SVG_NS, "rect");
+      shape.setAttribute("x", "2.5");
+      shape.setAttribute("y", "2.5");
+      shape.setAttribute("width", "11");
+      shape.setAttribute("height", "11");
+    } else if (SHAPE_POINTS[symbol]) {
+      shape = document.createElementNS(SVG_NS, "polygon");
+      shape.setAttribute("points", SHAPE_POINTS[symbol]);
+    } else {
+      shape = document.createElementNS(SVG_NS, "circle");
+      shape.setAttribute("cx", "8");
+      shape.setAttribute("cy", "8");
+      shape.setAttribute("r", "5.5");
+    }
+    shape.setAttribute("fill", filled ? color : "none");
+    shape.setAttribute("stroke", color);
+    shape.setAttribute("stroke-width", filled ? "0" : "1.6");
+    svg.appendChild(shape);
+    return svg;
+  }
+
   // --- Units --------------------------------------------------------------------------
 
   function unitOf(q) {
@@ -275,6 +370,22 @@
         right: spec.custom.right.filter(notX)
       };
     }
+    var own = spec.override;
+    if (own && own.on) {
+      // The page's preset, overridden from the panel. A master curve keeps the reduced
+      // frequency along x: superposition shifts along it.
+      var ownX = preset.superpose || !own.x ? firstPresent(active, preset.x) : own.x;
+      var notOwnX = function (i) {
+        return i !== ownX;
+      };
+      return {
+        active: active,
+        x: ownX,
+        left: (own.left || []).filter(notOwnX),
+        right: (own.right || []).filter(notOwnX),
+        overridden: true
+      };
+    }
     return {
       active: active,
       x: firstPresent(active, preset.x),
@@ -292,22 +403,35 @@
     if (!idents.length) {
       return "";
     }
-    var sample = null;
-    entries.some(function (entry) {
-      sample = findColumn(entry.block, idents[0]);
-      return !!sample;
-    });
+    // Each column by its own unit: a recognised quantity is converted to its display unit, so
+    // it has one; an unrecognised column is drawn as the file gave it, so its unit is read
+    // from its own column in every table (and may differ from one table to the next).
     var units = idents.map(function (ident) {
-      return unitText(ident, sample);
+      if (quantityOf(ident)) {
+        return unitText(ident, null);
+      }
+      var seen = [];
+      entries.forEach(function (entry) {
+        var column = findColumn(entry.block, ident);
+        var u = column ? unitText(ident, column) : null;
+        if (u !== null && seen.indexOf(u) < 0) {
+          seen.push(u);
+        }
+      });
+      return seen.filter(function (u) {
+        return u;
+      }).join(" or ");
     });
     var same = units.every(function (u) {
       return u === units[0];
     });
-    var text = idents.map(identSymbol).join(", ");
-    if (same && units[0]) {
-      text += " (" + units[0] + ")";
+    if (same) {
+      var text = idents.map(identSymbol).join(", ");
+      return units[0] ? text + " (" + units[0] + ")" : text;
     }
-    return text;
+    return idents.map(function (ident, i) {
+      return units[i] ? identSymbol(ident) + " (" + units[i] + ")" : identSymbol(ident);
+    }).join(", ");
   }
 
   // On a master curve the horizontal axis is the reduced frequency aT·ω.
@@ -334,7 +458,40 @@
     });
   }
 
+  // The id of the sweep the server will take as the reference: the one measured nearest the
+  // chosen temperature (or the middle one), the first of them in temperature order on a tie,
+  // exactly as /api/rheometry/tts picks it.
+  function referenceId(list, reference) {
+    var sorted = list.slice().sort(function (a, b) {
+      return a.block.temperature - b.block.temperature;
+    });
+    if (!sorted.length) {
+      return null;
+    }
+    var target = isFinite(reference) ? reference
+      : sorted[Math.floor(sorted.length / 2)].block.temperature;
+    var best = sorted[0];
+    sorted.forEach(function (entry) {
+      if (Math.abs(entry.block.temperature - target) < Math.abs(best.block.temperature - target)) {
+        best = entry;
+      }
+    });
+    return best.id;
+  }
+
+  // The reference is never shifted, so a value typed for a sweep before it became the
+  // reference is dropped rather than kept to reappear when the reference moves on.
+  function dropReferenceManual(id) {
+    if (id && spec.tts.manual && Object.prototype.hasOwnProperty.call(spec.tts.manual, id)) {
+      delete spec.tts.manual[id];
+      saveSpec();
+    }
+  }
+
   function ttsRequest() {
+    var reference = parseFloat(spec.tts.reference);
+    var list = ttsEntries();
+    dropReferenceManual(referenceId(list, reference));
     var manual = {};
     Object.keys(spec.tts.manual || {}).forEach(function (id) {
       var value = parseFloat(spec.tts.manual[id]);
@@ -342,9 +499,8 @@
         manual[id] = value;
       }
     });
-    var reference = parseFloat(spec.tts.reference);
     return {
-      curves: ttsEntries().map(function (entry) {
+      curves: list.map(function (entry) {
         var omega = findColumn(entry.block, "q:angular_frequency");
         var g1 = findColumn(entry.block, "q:storage_modulus");
         var g2 = findColumn(entry.block, "q:loss_modulus");
@@ -375,15 +531,17 @@
       var sent = JSON.stringify(body);
       if (body.curves.length < 2) {
         tts = null;
+        ttsError = "";
         ttsSent = "";
         renderTTS();
         draw();
         return;
       }
-      if (sent === ttsSent && tts) {
+      if (sent === ttsSent && (tts || ttsPending)) {
         return;
       }
       ttsSent = sent;
+      ttsPending = true;
       fetch("/api/rheometry/tts", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -401,13 +559,22 @@
           if (sent !== ttsSent) {
             return; // a newer request has been sent since
           }
+          ttsPending = false;
           tts = result;
+          ttsError = "";
+          dropReferenceManual(result.reference_id);
           renderTTS();
           draw();
         })
         .catch(function (error) {
+          if (sent !== ttsSent) {
+            return; // an old request failing must not hide a newer answer
+          }
+          ttsPending = false;
+          ttsSent = ""; // so the same request can be tried again
           tts = null;
-          renderTTS(String(error.message || error));
+          ttsError = String(error.message || error);
+          renderTTS();
           draw();
         });
     }, 150);
@@ -469,7 +636,6 @@
 
   function build() {
     var p = plan();
-    var palette = (P.palettes[spec.style.palette] || P.palettes.lada).colors;
     var traces = [];
     var notes = [];
     if (preset.superpose) {
@@ -489,7 +655,7 @@
     var ink = token("--ink-muted", "#5e6b77");
 
     p.active.forEach(function (entry, n) {
-      var color = palette[n % palette.length];
+      var color = sampleColor(entry, n);
       var xColumn = p.x ? findColumn(entry.block, p.x) : null;
       if (!xColumn) {
         if (p.x) {
@@ -505,7 +671,8 @@
           missing.push(identText(s.ident));
           return;
         }
-        var marker = P.markerFor(quantityOf(s.ident), index);
+        var marker = seriesStyle(s.ident, index);
+        var paint = seriesPaint(marker, entry, n, index, single);
         var sample = labelOf(entry, p.active);
         var name = single && many ? identSymbol(s.ident) : sample;
         var first = !keyed || !traces.some(function (t) {
@@ -521,14 +688,15 @@
           x: xs,
           y: toDisplay(column.values, s.ident),
           yaxis: s.axis,
+          meta: { exportColor: paint },
           marker: {
             symbol: marker.filled ? marker.symbol : marker.symbol + "-open",
-            size: Number(spec.style.markerSize) || 7,
-            color: color,
-            line: { color: color, width: marker.filled ? 0 : 1.5 }
+            size: marker.size,
+            color: paint,
+            line: { color: paint, width: marker.filled ? 0 : 1.5 }
           },
           line: {
-            color: color,
+            color: paint,
             width: Number(spec.style.lineWidth) || 1.5,
             dash: s.axis === "y2" ? "dot" : "solid"
           },
@@ -545,10 +713,12 @@
     });
     if (keyed && traces.length) {
       series.forEach(function (s, index) {
-        var marker = P.markerFor(quantityOf(s.ident), index);
+        var marker = seriesStyle(s.ident, index);
+        var keyInk = marker.color || ink;
         traces.push({
           type: "scatter",
           mode: "markers",
+          meta: { exportColor: marker.color || "#6b6b6b" },
           name: identSymbol(s.ident) + (s.axis === "y2" ? " (right)" : ""),
           x: [null],
           y: [null],
@@ -557,9 +727,9 @@
           hoverinfo: "skip",
           marker: {
             symbol: marker.filled ? marker.symbol : marker.symbol + "-open",
-            size: Number(spec.style.markerSize) || 7,
-            color: ink,
-            line: { color: ink, width: marker.filled ? 0 : 1.5 }
+            size: marker.size,
+            color: keyInk,
+            line: { color: keyInk, width: marker.filled ? 0 : 1.5 }
           }
         });
       });
@@ -567,26 +737,106 @@
     return { plan: p, traces: traces, notes: notes };
   }
 
-  function range(axis) {
-    var lo = parseFloat(axis.min);
-    var hi = parseFloat(axis.max);
-    if (!isFinite(lo) || !isFinite(hi) || lo === hi) {
+  // One end of an axis as Plotly wants it (log10 on a log axis), or null to fit the data.
+  function limitValue(text, log) {
+    var value = parseFloat(text);
+    if (!isFinite(value) || (log && value <= 0)) {
       return null;
     }
-    if (axis.log) {
-      return lo > 0 && hi > 0 ? [Math.log10(lo), Math.log10(hi)] : null;
+    return log ? Math.log10(value) : value;
+  }
+
+  // [low, high] with either end null when only the other was set, or null to fit both.
+  function range(axis) {
+    var lo = limitValue(axis.min, axis.log);
+    var hi = limitValue(axis.max, axis.log);
+    if ((lo === null && hi === null) || lo === hi) {
+      return null;
     }
     return [lo, hi];
   }
 
+  // What the limit fields of an axis amount to, in a sentence under them.
+  function limitHint(axis) {
+    var lo = parseFloat(axis.min);
+    var hi = parseFloat(axis.max);
+    if (axis.log && ((isFinite(lo) && lo <= 0) || (isFinite(hi) && hi <= 0))) {
+      return "A log axis only takes limits above zero; a limit at or below zero is ignored.";
+    }
+    if (isFinite(lo) && isFinite(hi) && lo === hi) {
+      return "From and To are equal, so the axis fits the data.";
+    }
+    if (isFinite(lo) && isFinite(hi) && lo > hi) {
+      return "From is above To, so the axis runs backwards.";
+    }
+    return "Leave an end empty to fit it to the data.";
+  }
+
+  // Where the legend can go: the same places the exported figure offers.
   var LEGENDS = {
     above: { orientation: "h", x: 0, y: 1.02, xanchor: "left", yanchor: "bottom" },
-    "inside-top-right": { x: 0.98, y: 0.98, xanchor: "right", yanchor: "top" },
+    // Below: at the bottom of the whole graph, under the axis title.
+    below: { orientation: "h", x: 0.5, xanchor: "center", y: 0, yref: "container",
+      yanchor: "bottom" },
     "inside-top-left": { x: 0.02, y: 0.98, xanchor: "left", yanchor: "top" },
-    "inside-bottom-right": { x: 0.98, y: 0.02, xanchor: "right", yanchor: "bottom" },
+    "inside-top-center": { x: 0.5, y: 0.98, xanchor: "center", yanchor: "top" },
+    "inside-top-right": { x: 0.98, y: 0.98, xanchor: "right", yanchor: "top" },
+    "inside-center-left": { x: 0.02, y: 0.5, xanchor: "left", yanchor: "middle" },
+    "inside-center": { x: 0.5, y: 0.5, xanchor: "center", yanchor: "middle" },
+    "inside-center-right": { x: 0.98, y: 0.5, xanchor: "right", yanchor: "middle" },
     "inside-bottom-left": { x: 0.02, y: 0.02, xanchor: "left", yanchor: "bottom" },
+    "inside-bottom-center": { x: 0.5, y: 0.02, xanchor: "center", yanchor: "bottom" },
+    "inside-bottom-right": { x: 0.98, y: 0.02, xanchor: "right", yanchor: "bottom" },
     outside: { x: 1.02, y: 1, xanchor: "left", yanchor: "top" }
   };
+
+  var LEGEND_CHOICES = [
+    ["above", "Above the plot"],
+    ["below", "Below the plot"],
+    ["inside-top-left", "Inside, top left"],
+    ["inside-top-center", "Inside, top centre"],
+    ["inside-top-right", "Inside, top right"],
+    ["inside-center-left", "Inside, middle left"],
+    ["inside-center", "Inside, centre"],
+    ["inside-center-right", "Inside, middle right"],
+    ["inside-bottom-left", "Inside, bottom left"],
+    ["inside-bottom-center", "Inside, bottom centre"],
+    ["inside-bottom-right", "Inside, bottom right"],
+    ["outside", "Outside, right"],
+    ["custom", "Where I dragged it"],
+    ["none", "No legend"]
+  ];
+
+  function fraction(value, fallback) {
+    var v = parseFloat(value);
+    return isFinite(v) ? Math.min(2, Math.max(-1, v)) : fallback;
+  }
+
+  function legendPlace() {
+    if (spec.style.legend === "custom") {
+      return { x: fraction(spec.style.legendX, 0.02), y: fraction(spec.style.legendY, 0.98),
+        xanchor: "left", yanchor: "top" };
+    }
+    return LEGENDS[spec.style.legend];
+  }
+
+  // The figure's size in mm: a named size, or the width and height typed in.
+  function figureSize() {
+    if (spec.style.size === "custom") {
+      var mm = function (value, fallback) {
+        var v = parseFloat(value);
+        return isFinite(v) ? Math.min(600, Math.max(20, v)) : fallback;
+      };
+      return { width: mm(spec.style.widthMm, 85), height: mm(spec.style.heightMm, 65) };
+    }
+    return P.sizes[spec.style.size] || P.sizes.single;
+  }
+
+  function sizeHint() {
+    var size = figureSize();
+    return "= " + (size.width / 25.4).toFixed(2) + " × " + (size.height / 25.4).toFixed(2) +
+      " in. From 20 to 600 mm each way.";
+  }
 
   function axisLayout(axis, title, extra) {
     var ink = token("--ink", "#1e2832");
@@ -614,7 +864,8 @@
     var r = range(axis);
     if (r) {
       layout.range = r;
-      layout.autorange = false;
+      // An end left empty still fits the data.
+      layout.autorange = r[0] === null ? "min" : r[1] === null ? "max" : false;
     } else {
       layout.autorange = true;
     }
@@ -665,7 +916,8 @@
         "import a temperature series on", { text: "My data.", href: "/rheometer/my-data" }];
     }
     if (preset.superpose && !tts) {
-      return ["Working out the shift factors…", null];
+      return [ttsError ? "The shift factors could not be worked out: " + ttsError
+        : "Working out the shift factors…", null];
     }
     if (key === "custom" &&
         (!result.plan.x || !result.plan.left.length && !result.plan.right.length)) {
@@ -711,7 +963,7 @@
     }
 
     var p = result.plan;
-    var size = P.sizes[spec.style.size] || P.sizes.single;
+    var size = figureSize();
     var width = target.clientWidth || 600;
     var height = Math.max(260, Math.min(width * size.height / size.width,
       window.innerHeight * 0.78));
@@ -719,12 +971,13 @@
     var hasY2 = result.traces.some(function (t) {
       return t.yaxis === "y2";
     });
-    var legend = LEGENDS[spec.style.legend];
+    var legend = legendPlace();
     var ink = token("--ink", "#1e2832");
 
     var layout = {
       height: height,
-      margin: { l: 72, r: hasY2 ? 72 : 20, t: spec.style.legend === "above" ? 44 : 16, b: 58 },
+      margin: { l: 72, r: hasY2 ? 72 : 20, t: spec.style.legend === "above" ? 44 : 16,
+        b: spec.style.legend === "below" ? 96 : 58 },
       paper_bgcolor: "rgba(0,0,0,0)",
       plot_bgcolor: "rgba(0,0,0,0)",
       font: {
@@ -757,7 +1010,9 @@
         { overlaying: "y", side: "right" });
     }
     // On a log axis spanning under two decades Plotly labels every minor tick (2…9), which
-    // crowds the axis; labelling only the 2s and 5s keeps it readable.
+    // crowds the axis; labelling only the 2s and 5s keeps it readable. Under half a decade
+    // (a near-constant tan δ in a time sweep) those digits may not fall on the axis at all,
+    // so Plotly's own evenly spaced labels are kept.
     [["xaxis", "x", null], ["yaxis", "y", "y"], ["yaxis2", "y", "y2"]].forEach(function (a) {
       var axis = layout[a[0]];
       if (!axis || axis.type !== "log") {
@@ -775,7 +1030,7 @@
       });
       if (values.length > 1) {
         var span = Math.log10(Math.max.apply(null, values) / Math.min.apply(null, values));
-        if (span < 2) {
+        if (span >= 0.5 && span < 2) {
           axis.dtick = "D2";
         }
       }
@@ -788,8 +1043,42 @@
       responsive: true,
       displaylogo: false,
       modeBarButtonsToRemove: ["select2d", "lasso2d", "autoScale2d", "toggleSpikelines"],
-      toImageButtonOptions: { format: "png", scale: 3, filename: key.replace(/_/g, "-") }
+      toImageButtonOptions: { format: "png", scale: 3, filename: key.replace(/_/g, "-") },
+      // The legend can be dragged; where it is dropped becomes the "custom" place.
+      edits: { legendPosition: true }
     });
+    if (!target.ladaLegendDrag && target.on) {
+      target.ladaLegendDrag = true;
+      target.on("plotly_relayout", function (change) {
+        var moved = Object.keys(change || {}).some(function (k) {
+          return k === "legend.x" || k === "legend.y";
+        });
+        if (moved) {
+          legendDropped(target);
+        }
+      });
+    }
+  }
+
+  // The dragged legend's top left corner as fractions of the plot area, which is what the
+  // exported figure anchors a "custom" legend by.
+  function legendDropped(target) {
+    var legendNode = target.querySelector(".legend");
+    var svg = target.querySelector(".main-svg");
+    var plotArea = target._fullLayout && target._fullLayout._size;
+    if (!legendNode || !svg || !plotArea || !plotArea.w || !plotArea.h) {
+      return;
+    }
+    var box = legendNode.getBoundingClientRect();
+    var origin = svg.getBoundingClientRect();
+    var x = (box.left - origin.left - plotArea.l) / plotArea.w;
+    var y = 1 - (box.top - origin.top - plotArea.t) / plotArea.h;
+    spec.style.legend = "custom";
+    spec.style.legendX = Math.round(fraction(x, 0.02) * 1000) / 1000;
+    spec.style.legendY = Math.round(fraction(y, 0.98) * 1000) / 1000;
+    saveSpec();
+    renderForm();
+    draw();
   }
 
   // --- Export -------------------------------------------------------------------------
@@ -812,7 +1101,7 @@
 
   function figureSpec(result) {
     var p = result.plan;
-    var size = P.sizes[spec.style.size] || P.sizes.single;
+    var size = figureSize();
     var hasY2 = result.traces.some(function (t) {
       return t.yaxis === "y2";
     });
@@ -825,6 +1114,8 @@
       marker_size: Number(spec.style.markerSize) || 7,
       line_width: Number(spec.style.lineWidth) || 1.5,
       legend: spec.style.legend,
+      legend_x: fraction(spec.style.legendX, 0.02),
+      legend_y: fraction(spec.style.legendY, 0.98),
       grid: !!spec.style.grid,
       x: Object.assign(axisSpec(spec.axes.x, [p.x]), { title: xTitle(p) }),
       y: axisSpec(spec.axes.y, p.left),
@@ -838,8 +1129,9 @@
           axis: t.yaxis === "y2" ? "y2" : "y",
           x: t.x,
           y: t.y,
-          color: t.legendgroup === "key" ? "#6b6b6b" : t.marker.color,
+          color: (t.meta && t.meta.exportColor) || t.marker.color,
           marker: symbol.replace(/-open$/, ""),
+          marker_size: t.marker.size,
           filled: !open,
           show_legend: t.showlegend !== false,
           key: t.legendgroup === "key"
@@ -906,7 +1198,7 @@
         }
         figureUrl = URL.createObjectURL(blob);
         img.src = figureUrl;
-        var size = P.sizes[spec.style.size] || P.sizes.single;
+        var size = figureSize();
         note.textContent = "Exactly as exported: " + size.width + " × " +
           Math.round(size.height) + " mm, " + spec.style.fontSize + " pt " +
           (spec.style.font === "serif" ? "serif." : "sans-serif.") +
@@ -981,7 +1273,8 @@
     return value === null || value === undefined ? "" : Number(value).toFixed(digits);
   }
 
-  function renderTTS(error) {
+  function renderTTS() {
+    var error = ttsError;
     var panel = $("tts-panel");
     if (!panel) {
       return;
@@ -1022,11 +1315,16 @@
     }
     if (!tts) {
       $("tts-fits").textContent = "";
+      notes.hidden = !error; // nothing stale from an earlier answer
       return;
     }
     tts.shifts.forEach(function (shift) {
       var tr = el("tr");
-      var isRef = shift.temperature === tts.reference;
+      // Only the reference sweep itself is fixed; another measured at the same temperature
+      // gets a shift of its own. (An older server without reference_id: by temperature.)
+      var isRef = tts.reference_id ? shift.id === tts.reference_id
+        : shift.temperature === tts.reference;
+      var lost = !isRef && !shift.manual && shift.auto_log_at === null;
       tr.appendChild(el("td", "", fixed(shift.temperature, 1)));
       var cell = el("td");
       var input = el("input");
@@ -1052,6 +1350,10 @@
         reset.title = shift.auto_log_at !== null
           ? "Overlap found " + fixed(shift.auto_log_at, 3) : "Overlap found no shift";
         source.appendChild(reset);
+      } else if (lost) {
+        source.textContent = "not found";
+        source.title = "Overlap found no shift: the sweep is drawn beside its neighbour and " +
+          "left out of the fits. Type a value to set it by hand.";
       } else {
         source.textContent = "by overlap";
       }
@@ -1115,7 +1417,8 @@
         size: 8,
         color: accent,
         symbol: tts.shifts.map(function (s) {
-          return s.manual ? "circle-open" : "circle";
+          // Hand-set: open; not found (left out of the fits): a cross.
+          return s.fitted === false ? "x-thin-open" : s.manual ? "circle-open" : "circle";
         }),
         line: { color: accent, width: 1.5 }
       },
@@ -1185,7 +1488,7 @@
       lines = ["temperature_C,log_aT,aT,log_bT,set_by"];
       tts.shifts.forEach(function (s) {
         lines.push([s.temperature, s.log_at, Math.pow(10, s.log_at), s.log_bt,
-          s.manual ? "hand" : "overlap"].join(","));
+          s.manual ? "hand" : s.fitted === false ? "not found" : "overlap"].join(","));
       });
     } else {
       lines = ["% Shift factors, reference " + tts.reference + " C", "T log_aT"];
@@ -1244,8 +1547,19 @@
   function renderData() {
     var host = $("studio-data");
     host.textContent = "";
+    if (skippedDatasets) {
+      var damaged = el("p", "studio-hint",
+        skippedDatasets === 1 ? "One saved file could not be read and is left out. "
+          : skippedDatasets + " saved files could not be read and are left out. ");
+      var fix = el("a", "", "Remove it on My data");
+      fix.href = "/rheometer/my-data";
+      damaged.appendChild(fix);
+      damaged.appendChild(document.createTextNode("."));
+      host.appendChild(damaged);
+    }
     if (!entries.length) {
-      var empty = el("p", "studio-hint", "No files imported yet. ");
+      var empty = el("p", "studio-hint",
+        skippedDatasets ? "No other files imported yet. " : "No files imported yet. ");
       var link = el("a", "", "Import files on My data");
       link.href = "/rheometer/my-data";
       empty.appendChild(link);
@@ -1253,7 +1567,6 @@
       host.appendChild(empty);
       return;
     }
-    var palette = (P.palettes[spec.style.palette] || P.palettes.lada).colors;
     var active = activeEntries();
     var matching = entries.filter(function (entry) {
       return preset.testTypes.indexOf(entry.block.test_type) >= 0;
@@ -1276,9 +1589,11 @@
       var swatch = el("span", "block-swatch");
       swatch.setAttribute("aria-hidden", "true");
       var n = active.indexOf(entry);
-      if (n >= 0) {
-        swatch.style.background = palette[n % palette.length];
-        swatch.style.borderColor = palette[n % palette.length];
+      // Colour names a sample only when several are drawn; one sample's quantities each have
+      // their own colour, shown under Series.
+      if (n >= 0 && active.length > 1) {
+        swatch.style.background = sampleColor(entry, n);
+        swatch.style.borderColor = sampleColor(entry, n);
       }
       label.appendChild(swatch);
       var text = el("span", "block-row-text");
@@ -1425,12 +1740,60 @@
     return fieldset;
   }
 
+  // A control that edits spec.styles rather than a spec path.
+  function styleControl(node, kind, id, prop) {
+    node.dataset.style = kind;
+    node.dataset.styleId = id;
+    node.dataset.styleProp = prop;
+    return node;
+  }
+
+  function colorInput(value) {
+    var node = el("input");
+    node.type = "color";
+    node.value = hex(value) || "#2f6fd0";
+    return node;
+  }
+
+  // The horizontal-axis choice and the left and right checklists: all of Custom plot, and on
+  // every other page the way to put something else on an axis.
+  function axisChooser(container, p, base, idents) {
+    if (base === "override" && preset.superpose) {
+      container.appendChild(el("p", "studio-hint",
+        "The horizontal axis stays the shifted frequency aT·ω: superposition works along it."));
+    } else {
+      var xs = idents.slice();
+      if (p.x && xs.indexOf(p.x) < 0) {
+        xs.unshift(p.x);
+      }
+      container.appendChild(field("Horizontal axis", select(base + ".x",
+        xs.map(function (ident) {
+          return [ident, identText(ident)];
+        }), p.x)));
+    }
+    ["left", "right"].forEach(function (side) {
+      var list = el("div", "studio-checklist");
+      list.appendChild(el("span", "studio-checklist-title",
+        side === "left" ? "Left axis" : "Right axis"));
+      idents.forEach(function (ident) {
+        if (ident !== p.x) {
+          list.appendChild(checkbox(null, identText(ident), p[side].indexOf(ident) >= 0,
+            { list: base + "." + side, ident: ident }));
+        }
+      });
+      container.appendChild(list);
+    });
+  }
+
+  var chooserOpen = false; // whether "Choose every axis yourself" was left open
+
   function renderForm() {
     var form = $("studio-form");
     var active = document.activeElement;
     var focused = active && form.contains(active)
       ? { path: active.dataset.path || "", ident: active.dataset.ident || "",
-        list: active.dataset.list || "" }
+        list: active.dataset.list || "",
+        style: (active.dataset.styleId || "") + "|" + (active.dataset.styleProp || "") }
       : null;
     fieldCount = 0;
     form.textContent = "";
@@ -1450,31 +1813,45 @@
       if (!idents.length) {
         what.appendChild(el("p", "studio-hint", "Tick a table to choose from its columns."));
       } else {
-        what.appendChild(field("Horizontal axis", select("custom.x",
-          idents.map(function (ident) {
-            return [ident, identText(ident)];
-          }), p.x)));
-        ["left", "right"].forEach(function (side) {
-          var list = el("div", "studio-checklist");
-          list.appendChild(el("span", "studio-checklist-title",
-            side === "left" ? "Left axis" : "Right axis"));
-          idents.forEach(function (ident) {
-            if (ident !== p.x) {
-              list.appendChild(checkbox(null, identText(ident),
-                spec.custom[side].indexOf(ident) >= 0, { list: "custom." + side, ident: ident }));
-            }
-          });
-          what.appendChild(list);
-        });
+        axisChooser(what, p, "custom", idents);
       }
       form.appendChild(what);
-    } else if (preset.right.length) {
-      var extra = group("Right axis");
-      extra.appendChild(field("Also show", select("right",
-        [["", "Nothing"]].concat(preset.right.map(function (q) {
-          return [q, byQ[q] ? byQ[q].name + " " + byQ[q].symbol : q];
-        })), spec.right)));
-      form.appendChild(extra);
+    } else {
+      var plotted = group("What is plotted");
+      if (preset.right.length && !p.overridden) {
+        plotted.appendChild(field("Also show on the right", select("right",
+          [["", "Nothing"]].concat(preset.right.map(function (q) {
+            return [q, byQ[q] ? byQ[q].name + " " + byQ[q].symbol : q];
+          })), spec.right)));
+      }
+      var chosen = availableIdents(p.active.length ? p.active : entries);
+      if (chosen.length) {
+        var more = el("details", "studio-more");
+        more.open = chooserOpen || !!p.overridden;
+        more.addEventListener("toggle", function () {
+          chooserOpen = more.open;
+        });
+        more.appendChild(el("summary", "", "Choose every axis yourself"));
+        axisChooser(more, p, "override", chosen);
+        if (p.overridden) {
+          var back = el("button", "quiet-button", "Back to this page's usual axes");
+          back.type = "button";
+          back.addEventListener("click", function () {
+            spec.override = { on: false, x: "", left: [], right: [] };
+            spec.axes.x.log = !!preset.logX;
+            spec.axes.y.log = !!preset.logY;
+            spec.axes.y2.log = !!(spec.right && byQ[spec.right] && byQ[spec.right].log);
+            saveSpec();
+            renderForm();
+            draw();
+          });
+          more.appendChild(back);
+        }
+        plotted.appendChild(more);
+      }
+      if (plotted.children.length > 1) {
+        form.appendChild(plotted);
+      }
     }
 
     // Units: one choice per kind of unit on show, so G′ and G″ can never disagree on one axis.
@@ -1518,14 +1895,20 @@
       var box = el("div", "studio-axis");
       var head = el("div", "studio-axis-head");
       head.appendChild(el("span", "studio-axis-name", a[1]));
-      head.appendChild(checkbox("axes." + a[0] + ".log", "Log scale", spec.axes[a[0]].log));
       box.appendChild(head);
+      var scale = select("axes." + a[0] + ".log",
+        [["false", "Linear"], ["true", "Logarithmic"]], String(!!spec.axes[a[0]].log));
+      scale.dataset.bool = "1";
+      box.appendChild(field("Scale", scale));
       var limits = el("div", "studio-pair");
       limits.appendChild(field("From", input("axes." + a[0] + ".min", "number",
         spec.axes[a[0]].min, { step: "any", placeholder: "auto" })));
       limits.appendChild(field("To", input("axes." + a[0] + ".max", "number",
         spec.axes[a[0]].max, { step: "any", placeholder: "auto" })));
       box.appendChild(limits);
+      var hint = el("small", "studio-field-hint", limitHint(spec.axes[a[0]]));
+      hint.id = "limit-hint-" + a[0];
+      box.appendChild(hint);
       box.appendChild(field("Title", input("axes." + a[0] + ".title", "text",
         spec.axes[a[0]].title, { placeholder: axisTitle(a[2], "") })));
       axes.appendChild(box);
@@ -1537,16 +1920,48 @@
     look.appendChild(field("Size", select("style.size", Object.keys(P.sizes).map(function (k) {
       return [k, P.sizes[k].name];
     }), spec.style.size), "The shape the figure will be exported at."));
+    if (spec.style.size === "custom") {
+      var dims = el("div", "studio-pair");
+      dims.appendChild(field("Width, mm", input("style.widthMm", "number", spec.style.widthMm,
+        { min: 20, max: 600, step: 0.5 })));
+      dims.appendChild(field("Height, mm", input("style.heightMm", "number", spec.style.heightMm,
+        { min: 20, max: 600, step: 0.5 })));
+      look.appendChild(dims);
+      var inches = el("small", "studio-field-hint", sizeHint());
+      inches.id = "size-hint";
+      look.appendChild(inches);
+    }
     look.appendChild(field("Colours", select("style.palette",
       Object.keys(P.palettes).map(function (k) {
         return [k, P.palettes[k].name];
       }), spec.style.palette)));
+    if (p.active.length > 1) {
+      var swatches = el("div", "studio-swatches");
+      p.active.forEach(function (entry, n) {
+        swatches.appendChild(field(labelOf(entry, p.active),
+          styleControl(colorInput(sampleColor(entry, n)), "sample", entry.id, "color")));
+      });
+      look.appendChild(swatches);
+      if (Object.keys(spec.styles.samples || {}).length) {
+        var palette = el("button", "quiet-button", "Use the palette's colours again");
+        palette.type = "button";
+        palette.addEventListener("click", function () {
+          spec.styles.samples = {};
+          saveSpec();
+          renderData();
+          renderForm();
+          draw();
+        });
+        look.appendChild(palette);
+      }
+    }
     look.appendChild(field("Draw as", select("style.mode",
       [["markers", "Points"], ["both", "Points and lines"], ["lines", "Lines"]],
       spec.style.mode)));
     var pair = el("div", "studio-pair");
     pair.appendChild(field("Point size", input("style.markerSize", "number",
-      spec.style.markerSize, { min: 2, max: 16, step: 1 })));
+      spec.style.markerSize, { min: 2, max: 16, step: 1 }),
+    "Each quantity can have its own under Markers."));
     pair.appendChild(field("Line width", input("style.lineWidth", "number",
       spec.style.lineWidth, { min: 0.5, max: 5, step: 0.25 })));
     look.appendChild(pair);
@@ -1556,17 +1971,81 @@
     pair2.appendChild(field("Font size, pt", input("style.fontSize", "number",
       spec.style.fontSize, { min: 6, max: 24, step: 0.5 })));
     look.appendChild(pair2);
-    look.appendChild(field("Legend", select("style.legend", [
-      ["above", "Above the plot"],
-      ["inside-top-right", "Inside, top right"],
-      ["inside-top-left", "Inside, top left"],
-      ["inside-bottom-right", "Inside, bottom right"],
-      ["inside-bottom-left", "Inside, bottom left"],
-      ["outside", "Outside, right"],
-      ["none", "No legend"]
-    ], spec.style.legend)));
+    look.appendChild(field("Legend", select("style.legend", LEGEND_CHOICES, spec.style.legend),
+      "Or drag the legend on the Explore graph: the exported figure puts it there too."));
     look.appendChild(checkbox("style.grid", "Grid lines", spec.style.grid));
     form.appendChild(look);
+
+    // Markers: one row per quantity on show. Unset choices follow the convention (G′ filled,
+    // G″ open, each sample in its colour) and the point size above.
+    var shown = [];
+    p.left.concat(p.right).forEach(function (ident) {
+      if (shown.indexOf(ident) < 0) {
+        shown.push(ident);
+      }
+    });
+    if (shown.length) {
+      var marks = group("Series");
+      var oneSample = p.active.length === 1;
+      marks.appendChild(el("p", "studio-hint", oneSample
+        ? "Each quantity has its own colour and marker."
+        : "Colour tells the samples apart; the marker tells the quantities apart."));
+      shown.forEach(function (ident, index) {
+        var st = seriesStyle(ident, index);
+        var own = (spec.styles.series || {})[ident] || {};
+        var shownColour = oneSample ? seriesPaint(st, p.active[0], 0, index, true)
+          : st.color || token("--ink-muted", "#6b6b6b");
+        var row = el("div", "studio-series");
+        row.style.setProperty("--series-color", shownColour);
+        var head = el("div", "studio-series-head");
+        head.appendChild(markerPreview(st.symbol, st.filled, shownColour));
+        head.appendChild(el("span", "studio-axis-name", identText(ident)));
+        head.appendChild(el("span", "studio-series-axis",
+          p.right.indexOf(ident) >= 0 ? "Right axis" : "Left axis"));
+        row.appendChild(head);
+        var shape = el("div", "studio-pair");
+        shape.appendChild(field("Shape",
+          styleControl(select("", P.shapes, st.symbol), "series", ident, "symbol")));
+        shape.appendChild(field("Fill", styleControl(
+          select("", [["true", "Filled"], ["false", "Open"]], String(st.filled)),
+          "series", ident, "filled")));
+        row.appendChild(shape);
+        var paint = el("div", "studio-pair");
+        var size = el("input");
+        size.type = "number";
+        size.min = "1";
+        size.max = "30";
+        size.step = "0.5";
+        size.placeholder = String(Number(spec.style.markerSize) || 7);
+        size.value = own.size === undefined || own.size === null ? "" : own.size;
+        paint.appendChild(field("Size", styleControl(size, "series", ident, "size")));
+        var colour = styleControl(colorInput(st.color ||
+          (oneSample ? shownColour : p.active[0] ? sampleColor(p.active[0], 0) : "")),
+        "series", ident, "color");
+        colour.disabled = !st.color;
+        var colourField = field("Colour", colour);
+        var ownColour = checkbox(null, oneSample ? "Choose colour" : "Same for every sample",
+          !!st.color);
+        var ownBox = styleControl(ownColour.querySelector("input"), "series", ident, "ownColor");
+        ownBox.dataset.colorFor = colour.id;
+        colourField.appendChild(ownColour);
+        paint.appendChild(colourField);
+        row.appendChild(paint);
+        marks.appendChild(row);
+      });
+      if (Object.keys(spec.styles.series || {}).length) {
+        var usual = el("button", "quiet-button", "Back to the usual markers");
+        usual.type = "button";
+        usual.addEventListener("click", function () {
+          spec.styles.series = {};
+          saveSpec();
+          renderForm();
+          draw();
+        });
+        marks.appendChild(usual);
+      }
+      form.appendChild(marks);
+    }
 
     var reset = el("button", "quiet-button studio-reset", "Reset this graph");
     reset.type = "button";
@@ -1586,7 +2065,8 @@
         function (node) {
           return (node.dataset.path || "") === focused.path &&
             (node.dataset.ident || "") === focused.ident &&
-            (node.dataset.list || "") === focused.list;
+            (node.dataset.list || "") === focused.list &&
+            (node.dataset.styleId || "") + "|" + (node.dataset.styleProp || "") === focused.style;
         })[0];
       if (again) {
         again.focus();
@@ -1596,34 +2076,104 @@
 
   // Structural choices change which controls exist; everything else only redraws.
   function isStructural(path) {
-    return path === "right" || path === "custom.x" || path.indexOf("units.") === 0;
+    return path === "right" || path === "custom.x" || path === "override.x" ||
+      path === "style.palette" || path === "style.markerSize" || path === "style.size" ||
+      path.indexOf("units.") === 0;
+  }
+
+  // The first change to what a graph page plots starts from what it was plotting.
+  function seedOverride() {
+    if (!spec.override.on) {
+      var current = plan();
+      spec.override = {
+        on: true,
+        x: current.x,
+        left: current.left.slice(),
+        right: current.right.slice()
+      };
+    }
+  }
+
+  function onStyleChange(event, target) {
+    var id = target.dataset.styleId;
+    var prop = target.dataset.styleProp;
+    if (target.dataset.style === "sample") {
+      if (hex(target.value)) {
+        spec.styles.samples[id] = hex(target.value);
+      }
+      saveSpec();
+      renderData();
+      redrawSoon();
+      return;
+    }
+    if (event.type !== "change" && target.type !== "color" && target.type !== "number") {
+      return;
+    }
+    var own = spec.styles.series[id] || (spec.styles.series[id] = {});
+    if (prop === "filled") {
+      own.filled = target.value === "true";
+    } else if (prop === "size") {
+      var size = parseFloat(target.value);
+      if (isFinite(size) && size >= 1 && size <= 30) {
+        own.size = size;
+      } else {
+        delete own.size;
+      }
+    } else if (prop === "ownColor") {
+      var colour = $(target.dataset.colorFor);
+      colour.disabled = !target.checked;
+      if (target.checked) {
+        own.color = hex(colour.value);
+      } else {
+        delete own.color;
+      }
+    } else if (prop === "color") {
+      own.color = hex(target.value) || own.color;
+    } else if (prop === "symbol" && knownShape(target.value)) {
+      own.symbol = target.value;
+    }
+    saveSpec();
+    redrawSoon();
+    if (event.type === "change") {
+      renderForm(); // so each series card's preview shows the new look
+    }
   }
 
   function onFormChange(event) {
     var target = event.target;
+    if (target.dataset.style) {
+      onStyleChange(event, target);
+      return;
+    }
     if (target.dataset.list) {
       if (event.type !== "change") {
         return;
       }
+      var listPath = target.dataset.list;
+      var listBase = listPath.split(".")[0];
+      if (listBase === "override") {
+        seedOverride();
+      }
       var ident = target.dataset.ident;
-      var list = (getPath(target.dataset.list) || []).filter(function (i) {
+      var list = (getPath(listPath) || []).filter(function (i) {
         return i !== ident;
       });
+      var onLeft = /\.left$/.test(listPath);
       if (target.checked) {
         list.push(ident);
         // A quantity sits on one side only.
-        var other = target.dataset.list === "custom.left" ? "custom.right" : "custom.left";
+        var other = listBase + (onLeft ? ".right" : ".left");
         setPath(other, (getPath(other) || []).filter(function (i) {
           return i !== ident;
         }));
       }
       // The first quantity put on an axis sets its scale, the way the presets do.
-      var axisKey = target.dataset.list === "custom.left" ? "y" : "y2";
+      var axisKey = onLeft ? "y" : "y2";
       var q = quantityOf(ident);
       if (target.checked && list.length === 1 && q && byQ[q]) {
         spec.axes[axisKey].log = !!byQ[q].log;
       }
-      setPath(target.dataset.list, list);
+      setPath(listPath, list);
       saveSpec();
       renderForm();
       draw();
@@ -1633,30 +2183,42 @@
     if (!path) {
       return;
     }
-    setPath(path, target.type === "checkbox" ? target.checked : target.value);
+    if (path.indexOf("override.") === 0) {
+      seedOverride();
+    }
+    setPath(path, target.type === "checkbox" ? target.checked
+      : target.dataset.bool ? target.value === "true" : target.value);
+    if ((path === "style.widthMm" || path === "style.heightMm") && $("size-hint")) {
+      $("size-hint").textContent = sizeHint();
+    }
+    var axisMatch = /^axes\.(x|y|y2)\./.exec(path);
+    if (axisMatch && $("limit-hint-" + axisMatch[1])) {
+      $("limit-hint-" + axisMatch[1]).textContent = limitHint(spec.axes[axisMatch[1]]);
+    }
     // A quantity that spans decades (tan δ, |η*|, stress) starts on a log axis.
     if (path === "right" && event.type === "change" && byQ[target.value]) {
       spec.axes.y2.log = !!byQ[target.value].log;
     }
-    if (path === "custom.x" && event.type === "change") {
+    if ((path === "custom.x" || path === "override.x") && event.type === "change") {
       var xq = quantityOf(target.value);
       spec.axes.x.log = !!(xq && byQ[xq] && byQ[xq].log);
     }
     saveSpec();
+    if (path === "style.palette") {
+      renderData();
+    }
     if (event.type === "change" && isStructural(path)) {
       renderForm();
       draw();
       return;
     }
     redrawSoon();
-    if (path === "style.palette") {
-      renderData();
-    }
   }
 
   $("studio-form").addEventListener("change", onFormChange);
   $("studio-form").addEventListener("input", function (event) {
-    if (event.target.type === "text" || event.target.type === "number") {
+    var typed = event.target.type;
+    if (typed === "text" || typed === "number" || typed === "color") {
       onFormChange(event);
     }
   });
@@ -1682,7 +2244,13 @@
           byQ[q.key] = q;
         });
         entries = [];
-        results[1].forEach(function (dataset) {
+        var readable = results[1].filter(function (dataset) {
+          return store.validDataset(dataset, function (key) {
+            return !!byQ[key];
+          });
+        });
+        skippedDatasets = results[1].length - readable.length;
+        readable.forEach(function (dataset) {
           dataset.blocks.forEach(function (block) {
             entries.push({ dataset: dataset, block: block, id: block.id });
           });

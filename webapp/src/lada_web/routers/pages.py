@@ -13,8 +13,12 @@ from ..rendering import templates
 
 router = APIRouter(include_in_schema=False)
 
+# HEAD as well as GET: link checkers, uptime monitors and `curl -I` all ask with HEAD, and a
+# GET-only route answers them 405. The server drops the body of a HEAD response itself.
+PAGE_METHODS = ["GET", "HEAD"]
 
-@router.get("/")
+
+@router.api_route("/", methods=PAGE_METHODS)
 def home(request: Request):
     return templates.TemplateResponse(request, "home.html", {"doors": WORKSPACES})
 
@@ -29,17 +33,17 @@ def _overview(request: Request, key: str):
     return templates.TemplateResponse(request, "index.html", context)
 
 
-@router.get("/simulations")
+@router.api_route("/simulations", methods=PAGE_METHODS)
 def simulations_overview(request: Request):
     return _overview(request, "simulations")
 
 
-@router.get("/rheometer")
+@router.api_route("/rheometer", methods=PAGE_METHODS)
 def rheometer_overview(request: Request):
     return _overview(request, "rheometer")
 
 
-@router.get("/{first}/{second}")
+@router.api_route("/{first}/{second}", methods=PAGE_METHODS)
 def calculation_page(request: Request, first: str, second: str):
     calc = get_calculation_by_path(f"/{first}/{second}")
     if calc is None:

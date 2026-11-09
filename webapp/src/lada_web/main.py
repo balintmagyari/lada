@@ -48,6 +48,28 @@ TRAJECTORY_PREFIX = "/api/dynamics/"
 # calculation; parsers/modifiers stay single-file, so they keep the tighter one-file ceiling.
 MULTI_FILE_TEXT_PREFIXES = ("/api/conformations/", "/api/rheology/", "/api/rheometry/")
 
+# Routes whose body is a JSON document rather than an upload. They are held to max_json_bytes
+# whatever Content-Type the request claims: FastAPI reads such a body into memory in one piece
+# before it can find out the type was wrong.
+JSON_PATHS = frozenset(
+    {
+        "/api/dynamics/merge-regimes",
+        "/api/dynamics/merge-regimes/download",
+        "/api/rheology/merge-regimes",
+        "/api/rheology/merge-regimes/download",
+        "/api/rheology/dynamic-moduli/from-regimes",
+        "/api/rheology/dynamic-moduli/from-regimes/download",
+        "/api/rheometry/rederive",
+        "/api/rheometry/figure",
+        "/api/rheometry/pgfplots",
+        "/api/rheometry/tts",
+    }
+)
+
+# Content types an upload (or a plain form) arrives as. Anything else sent to /api/ is a JSON
+# document or nothing the routes can use, and gets the JSON ceiling.
+FORM_CONTENT_TYPES = ("multipart/form-data", "application/x-www-form-urlencoded")
+
 TOO_LARGE_MESSAGE = "The request body is larger than this server accepts."
 NO_LENGTH_MESSAGE = (
     "This request declares no Content-Length, so its size cannot be checked before the "
@@ -90,12 +112,22 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         + BODY_OVERHEAD_BYTES
     )
 
-    def body_ceiling(path: str) -> int:
+    json_ceiling = resolved.max_json_bytes
+
+    def upload_body_ceiling(path: str) -> int:
         if path.startswith(TRAJECTORY_PREFIX):
             return trajectory_ceiling
         if path.startswith(MULTI_FILE_TEXT_PREFIXES):
             return multi_upload_ceiling
         return upload_ceiling
+
+    def body_ceiling(path: str, content_type: str) -> int:
+        if path in JSON_PATHS:
+            return json_ceiling
+        ceiling = upload_body_ceiling(path)
+        if content_type.split(";", 1)[0].strip().lower() not in FORM_CONTENT_TYPES:
+            return min(ceiling, json_ceiling)
+        return ceiling
 
     @app.middleware("http")
     async def limit_body_size(
@@ -117,7 +149,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         """
         declared = request.headers.get("content-length", "")
         if declared.isdecimal():
-            if int(declared) > body_ceiling(request.url.path):
+            ceiling = body_ceiling(request.url.path, request.headers.get("content-type", ""))
+            if int(declared) > ceiling:
                 return error_response(request, 413, TOO_LARGE_MESSAGE, title="Too large")
         elif request.method == "POST" and request.url.path.startswith("/api/"):
             return error_response(request, 413, NO_LENGTH_MESSAGE, title="Too large")

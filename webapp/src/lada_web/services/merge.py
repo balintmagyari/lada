@@ -143,7 +143,19 @@ def merge_regimes(
         raise ValueError("At least one regime is required.")
 
     names = list(series[0])
-    indexed = [(x, s) for x, s in zip(x_arrays, series, strict=True) if x.size]
+    pairs = list(zip(x_arrays, series, strict=True))
+    for number, (x, s) in enumerate(pairs, start=1):
+        for name in names:
+            if len(s[name]) != len(x):
+                raise ValueError(
+                    f"Regime {number} has {len(x)} lag times but {len(s[name])} values in "
+                    f"'{name}'; every series must have one value per lag time."
+                )
+        # Points are ordered by lag time below, so a repeated lag time would come out in no
+        # defined order. A correlator never repeats one; refuse rather than guess.
+        if np.unique(x).size != x.size:
+            raise ValueError(f"Regime {number} repeats a lag time; each may appear only once.")
+    indexed = [(x, s) for x, s in pairs if x.size]
     if not indexed:
         raise ValueError("Every regime is empty; there is nothing to merge.")
     # Finest first: under nested sampling the shortest reach is the finest grid.

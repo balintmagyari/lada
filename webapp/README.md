@@ -139,6 +139,7 @@ on-screen "view" step, since the result is a modified data file, not a table.
 | Oscillation | `/rheometer/frequency-sweep` | G′, G″ (and optionally tan δ, \|η*\|, δ) against ω |
 | Oscillation | `/rheometer/amplitude-sweep` | G′, G″ against strain or stress amplitude |
 | Oscillation | `/rheometer/temperature-sweep` | G′, G″ and tan δ against temperature |
+| Oscillation | `/rheometer/time-sweep` | G′, G″ and tan δ against time |
 | Flow & transient | `/rheometer/flow-curve` | Viscosity (and optionally shear stress) against shear rate |
 | Flow & transient | `/rheometer/creep` | Creep compliance J(t) against time |
 | Flow & transient | `/rheometer/stress-relaxation` | Relaxation modulus G(t) against time |
@@ -149,7 +150,8 @@ on-screen "view" step, since the result is a modified data file, not a table.
 `.csv`, `.txt`, `.dat`, `.tsv` (any delimiter, decimal commas, units in a row under the header or
 in the header itself), Excel `.xlsx`/`.xls` (every sheet), and exports from **TA Instruments
 TRIOS** (split into its `[step]` sections) and **Anton Paar RheoCompass** (split into its
-intervals). The format is recognised from the content, not the extension. Every column is matched
+intervals), and **TA Orchestrator** data files (`.RSD01`, `.RSD02` …, the binary files ARES
+rheometers save). The format is recognised from the content, not the extension. Every column is matched
 to a rheology quantity by its header (English and common German names), converted to canonical
 units (Pa, Pa·s, rad/s, 1/s, s, °C, %), and missing quantities that follow exactly from the
 measured ones are added: tan δ, |G*|, |η*|, δ, and ω ↔ f. Each table is labelled with the kind of
@@ -163,6 +165,16 @@ recognised wrongly, can be corrected on the page (`POST /api/rheometry/rederive`
 > (`rheometry/tabular.py`), a layout that differs a little should still import, with less
 > metadata at worst. Add real exports as fixtures when you have them.
 
+**TA Orchestrator files** hold the instrument's raw signals rather than the table Orchestrator
+shows, so `rheometry/orchestrator.py` recomputes that table (G′, G″, tan δ, stress, strain,
+torque, frequency, temperature, plus elapsed time) and the test's metadata (name, operator,
+start, plate diameter, gap, transducer range, notes). It was checked against Orchestrator's own
+text exports of a frequency, a strain and a time sweep (8 mm parallel plates, both transducer
+ranges, `webapp/tests/data/rheometry/orchestrator/`): every column agrees to the float32
+precision the file stores. Other geometries (cone-and-plate, Couette, torsion) are read with the
+same parallel-plate formulas and are flagged on import: compare one point with Orchestrator
+before relying on them, and add an export as a fixture when you have one.
+
 **Where the data lives.** Imported files are kept in the browser (IndexedDB), never on the
 server: the server reads each upload into JSON and forgets it. Every rheometer page in that browser
 sees the same files, a reload loses nothing, and *Save project* / *Open project* move them between
@@ -171,7 +183,7 @@ browsers as one JSON file. Each graph page remembers its settings (not its data)
 
 **Graphs and export.** Each graph page is the same studio with a different preset: it ticks the
 tables that match its kind of test, overlays samples with one colour each (G′ filled, G″ open),
-offers unit, axis, size and style controls, and has two views — *Explore* (interactive Plotly) and
+offers unit, axis, size and style controls (what goes on each axis, linear or log scale and limits for x, left and right y — either end alone — and a colour per sample plus a marker shape, fill, size and colour per quantity), and has two views — *Explore* (interactive Plotly) and
 *Figure*, which shows the exported figure itself, rendered by the server. Export gives SVG, PDF
 (fonts embedded) or PNG at 300/600/1200 dpi, at exactly the chosen size (single column 85 mm,
 double column 175 mm, slide, square), always in print style whatever the site's theme; or a

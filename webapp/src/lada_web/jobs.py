@@ -45,6 +45,9 @@ class Job:
     result: Any | None = None
     error: str | None = None
     created_at: float = field(default_factory=time.monotonic)
+    # Set when the job reaches "done" or "error". The TTL counts from here, not from creation:
+    # a calculation that runs longer than the TTL must still be there for its last poll.
+    finished_at: float | None = None
 
 
 class JobStore:
@@ -79,6 +82,7 @@ class JobStore:
                 job.status = "done"
                 job.progress = 1.0
                 job.result = result
+                job.finished_at = time.monotonic()
 
     def set_error(self, job_id: str, message: str) -> None:
         with self._lock:
@@ -86,12 +90,22 @@ class JobStore:
             if job is not None:
                 job.status = "error"
                 job.error = message
+                job.finished_at = time.monotonic()
 
     def sweep(self, ttl_seconds: float) -> None:
-        """Drop jobs older than `ttl_seconds`, whether or not their result was ever fetched."""
+        """Drop jobs that finished more than `ttl_seconds` ago, fetched or not.
+
+        A pending or running job is never swept: `run_job` always ends it with `set_result` or
+        `set_error`, and its TTL starts then. Sweeping on `created_at` deleted any calculation
+        that ran longer than the TTL, so its next poll answered 404 while it was still working.
+        """
         cutoff = time.monotonic() - ttl_seconds
         with self._lock:
-            stale = [job_id for job_id, job in self._jobs.items() if job.created_at < cutoff]
+            stale = [
+                job_id
+                for job_id, job in self._jobs.items()
+                if job.finished_at is not None and job.finished_at < cutoff
+            ]
             for job_id in stale:
                 del self._jobs[job_id]
 

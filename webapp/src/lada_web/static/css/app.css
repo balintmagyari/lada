@@ -1954,6 +1954,35 @@ dialog.jump {
   margin: 0.15rem 0;
 }
 
+.ds-details {
+  margin: 0 0 0.75rem;
+  font-size: 0.82rem;
+}
+
+.ds-details summary {
+  width: fit-content;
+  color: var(--ink-muted);
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.ds-details-list {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  gap: 0.2rem 1rem;
+  margin: 0.5rem 0 0;
+}
+
+.ds-details-list dt {
+  color: var(--ink-faint);
+}
+
+.ds-details-list dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+  white-space: pre-line;
+}
+
 .ds-block {
   padding: 0.8rem 0 0.75rem;
   border-top: 1px solid var(--line);
@@ -2003,6 +2032,128 @@ dialog.jump {
   font-size: 0.85rem;
   font-weight: 600;
   text-decoration: none;
+}
+
+.ds-block-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.9rem;
+  margin-left: auto;
+}
+
+.ds-block-actions .ds-block-open {
+  margin-left: 0;
+}
+
+.ds-block-view {
+  padding: 0.2rem 0.65rem;
+  font-size: 0.82rem;
+}
+
+.ds-table {
+  margin: 0.7rem 0 0.2rem;
+}
+
+.ds-table-scroll {
+  max-height: 26rem;
+  overflow: auto;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-small);
+  background: var(--surface);
+}
+
+.ds-table-scroll:focus-visible {
+  outline: 2px solid var(--hue-strong, var(--ink));
+  outline-offset: 2px;
+}
+
+.ds-grid {
+  width: max-content;
+  min-width: 100%;
+  margin: 0;
+  border-collapse: separate;
+  border-spacing: 0;
+  font-size: 0.8rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.ds-grid th,
+.ds-grid td {
+  padding: 0.25rem 0.7rem;
+  border: 0;
+  border-right: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+  background: var(--surface);
+  white-space: nowrap;
+}
+
+.ds-grid td {
+  text-align: right;
+}
+
+.ds-grid thead th {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background: var(--sunken);
+  text-align: right;
+  vertical-align: bottom;
+}
+
+.ds-grid-name {
+  display: block;
+  font-weight: 700;
+}
+
+.ds-grid-unit {
+  display: block;
+  color: var(--ink-faint);
+  font-size: 0.72rem;
+  font-weight: 400;
+}
+
+.ds-grid .ds-grid-index {
+  position: sticky;
+  left: 0;
+  z-index: 1;
+  background: var(--sunken);
+  color: var(--ink-faint);
+  font-weight: 400;
+  text-align: right;
+}
+
+.ds-grid thead .ds-grid-index {
+  z-index: 3;
+}
+
+.ds-grid tbody tr:nth-child(even) td {
+  background: color-mix(in srgb, var(--sunken) 55%, var(--surface));
+}
+
+.ds-grid tbody tr:hover td {
+  background: var(--hue-tint, var(--sunken));
+}
+
+.ds-grid .is-derived {
+  color: var(--ink-muted);
+  font-style: italic;
+}
+
+.ds-grid thead .is-derived {
+  background: color-mix(in srgb, var(--sunken) 70%, var(--line));
+}
+
+.ds-table-foot {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem 0.9rem;
+  margin-top: 0.5rem;
+  font-size: 0.82rem;
+}
+
+.ds-table-count {
+  color: var(--ink-muted);
 }
 
 .ds-block-open:hover {
@@ -2512,6 +2663,87 @@ dialog.jump {
   margin-top: 0.6rem;
   padding-top: 0.6rem;
   border-top: 1px dashed var(--line);
+}
+
+.studio-more {
+  margin: 0.35rem 0 0;
+}
+
+.studio-more summary {
+  width: fit-content;
+  margin-bottom: 0.25rem;
+  color: var(--ink-muted);
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.studio-more[open] summary {
+  margin-bottom: 0.6rem;
+}
+
+.studio-more .quiet-button {
+  margin-top: 0.5rem;
+}
+
+.studio-swatches {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0 0.75rem;
+}
+
+.studio-swatches label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.studio-form input[type="color"] {
+  width: 100%;
+  height: 2.1rem;
+  margin-bottom: 0.25rem;
+  padding: 0.15rem;
+  cursor: pointer;
+}
+
+.studio-form input[type="color"]:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.studio-series {
+  margin: 0 0 0.6rem;
+  padding: 0.55rem 0.7rem 0.3rem;
+  border: 1px solid var(--line);
+  border-left: 4px solid var(--series-color, var(--line));
+  border-radius: var(--radius-small);
+  background: var(--sunken);
+}
+
+.studio-series-head {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  margin-bottom: 0.45rem;
+}
+
+.studio-series-head .studio-axis-name {
+  flex: 1;
+  min-width: 0;
+}
+
+.series-preview {
+  flex: none;
+}
+
+.studio-series-axis {
+  flex: none;
+  padding: 0.05rem 0.45rem;
+  border-radius: 999px;
+  background: var(--surface, var(--bg));
+  color: var(--ink-muted);
+  font-size: 0.72rem;
+  font-weight: 600;
 }
 
 .studio-axis-head {

@@ -5,6 +5,38 @@ import pandas as pd
 from tqdm import tqdm
 
 
+def _require_columns(cols: list, required: list[str], calculation: str) -> None:
+    """Raise a ValueError naming every required column the data lacks."""
+    missing = [c for c in required if c not in cols]
+    if missing:
+        raise ValueError(
+            f"Missing a required column for {calculation} calculation: {', '.join(missing)}. "
+            f"The data has: {', '.join(str(c) for c in cols)}."
+        )
+
+
+def _chain_mask(frame_mols: np.ndarray) -> np.ndarray:
+    """Atoms of one frame that belong to a real chain.
+
+    Molecule ID 0 is what LAMMPS gives atoms that belong to no molecule (solvent, ions,
+    walls), and a one-atom molecule has no conformation to speak of: its Rg is 0 and its two
+    "ends" are the same atom. Counting either would drag the chain average towards zero, so
+    only molecules with a non-zero ID and at least two atoms are kept.
+    """
+    unique_mols, inverse, counts = np.unique(frame_mols, return_inverse=True, return_counts=True)
+    keep = (unique_mols != 0) & (counts >= 2)
+    return keep[inverse]
+
+
+def _no_chains_error(ts, has_timesteps: bool, molecule_col: str) -> ValueError:
+    where = f" at timestep {ts}" if has_timesteps else ""
+    return ValueError(
+        f"No polymer chains were found{where}: every atom has molecule ID 0 or is the only "
+        f"atom of its molecule in column '{molecule_col}'. Rg and Ree are computed only for "
+        "molecules with a non-zero ID and at least two atoms."
+    )
+
+
 def calculate_avg_rg_sq(
     df: pd.DataFrame | np.ndarray,
     columns: list[str] | None = None,
@@ -17,6 +49,9 @@ def calculate_avg_rg_sq(
     """
     Compute the ensemble-average squared radius of gyration using fast vectorization.
     Dynamically handles both single frames and massive multi-timestep trajectories.
+
+    Only real chains are averaged: atoms with molecule ID 0 (no molecule) and molecules
+    of a single atom are left out. A ValueError is raised if a frame has no chain left.
 
     Parameters
     ----------
@@ -68,12 +103,7 @@ def calculate_avg_rg_sq(
         raise TypeError("Data must be a pandas.DataFrame or numpy.ndarray.")
 
     # Extract column indices
-    missing = [c for c in [molecule_col, *coord_cols] if c not in cols]
-    if missing:
-        raise ValueError(
-            f"Missing a required column for Rg calculation: {', '.join(missing)}. "
-            f"The data has: {', '.join(str(c) for c in cols)}."
-        )
+    _require_columns(cols, [molecule_col, *coord_cols], "Rg")
     mol_idx = cols.index(molecule_col)
     x_idx, y_idx, z_idx = [cols.index(c) for c in coord_cols]
 
@@ -109,6 +139,14 @@ def calculate_avg_rg_sq(
         ts_mols = mols[ts_mask]
         ts_coords = coords[ts_mask]
         ts_masses = masses[ts_mask]
+
+        # Keep only real chains (mol != 0, at least two atoms)
+        chains = _chain_mask(ts_mols)
+        if not chains.any():
+            raise _no_chains_error(ts, has_timesteps, molecule_col)
+        ts_mols = ts_mols[chains]
+        ts_coords = ts_coords[chains]
+        ts_masses = ts_masses[chains]
 
         # Vectorized Rg^2 Calculation
         _, mol_indices = np.unique(ts_mols, return_inverse=True)
@@ -156,6 +194,9 @@ def calculate_avg_ree_sq(
     """
     Compute the ensemble-average squared end-to-end distance using fast vectorization.
     Dynamically handles both single frames and multi-timestep trajectories.
+
+    Only real chains are averaged: atoms with molecule ID 0 (no molecule) and molecules
+    of a single atom are left out. A ValueError is raised if a frame has no chain left.
 
     Chain ends are identified as the minimum and maximum atom ID within each molecule,
     so unwrapped coordinates (``xu``, ``yu``, ``zu``) should be used to avoid
@@ -206,12 +247,10 @@ def calculate_avg_ree_sq(
         raise TypeError("Data must be a pandas.DataFrame or numpy.ndarray.")
 
     # Extract column indices
-    try:
-        mol_idx = cols.index(molecule_col)
-        id_idx = cols.index(atom_id_col)
-        x_idx, y_idx, z_idx = [cols.index(c) for c in coord_cols]
-    except ValueError as e:
-        raise ValueError(f"Missing a required column for Ree calculation: {e}") from e
+    _require_columns(cols, [molecule_col, atom_id_col, *coord_cols], "Ree")
+    mol_idx = cols.index(molecule_col)
+    id_idx = cols.index(atom_id_col)
+    x_idx, y_idx, z_idx = [cols.index(c) for c in coord_cols]
 
     # Extract targeting arrays
     mols = arr[:, mol_idx]
@@ -238,6 +277,14 @@ def calculate_avg_ree_sq(
         ts_mols = mols[ts_mask]
         ts_atom_ids = atom_ids[ts_mask]
         ts_coords = coords[ts_mask]
+
+        # Keep only real chains (mol != 0, at least two atoms)
+        chains = _chain_mask(ts_mols)
+        if not chains.any():
+            raise _no_chains_error(ts, has_timesteps, molecule_col)
+        ts_mols = ts_mols[chains]
+        ts_atom_ids = ts_atom_ids[chains]
+        ts_coords = ts_coords[chains]
 
         # Sort atoms first by molecule ID, then by atom ID
         # This ensures the first and last indices correspond to the chain ends
@@ -282,6 +329,9 @@ def calculate_ree_vectors(
 ) -> pd.DataFrame:
     """
     Compute the end-to-end vector for each molecule at each timestep.
+
+    Only real chains are averaged: atoms with molecule ID 0 (no molecule) and molecules
+    of a single atom are left out. A ValueError is raised if a frame has no chain left.
 
     Parameters
     ----------
@@ -329,12 +379,10 @@ def calculate_ree_vectors(
         raise TypeError("Data must be a pandas.DataFrame or numpy.ndarray.")
 
     # Extract column indices
-    try:
-        mol_idx = cols.index(molecule_col)
-        id_idx = cols.index(atom_id_col)
-        x_idx, y_idx, z_idx = [cols.index(c) for c in coord_cols]
-    except ValueError as e:
-        raise ValueError(f"Missing a required column for Ree vector calculation: {e}") from e
+    _require_columns(cols, [molecule_col, atom_id_col, *coord_cols], "Ree vector")
+    mol_idx = cols.index(molecule_col)
+    id_idx = cols.index(atom_id_col)
+    x_idx, y_idx, z_idx = [cols.index(c) for c in coord_cols]
 
     # Extract targeting arrays
     mols = arr[:, mol_idx]
@@ -361,6 +409,14 @@ def calculate_ree_vectors(
         ts_mols = mols[ts_mask]
         ts_atom_ids = atom_ids[ts_mask]
         ts_coords = coords[ts_mask]
+
+        # Keep only real chains (mol != 0, at least two atoms)
+        chains = _chain_mask(ts_mols)
+        if not chains.any():
+            raise _no_chains_error(ts, has_timesteps, molecule_col)
+        ts_mols = ts_mols[chains]
+        ts_atom_ids = ts_atom_ids[chains]
+        ts_coords = ts_coords[chains]
 
         # Sort atoms first by molecule ID, then by atom ID
         sort_keys = np.lexsort((ts_atom_ids, ts_mols))

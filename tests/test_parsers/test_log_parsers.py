@@ -2,6 +2,7 @@
 
 import os
 
+import numpy as np
 import pytest
 
 from lada import read_lammps_log
@@ -135,3 +136,93 @@ class TestReadLammpsLog:
         assert thermo is not None
         assert len(thermo.columns) > 0
         assert thermo.data.shape[0] > 0
+
+
+TWO_RUNS_DIFFERENT_COLUMNS = """LAMMPS
+Per MPI rank memory allocation = 2.5 Mbytes
+Step Temp Press
+0 1.0 0.5
+100 1.1 0.6
+Loop time of 0.1 on 1 procs
+Per MPI rank memory allocation = 2.5 Mbytes
+Step PotEng KinEng
+100 -5.0 1.6
+200 -4.0 1.7
+Loop time of 0.1 on 1 procs
+"""
+
+
+class TestEachRunUsesItsOwnHeader:
+    """Earlier runs were labelled with the last run's header (D2)."""
+
+    def test_columns_are_the_union_in_order_of_appearance(self, tmp_path):
+        path = tmp_path / "two.log"
+        path.write_text(TWO_RUNS_DIFFERENT_COLUMNS)
+        thermo = read_lammps_log(str(path))
+        assert thermo.columns == ["Step", "Temp", "Press", "PotEng", "KinEng"]
+
+    def test_values_sit_under_their_own_column_and_missing_ones_are_nan(self, tmp_path):
+        path = tmp_path / "two.log"
+        path.write_text(TWO_RUNS_DIFFERENT_COLUMNS)
+        thermo = read_lammps_log(str(path))
+        np.testing.assert_array_equal(thermo.get("Step"), [0, 100, 100, 200])
+        np.testing.assert_array_equal(thermo.get("Temp"), [1.0, 1.1, np.nan, np.nan])
+        np.testing.assert_array_equal(thermo.get("PotEng"), [np.nan, np.nan, -5.0, -4.0])
+        np.testing.assert_array_equal(thermo.run_index, [0, 0, 1, 1])
+        assert list(thermo.to_pandas().columns) == thermo.columns
+
+    def test_runs_with_different_column_counts(self, tmp_path):
+        path = tmp_path / "diff.log"
+        path.write_text(
+            TWO_RUNS_DIFFERENT_COLUMNS.replace("PotEng KinEng", "PotEng")
+            .replace("-5.0 1.6", "-5.0")
+            .replace("-4.0 1.7", "-4.0")
+        )
+        thermo = read_lammps_log(str(path))
+        assert thermo.data.shape == (4, 4)
+        np.testing.assert_array_equal(thermo.get("PotEng"), [np.nan, np.nan, -5.0, -4.0])
+
+    def test_same_header_in_every_run_is_unchanged(self, synthetic_log_file):
+        thermo = read_lammps_log(synthetic_log_file)
+        assert thermo.columns == ["Step", "Temp", "E_pair", "E_mol", "TotEng", "Press"]
+        assert thermo.data.shape == (6, 6)
+        assert not np.isnan(thermo.data).any()
+        np.testing.assert_array_equal(thermo.run_index, [0, 0, 0, 1, 1, 1])
+
+
+class TestNonNumericLinesInsideABlock:
+    """One WARNING line inside a thermo block made the whole log unreadable (D3)."""
+
+    @pytest.mark.parametrize(
+        "intruder",
+        [
+            "WARNING: Bond/angle/dihedral extent > half of periodic box length (domain.cpp:936)",
+            "SHAKE stats (type/ave/delta/count) on step 100",
+            "Loop time 0.1",  # a variant without "of"
+            "100 1.1",  # a truncated row
+        ],
+    )
+    def test_the_line_is_skipped(self, tmp_path, intruder):
+        path = tmp_path / "warn.log"
+        path.write_text(
+            "LAMMPS\nPer MPI rank memory allocation = 2.5 Mbytes\n"
+            "   Step          Temp          Press\n"
+            "         0   1.0   0.5\n"
+            f"{intruder}\n"
+            "       100   1.1   0.6\n"
+            "Loop time of 0.1 on 1 procs\n"
+        )
+        thermo = read_lammps_log(str(path))
+        assert thermo.columns == ["Step", "Temp", "Press"]
+        np.testing.assert_array_equal(thermo.data, [[0, 1.0, 0.5], [100, 1.1, 0.6]])
+
+    def test_a_warning_before_the_header_is_not_the_header(self, tmp_path):
+        path = tmp_path / "warn.log"
+        path.write_text(
+            "Per MPI rank memory allocation = 2.5 Mbytes\n"
+            "WARNING: something\n"
+            "Step Temp\n0 1.0\nLoop time of 0.1 on 1 procs\n"
+        )
+        thermo = read_lammps_log(str(path))
+        assert thermo.columns == ["Step", "Temp"]
+        np.testing.assert_array_equal(thermo.data, [[0, 1.0]])

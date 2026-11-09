@@ -1,6 +1,7 @@
 """Tests for LAMMPS data file parser."""
 
 import os
+import warnings
 
 import pytest
 
@@ -185,7 +186,7 @@ class TestSectionShape:
         )
         frame = read_data_file(path).to_pandas("Masses")
 
-        assert list(frame.columns) == ["atom_id", "mass"]
+        assert list(frame.columns) == ["type", "mass"]
         assert len(frame) == 1
 
     def test_an_absent_section_stays_empty(self, tmp_path):
@@ -311,3 +312,29 @@ class TestReadLammpsACF:
 
         assert df is not None
         assert len(df) > 0
+
+
+class TestSectionLabels:
+    """Masses was labelled `atom_id` and Pair Coeffs was listed but refused (D12)."""
+
+    FIXTURE = os.path.join(os.path.dirname(__file__), "../data/sample_molecular.data")
+
+    def test_masses_first_column_is_the_atom_type(self):
+        frame = read_data_file(self.FIXTURE).to_pandas("Masses")
+        assert list(frame.columns) == ["type", "mass"]
+        assert frame["type"].tolist() == [1.0, 2.0]
+
+    def test_every_listed_section_can_be_converted(self):
+        data = read_data_file(self.FIXTURE)
+        assert "Pair Coeffs" in data.sections
+        for name in data.sections:
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore")
+                frame = data.to_pandas(name)
+            assert len(frame) == len(data.get(name))
+
+    def test_pair_coeffs_rows(self):
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            frame = read_data_file(self.FIXTURE).to_pandas("Pair Coeffs")
+        assert frame.to_numpy().tolist() == [[1.0, 1.0, 1.0], [2.0, 0.5, 1.2]]

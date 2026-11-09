@@ -215,16 +215,13 @@ class TestEdgeCases:
     """Tests for edge cases and error handling."""
 
     def test_single_atom_calculation(self):
-        """Test with minimum single atom."""
+        """A lone atom is not a chain, so there is nothing to average and that is an error."""
         df = create_synthetic_trajectory_df(num_atoms=1, num_timesteps=1)
 
-        rg_sq = calculate_avg_rg_sq(
-            df, coord_cols=["xu", "yu", "zu"], molecule_col="mol", timestep_col="timestep"
-        )
-
-        # Single atom should have Rg² = 0
-        assert isinstance(rg_sq, dict)
-        assert rg_sq[0] == 0.0
+        with pytest.raises(ValueError, match="No polymer chains"):
+            calculate_avg_rg_sq(
+                df, coord_cols=["xu", "yu", "zu"], molecule_col="mol", timestep_col="timestep"
+            )
 
     def test_one_frame_keeps_its_own_timestep(self):
         """A one-frame trajectory is keyed by its real timestep, not collapsed to a float.
@@ -335,3 +332,60 @@ class TestProgressCallback:
             progress_callback=lambda c, t: calls.append((c, t)),
         )
         self.assert_well_formed(calls, total=5)
+
+
+def _chains_with_ions():
+    """Two 3-bead chains plus a mol-0 atom and a single-atom molecule, over two frames."""
+    rows = []
+    for ts in (0, 100):
+        shift = ts * 0.01
+        # mol 1: straight line along x, Rg^2 = 2/3, Ree^2 = 4
+        rows += [(ts, 1, 1, 0.0 + shift, 0.0, 0.0), (ts, 2, 1, 1.0 + shift, 0.0, 0.0),
+                 (ts, 3, 1, 2.0 + shift, 0.0, 0.0)]
+        # mol 2: straight line along y, spacing 2 -> Rg^2 = 8/3, Ree^2 = 16
+        rows += [(ts, 4, 2, 0.0, 0.0, 0.0), (ts, 5, 2, 0.0, 2.0, 0.0),
+                 (ts, 6, 2, 0.0, 4.0, 0.0)]
+        # mol 0 atoms (no molecule) far apart, and a one-atom molecule
+        rows += [(ts, 7, 0, 50.0, 0.0, 0.0), (ts, 8, 0, -50.0, 0.0, 0.0),
+                 (ts, 9, 3, 9.0, 9.0, 9.0)]
+    return pd.DataFrame(rows, columns=["timestep", "id", "mol", "xu", "yu", "zu"])
+
+
+class TestOnlyRealChainsAreAveraged:
+    """Mol 0 and single-atom molecules used to dilute (or inflate) the chain averages (D4)."""
+
+    def test_rg_sq_ignores_mol_zero_and_single_atom_molecules(self):
+        rg = calculate_avg_rg_sq(_chains_with_ions())
+        assert rg == pytest.approx({0: (2 / 3 + 8 / 3) / 2, 100: (2 / 3 + 8 / 3) / 2})
+
+    def test_ree_sq_ignores_mol_zero_and_single_atom_molecules(self):
+        ree = calculate_avg_ree_sq(_chains_with_ions())
+        assert ree == pytest.approx({0: 10.0, 100: 10.0})
+
+    def test_ree_vectors_list_only_real_chains(self):
+        vectors = calculate_ree_vectors(_chains_with_ions())
+        assert sorted(set(vectors["mol"])) == [1, 2]
+        assert len(vectors) == 4
+
+    def test_frame_without_chains_raises(self):
+        df = _chains_with_ions()
+        df = df[df["mol"].isin([0, 3])]
+        for func in (calculate_avg_rg_sq, calculate_avg_ree_sq, calculate_ree_vectors):
+            with pytest.raises(ValueError, match="No polymer chains.*molecule ID 0"):
+                func(df)
+
+
+class TestMissingColumnMessages:
+    """The Ree errors used to quote numpy's "'x' is not in list" (D11)."""
+
+    @pytest.mark.parametrize("func", [calculate_avg_ree_sq, calculate_ree_vectors])
+    @pytest.mark.parametrize("dropped", ["id", "mol", "zu"])
+    def test_ree_error_names_the_missing_column(self, func, dropped):
+        df = _chains_with_ions().drop(columns=dropped)
+        with pytest.raises(ValueError, match=rf"Missing a required column .*: {dropped}\. "):
+            func(df)
+
+    def test_ree_error_lists_every_missing_column(self):
+        df = _chains_with_ions().drop(columns=["id", "yu"])
+        with pytest.raises(ValueError, match=r": id, yu\. The data has: timestep, mol, xu, zu"):
+            calculate_avg_ree_sq(df)

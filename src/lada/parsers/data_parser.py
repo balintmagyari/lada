@@ -30,6 +30,8 @@ ALLOWED_SECTIONS = (
     "Angles",
     "Dihedrals",
     "Impropers",
+    "Pair Coeffs",
+    "PairIJ Coeffs",
     "Nonbond Coeffs",
     "Bond Coeffs",
     "Angle Coeffs",
@@ -92,6 +94,8 @@ class LammpsData:
             "Angles",
             "Dihedrals",
             "Impropers",
+            "Pair Coeffs",
+            "PairIJ Coeffs",
             "Nonbond Coeffs",
             "Bond Coeffs",
             "Angle Coeffs",
@@ -109,7 +113,7 @@ class LammpsData:
           style was not detected.
         * ``'Bonds'``      — ``bond_id``, ``bond_type``, ``atom1_id``, ``atom2_id``
         * ``'Velocities'`` — ``atom_id``, ``vx``, ``vy``, ``vz``
-        * ``'Masses'``     — ``atom_id``, ``mass``
+        * ``'Masses'``     — ``type``, ``mass`` (one row per atom type)
         * all others       — generic ``col_0``, ``col_1`` … with a warning.
 
         Parameters
@@ -117,7 +121,8 @@ class LammpsData:
         section : str, optional
             Name of the section to convert (default: ``'Atoms'``). Must be one of
             ``Masses``, ``Atoms``, ``Bonds``, ``Velocities``, ``Angles``,
-            ``Dihedrals``, ``Impropers``, ``Nonbond Coeffs``, ``Bond Coeffs``,
+            ``Dihedrals``, ``Impropers``, ``Pair Coeffs``, ``PairIJ Coeffs``,
+            ``Nonbond Coeffs``, ``Bond Coeffs``,
             ``Angle Coeffs``, ``Dihedral Coeffs``, ``Improper Coeffs``.
 
         Returns
@@ -177,7 +182,8 @@ class LammpsData:
             return pd.DataFrame(data_array, columns=["atom_id", "vx", "vy", "vz"])
 
         elif section == "Masses":
-            return pd.DataFrame(data_array, columns=["atom_id", "mass"])
+            # A Masses row is "<atom type> <mass>"; the first column is a type, not an atom.
+            return pd.DataFrame(data_array, columns=["type", "mass"])
 
         else:
             warnings.warn(

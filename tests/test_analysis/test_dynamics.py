@@ -145,3 +145,27 @@ class TestProgressCallback:
         total = n_vectors * n_frames
         assert_well_formed_progress(calls, total=total)
         assert len(calls) == total
+
+
+class TestRouseModeRange:
+    """The p range error used to say "strictly between 0 and N-1" for an inclusive range (D11)."""
+
+    @pytest.mark.parametrize("p", [-1, 4])
+    def test_out_of_range_p_names_the_inclusive_range(self, trajectory_file, p):
+        chain_indices = np.array([[0, 1, 2, 3]])
+        with pytest.raises(ValueError) as excinfo:
+            calculate_rouse_mode_acf_from_trajectory(
+                trajectory_file, chain_indices, p=p, time_per_frame=0.5
+            )
+        message = str(excinfo.value)
+        assert f"p={p}" in message
+        assert "from 0 to 3 inclusive" in message
+        assert "strictly" not in message
+
+    @pytest.mark.parametrize("p", [0, 3])
+    def test_both_ends_of_the_range_are_accepted(self, trajectory_file, p):
+        chain_indices = np.array([[0, 1, 2, 3]])
+        result = calculate_rouse_mode_acf_from_trajectory(
+            trajectory_file, chain_indices, p=p, time_per_frame=0.5
+        )
+        assert result.shape == (6, 2)

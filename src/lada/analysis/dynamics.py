@@ -174,9 +174,8 @@ def calculate_rouse_mode_acf_from_trajectory(
     # ---------------------------------------------------------
     if not (0 <= p < N):
         raise ValueError(
-            f"Mathematical constraint violated! You requested mode p={p}. "
-            f"For a chain containing N={N} beads, the Rouse mode number 'p' "
-            f"must be an integer strictly between 0 and {N - 1}."
+            f"Rouse mode p={p} is out of range: for chains of N={N} beads, p must be an "
+            f"integer from 0 to {N - 1} inclusive (0 <= p < N)."
         )
     # ---------------------------------------------------------
 

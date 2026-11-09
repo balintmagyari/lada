@@ -48,6 +48,16 @@ write_pgfplots_table(G, "G_t.dat", comment="Stress relaxation modulus, T=1.0")
 
 ---
 
+## Web front-end
+
+`webapp/` is a separate installable project (`lada-web`): a browser tool that turns rheometer
+exports and spreadsheets into publication-ready graphs, with master curves by time–temperature
+superposition and export to SVG, PDF, PNG or pgfplots. It depends on `lada` rather than the other
+way around, so `pip install lada` stays exactly as lightweight as it is today. See
+[`webapp/README.md`](webapp/README.md) for the quick start, routes, configuration and Docker.
+
+---
+
 ## 1) Parsers
 
 ### 1a) Dump files — `dump_frames` / `read_dump`

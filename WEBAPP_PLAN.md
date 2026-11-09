@@ -1,5 +1,32 @@
 # Web application front-end for `lada`
 
+## Release order (revised 2026-11-09)
+
+The priority changed after both workspaces were built: **the first public version is the
+rheometer graphing tool alone.** Its job is easy, highly customisable graphing of rheological
+data, with limited data manipulation and post-processing (unit and column corrections, derived
+quantities, time–temperature superposition). Nothing that needs simulation data ships in v1.
+
+| Release | Branch | Contents |
+|---|---|---|
+| **v1: rheometer graphing** | `worktree-webapp-frontend` (worktree `.claude/worktrees/webapp-frontend`) | Import (CSV/TXT/DAT/TSV, Excel, TRIOS, RheoCompass, TA Orchestrator `.RSDxx`), column check and correction, the frequency/amplitude/temperature/time sweep, flow curve, creep, stress relaxation, master curve and custom plot pages, figure export (SVG/PDF/PNG) and pgfplots export |
+| v2: simulation tools | `webapp-simulations` (worktree `.claude/worktrees/webapp-simulations`) | The Simulations workspace: LAMMPS parsers, conformations, dynamics from `.npz`, ACF stress relaxation and dynamic moduli, end-bead rewriting, background jobs with progress, regime merging, and the core `lada` changes it relies on (`chains_from_data_file`, `progress_callback`, per-run thermo headers, lada 1.3.0) |
+
+What the split means in practice:
+
+- **v1 touches only `webapp/`, CI and docs.** Core `lada` on the v1 branch is identical to
+  `main`; the app needs nothing from it beyond `write_pgfplots_table`. The core work for the
+  simulation tools stays on `webapp-simulations`, to be reviewed and released as lada 1.3.0 with v2.
+- **v1 is stateless and job-free**, so it runs as several worker processes or containers with no
+  sticky sessions, and its only server-side resource concern is figure rendering (one matplotlib
+  draw at a time per worker). Uploads are rheometer exports of kilobytes to a few MB.
+- **Bringing v2 back** is a second `Workspace` in `catalog.py` with its sections, the routers,
+  services, templates and tests from `webapp-simulations`, the workspace switch in `base.html`
+  (already conditional on there being more than one workspace), and htmx/Alpine in the page head.
+  Rebase `webapp-simulations` onto v1 once v1 is merged, rather than merging the other way.
+
+The sections below are the original plan for the full two-workspace app, kept as the design record.
+
 ## Context
 
 `lada` is currently code-only: every capability (parsing LAMMPS files, computing Rg²/Ree²/stress
@@ -229,12 +256,18 @@ xyz/hdf5 exporters, restart-file parsing).
 
 ## Status
 
-- [x] Phase 1 — Backend skeleton + parsers + conformations + rheology
-- [x] Phase 2 — Dynamics / `.npz` endpoints
-- [x] Phase 3 — Modifiers
-- [x] Phase 4 — Polish & deploy readiness, **except verification step 4, which was never run**.
-  Docker is not installed on the machine this was built on, so the image has never been built
-  and `docker compose up` has never been executed: `webapp/Dockerfile` and
-  `webapp/docker-compose.yml` are written and reviewed but entirely unexercised. The `lada`
-  PyPI pin (see `webapp/README.md`) would fail the build today in any case. Treat "the
-  container serves the same behavior as local dev" as unverified, not as done.
+v1 (rheometer graphing, branch `worktree-webapp-frontend`):
+
+- [x] Import, column check, graph studio, export, master curves (built as phases 3–6 of the
+  two-workspace build, then separated from the Simulations workspace)
+- [x] Rheometer-only app: one workspace, simulation routes, jobs and htmx/Alpine removed, tests
+  re-pointed at the rheometer routes
+- [x] Docker files resized for v1 (stateless, `WEB_CONCURRENCY` workers, honours `$PORT`)
+- [ ] **Build and run the Docker image once.** Docker was never available on the machine this was
+  built on, so the image has never been built and `docker compose up` never run.
+- [ ] Try the TRIOS and RheoCompass readers on real exports (fixtures are synthetic) and add them
+  as fixtures
+- [ ] Choose a host and deploy (see the deployment guide)
+
+v2 (simulation tools, branch `webapp-simulations`): phases 1–4 of the original plan are built
+there, with the same unverified Docker caveat. Rebase onto v1 after v1 is merged.

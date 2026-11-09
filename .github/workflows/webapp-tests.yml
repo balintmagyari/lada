@@ -6,14 +6,12 @@ on:
     paths:
       - 'webapp/**'
       - 'src/**'
-      - 'tests/data/**'
       - '.github/workflows/webapp-tests.yml'
   pull_request:
     branches: [ main, develop ]
     paths:
       - 'webapp/**'
       - 'src/**'
-      - 'tests/data/**'
       - '.github/workflows/webapp-tests.yml'
 
 jobs:

@@ -11,24 +11,15 @@ services:
       - "127.0.0.1:8000:8000"
     environment:
       LADA_WEB_MAX_UPLOAD_MB: "50"
-      LADA_WEB_MAX_TRAJECTORY_MB: "500"
-      LADA_WEB_MAX_TRAJECTORY_FRAMES: "3000"
-      # Lowered from the 2048 MB default so two concurrent jobs still fit inside mem_limit below.
-      LADA_WEB_MAX_TRAJECTORY_MEMORY_MB: "1024"
-      # Lowered from the default 4: each running job can hold one decompressed trajectory.
-      LADA_WEB_MAX_CONCURRENT_JOBS: "2"
-      LADA_WEB_MAX_TABLE_ROWS: "500"
+      LADA_WEB_MAX_FILES_PER_REQUEST: "10"
+      WEB_CONCURRENCY: "2"
       # Point every workspace at the tmpfs, so uploads never touch the writable layer.
       LADA_WEB_TEMP_ROOT: "/tmp/lada-web"
-    # Uploads land in /tmp twice: Starlette spools the multipart file part there while it
-    # parses the form, and `save_upload` then writes its own copy into the request workspace.
-    # One 500 MB trajectory therefore needs ~1 GB, and a tmpfs keeps all of it in memory and
-    # out of the container's writable layer, where a large upload could otherwise fill the
-    # disk. Raise this together with LADA_WEB_MAX_TRAJECTORY_MB, and mem_limit with both.
+    # Uploads land in /tmp twice: Starlette spools the multipart file part there while it parses
+    # the form, and `save_upload` then writes its own copy into the request workspace. The
+    # largest import (10 files of 50 MB) therefore needs ~1 GB; real rheometer exports are a few
+    # MB, so this is a ceiling, not the usual load. Raise it with either upload setting.
     tmpfs:
-      - /tmp:size=1200m,mode=1777
-    # The tmpfs also caps a multi-file request's total upload: 10 × 500 MB will not fit, so raise it
-    # (and mem_limit) if users average many large trajectories in one go.
-    # 1.2 GB of tmpfs plus two jobs holding up to 1 GB of decompressed trajectory each,
-    # plus the interpreter and NumPy. Every one of those three numbers moves this one.
-    mem_limit: 4g
+      - /tmp:size=1100m,mode=1777
+    # The full tmpfs plus two workers of ~250 MB each (interpreter, NumPy, pandas, matplotlib).
+    mem_limit: 2g
